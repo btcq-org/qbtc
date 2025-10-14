@@ -13,10 +13,8 @@ import (
 	epochsmodulev1 "cosmossdk.io/api/cosmos/epochs/module/v1"
 	feegrantmodulev1 "cosmossdk.io/api/cosmos/feegrant/module/v1"
 	genutilmodulev1 "cosmossdk.io/api/cosmos/genutil/module/v1"
-	govmodulev1 "cosmossdk.io/api/cosmos/gov/module/v1"
 	mintmodulev1 "cosmossdk.io/api/cosmos/mint/module/v1"
 	paramsmodulev1 "cosmossdk.io/api/cosmos/params/module/v1"
-	slashingmodulev1 "cosmossdk.io/api/cosmos/slashing/module/v1"
 	stakingmodulev1 "cosmossdk.io/api/cosmos/staking/module/v1"
 	txconfigv1 "cosmossdk.io/api/cosmos/tx/config/v1"
 	upgrademodulev1 "cosmossdk.io/api/cosmos/upgrade/module/v1"
@@ -39,15 +37,13 @@ import (
 	_ "github.com/cosmos/cosmos-sdk/x/epochs"       // import for side-effects
 	epochstypes "github.com/cosmos/cosmos-sdk/x/epochs/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	_ "github.com/cosmos/cosmos-sdk/x/gov" // import for side-effects
-	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	_ "github.com/cosmos/cosmos-sdk/x/gov"  // import for side-effects
 	_ "github.com/cosmos/cosmos-sdk/x/mint" // import for side-effects
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 	_ "github.com/cosmos/cosmos-sdk/x/params" // import for side-effects
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	_ "github.com/cosmos/cosmos-sdk/x/slashing" // import for side-effects
-	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
-	_ "github.com/cosmos/cosmos-sdk/x/staking" // import for side-effects
+	_ "github.com/cosmos/cosmos-sdk/x/staking"  // import for side-effects
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
 	ibctransfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
@@ -60,7 +56,6 @@ var (
 		{Account: minttypes.ModuleName, Permissions: []string{authtypes.Minter}},
 		{Account: stakingtypes.BondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
 		{Account: stakingtypes.NotBondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
-		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: ibctransfertypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: icatypes.ModuleName},
 	}
@@ -69,8 +64,6 @@ var (
 	blockAccAddrs = []string{
 		authtypes.FeeCollectorName,
 		minttypes.ModuleName,
-		stakingtypes.BondedPoolName,
-		stakingtypes.NotBondedPoolName,
 		// We allow the following module accounts to receive funds:
 		// govtypes.ModuleName
 	}
@@ -94,7 +87,6 @@ var (
 					// NOTE: staking module is required if HistoricalEntries param > 0
 					BeginBlockers: []string{
 						minttypes.ModuleName,
-						slashingtypes.ModuleName,
 						stakingtypes.ModuleName,
 						authz.ModuleName,
 						epochstypes.ModuleName,
@@ -105,7 +97,6 @@ var (
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
-						govtypes.ModuleName,
 						stakingtypes.ModuleName,
 						feegrant.ModuleName,
 						// chain modules
@@ -127,8 +118,6 @@ var (
 						authtypes.ModuleName,
 						banktypes.ModuleName,
 						stakingtypes.ModuleName,
-						slashingtypes.ModuleName,
-						govtypes.ModuleName,
 						minttypes.ModuleName,
 						genutiltypes.ModuleName,
 						authz.ModuleName,
@@ -167,10 +156,6 @@ var (
 				Config: appconfig.WrapAny(&stakingmodulev1.Module{}),
 			},
 			{
-				Name:   slashingtypes.ModuleName,
-				Config: appconfig.WrapAny(&slashingmodulev1.Module{}),
-			},
-			{
 				Name:   "tx",
 				Config: appconfig.WrapAny(&txconfigv1.Config{}),
 			},
@@ -193,10 +178,6 @@ var (
 			{
 				Name:   feegrant.ModuleName,
 				Config: appconfig.WrapAny(&feegrantmodulev1.Module{}),
-			},
-			{
-				Name:   govtypes.ModuleName,
-				Config: appconfig.WrapAny(&govmodulev1.Module{}),
 			},
 			{
 				Name:   consensustypes.ModuleName,

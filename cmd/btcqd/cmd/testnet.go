@@ -8,22 +8,12 @@ import (
 	"strings"
 
 	"cosmossdk.io/log"
-	"cosmossdk.io/math"
-	storetypes "cosmossdk.io/store/types"
 	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/libs/bytes"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
-	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
-	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/spf13/cast"
 	"github.com/spf13/cobra"
 
@@ -77,119 +67,16 @@ func newTestnetApp(logger log.Logger, db dbm.DB, traceStore io.Writer, appOpts s
 }
 
 func initAppForTestnet(app *app.App, args valArgs) *app.App {
-	// Required Changes:
-	//
-	ctx := app.App.NewUncachedContext(true, cmtproto.Header{})
-
-	pubkey := &ed25519.PubKey{Key: args.newValPubKey.Bytes()}
-	pubkeyAny, err := codectypes.NewAnyWithValue(pubkey)
-	handleErr(err)
-
-	// STAKING
-	//
-
-	// Create Validator struct for our new validator.
-	newVal := stakingtypes.Validator{
-		OperatorAddress: args.newOperatorAddress,
-		ConsensusPubkey: pubkeyAny,
-		Jailed:          false,
-		Status:          stakingtypes.Bonded,
-		Tokens:          math.NewInt(valVotingPower),
-		DelegatorShares: math.LegacyMustNewDecFromStr("10000000"),
-		Description: stakingtypes.Description{
-			Moniker: "Testnet Validator",
-		},
-		Commission: stakingtypes.Commission{
-			CommissionRates: stakingtypes.CommissionRates{
-				Rate:          math.LegacyMustNewDecFromStr("0.05"),
-				MaxRate:       math.LegacyMustNewDecFromStr("0.1"),
-				MaxChangeRate: math.LegacyMustNewDecFromStr("0.05"),
-			},
-		},
-		MinSelfDelegation: math.OneInt(),
-	}
-
-	validator, err := app.StakingKeeper.ValidatorAddressCodec().StringToBytes(newVal.GetOperator())
-	handleErr(err)
-
-	// Remove all validators from power store
-	stakingKey := app.GetKey(stakingtypes.ModuleName)
-	stakingStore := ctx.KVStore(stakingKey)
-	iterator, err := app.StakingKeeper.ValidatorsPowerStoreIterator(ctx)
-	handleErr(err)
-
-	for ; iterator.Valid(); iterator.Next() {
-		stakingStore.Delete(iterator.Key())
-	}
-	iterator.Close()
-
-	// Remove all validators from last validators store
-	iterator, err = app.StakingKeeper.LastValidatorsIterator(ctx)
-	handleErr(err)
-
-	for ; iterator.Valid(); iterator.Next() {
-		stakingStore.Delete(iterator.Key())
-	}
-	iterator.Close()
-
-	// Remove all validators from validators store
-	iterator = stakingStore.Iterator(stakingtypes.ValidatorsKey, storetypes.PrefixEndBytes(stakingtypes.ValidatorsKey))
-	for ; iterator.Valid(); iterator.Next() {
-		stakingStore.Delete(iterator.Key())
-	}
-	iterator.Close()
-
-	// Remove all validators from unbonding queue
-	iterator = stakingStore.Iterator(stakingtypes.ValidatorQueueKey, storetypes.PrefixEndBytes(stakingtypes.ValidatorQueueKey))
-	for ; iterator.Valid(); iterator.Next() {
-		stakingStore.Delete(iterator.Key())
-	}
-	iterator.Close()
-
-	// Add our validator to power and last validators store
-	handleErr(app.StakingKeeper.SetValidator(ctx, newVal))
-	handleErr(app.StakingKeeper.SetValidatorByConsAddr(ctx, newVal))
-	handleErr(app.StakingKeeper.SetValidatorByPowerIndex(ctx, newVal))
-	handleErr(app.StakingKeeper.SetLastValidatorPower(ctx, validator, 0))
-	handleErr(app.StakingKeeper.Hooks().AfterValidatorCreated(ctx, validator))
-
-	// DISTRIBUTION
-	//
-
-	// Initialize records for this validator across all distribution stores
-	handleErr(app.DistrKeeper.SetValidatorHistoricalRewards(ctx, validator, 0, distrtypes.NewValidatorHistoricalRewards(sdk.DecCoins{}, 1)))
-	handleErr(app.DistrKeeper.SetValidatorCurrentRewards(ctx, validator, distrtypes.NewValidatorCurrentRewards(sdk.DecCoins{}, 1)))
-	handleErr(app.DistrKeeper.SetValidatorAccumulatedCommission(ctx, validator, distrtypes.InitialValidatorAccumulatedCommission()))
-	handleErr(app.DistrKeeper.SetValidatorOutstandingRewards(ctx, validator, distrtypes.ValidatorOutstandingRewards{Rewards: sdk.DecCoins{}}))
-
-	// SLASHING
-	//
-
-	// Set validator signing info for our new validator.
-	newConsAddr := sdk.ConsAddress(args.newValAddr.Bytes())
-	newValidatorSigningInfo := slashingtypes.ValidatorSigningInfo{
-		Address:     newConsAddr.String(),
-		StartHeight: app.App.LastBlockHeight() - 1,
-		Tombstoned:  false,
-	}
-	_ = app.SlashingKeeper.SetValidatorSigningInfo(ctx, newConsAddr, newValidatorSigningInfo)
-
-	// BANK
-	//
-	bondDenom, err := app.StakingKeeper.BondDenom(ctx)
-	handleErr(err)
-
-	defaultCoins := sdk.NewCoins(sdk.NewInt64Coin(bondDenom, 1000000000))
 
 	// Fund local accounts
-	for _, accountStr := range args.accountsToFund {
-		handleErr(app.BankKeeper.MintCoins(ctx, minttypes.ModuleName, defaultCoins))
-
-		account, err := app.AuthKeeper.AddressCodec().StringToBytes(accountStr)
-		handleErr(err)
-
-		handleErr(app.BankKeeper.SendCoinsFromModuleToAccount(ctx, minttypes.ModuleName, account, defaultCoins))
-	}
+	//for _, accountStr := range args.accountsToFund {
+	//	handleErr(app.BankKeeper.MintCoins(ctx, minttypes.ModuleName, defaultCoins))
+	//
+	//	account, err := app.AuthKeeper.AddressCodec().StringToBytes(accountStr)
+	//	handleErr(err)
+	//
+	//	handleErr(app.BankKeeper.SendCoinsFromModuleToAccount(ctx, minttypes.ModuleName, account, defaultCoins))
+	//}
 
 	return app
 }
