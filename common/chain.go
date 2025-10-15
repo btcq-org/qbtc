@@ -1,10 +1,18 @@
 package common
 
 import (
+	"btcq/app"
 	"errors"
 	"strings"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hashicorp/go-multierror"
+)
+
+const (
+	EmptyChain = Chain("")
+	BTCChain   = Chain("BTC")
+	BTCQChain  = Chain("BTCQ")
 )
 
 type Chain string
@@ -30,6 +38,21 @@ func (c Chain) Valid() error {
 	}
 	return nil
 }
+func (c Chain) IsEmpty() bool {
+	return strings.TrimSpace(c.String()) == ""
+}
+
+// GetGasAsset chain's base asset
+func (c Chain) GetGasAsset() Asset {
+	switch c {
+	case BTCQChain:
+		return BTCQAsset
+	case BTCChain:
+		return BTCAsset
+	default:
+		return EmptyAsset
+	}
+}
 
 // NewChain create a new Chain
 func NewChain(chainID string) (Chain, error) {
@@ -39,6 +62,32 @@ func NewChain(chainID string) (Chain, error) {
 	}
 	return chain, nil
 }
+func (c Chain) AddressPrefix(cn ChainNetwork) string {
+	switch c {
+	case BTCChain:
+		switch cn {
+		case MainNet:
+			return chaincfg.MainNetParams.Bech32HRPSegwit
+		case StageNet:
+			return chaincfg.MainNetParams.Bech32HRPSegwit
+		case MockNet:
+			return chaincfg.RegressionNetParams.Bech32HRPSegwit
+		}
+	case BTCQChain:
+		return app.AccountAddressPrefix
+	}
+	return ""
+}
+func (c Chain) IsValidAddress(addr Address) bool {
+	network := CurrentChainNetwork
+	prefix := c.AddressPrefix(network)
+	return strings.HasPrefix(addr.String(), prefix)
+}
+
+func (c Chain) IsBTCQChain() bool {
+	return c.Equals(BTCQChain)
+}
+
 func NewChains(raw []string) (Chains, error) {
 	var returnErr error
 	var chains Chains

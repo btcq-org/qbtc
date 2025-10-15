@@ -63,7 +63,7 @@ func newTestnetApp(logger log.Logger, db dbm.DB, traceStore io.Writer, appOpts s
 	return initAppForTestnet(testApp, args)
 }
 
-func initAppForTestnet(app *app.App, args valArgs) *app.App {
+func initAppForTestnet(app *app.App, _ valArgs) *app.App {
 
 	// Fund local accounts
 	//for _, accountStr := range args.accountsToFund {

@@ -49,12 +49,3 @@ func (s Symbol) String() string {
 	// uppercasing again just in case someone created a ticker via Chain("rune")
 	return strings.ToUpper(string(s))
 }
-
-// IsMiniToken is to determine whether it is a mini token on binance chain
-func (s Symbol) IsMiniToken() bool {
-	parts := strings.Split(s.String(), "-")
-	if len(parts) == 1 {
-		return false
-	}
-	return len(parts[1]) == 4 && strings.HasSuffix(s.String(), "M")
-}

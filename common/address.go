@@ -34,7 +34,7 @@ func (addr Address) AccAddress() (sdk.AccAddress, error) {
 }
 
 func (addr Address) Equals(addr2 Address) bool {
-	return strings.EqualFold(addr.String(), addr2.String())
+	return addr.String() == addr2.String()
 }
 
 func (addr Address) IsEmpty() bool {

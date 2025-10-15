@@ -1,6 +1,6 @@
 package common
 
-// ChainNetwork is to indicate which chain environment THORNode are working with
+// ChainNetwork is to indicate which chain environment BTCQ is working with
 type ChainNetwork uint8
 
 const (
@@ -14,14 +14,7 @@ const (
 	StageNet
 )
 
-// Soft Equals check is mainnet == mainet, or mocknet == mocknet
+// SoftEquals check is mainnet == mainnet, or mocknet == mocknet
 func (net ChainNetwork) SoftEquals(net2 ChainNetwork) bool {
-	if net == MainNet && net2 == MainNet {
-		return true
-	}
-	if net != MainNet && net2 != MainNet {
-		return true
-	}
-
-	return false
+	return net == net2
 }

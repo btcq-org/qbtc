@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+const (
+	BTCQTicker = Ticker("BTCQ")
+)
+
 type (
 	// Ticker The trading 'symbol' or shortened name (typically in capital
 	// letters) that refer to a coin on a trading platform. For example: ETH

@@ -45,8 +45,7 @@ import (
 const (
 	// Name is the name of the application.
 	Name = "btcq"
-	// AccountAddressPrefix is the prefix for accounts addresses.
-	AccountAddressPrefix = "btcq"
+
 	// ChainCoinType is the coin type of the chain.
 	ChainCoinType = 118
 )
