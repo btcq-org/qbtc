@@ -53,7 +53,7 @@ func (g Gas) Equals(gas2 Gas) bool {
 		return g2[i].Asset.String() < g2[j].Asset.String()
 	})
 
-	for i := range g {
+	for i := range g1 {
 		if !g1[i].Equals(g2[i]) {
 			return false
 		}

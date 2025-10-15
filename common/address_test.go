@@ -34,7 +34,7 @@ func TestAddress(t *testing.T) {
 	assert.False(t, addr.IsEmpty())
 	_, err = addr.AccAddress()
 	assert.NotNil(t, err)
-	addr, err = NewAddress("3QJmV3qfvL9SuYo34YihAf3sRCW3qSinyC")
+	_, err = NewAddress("3QJmV3qfvL9SuYo34YihAf3sRCW3qSinyC")
 	assert.Nil(t, err)
 
 	_, err = NewAddress("02192d74d0cb94344c9569c2e77901573d8d7903c3ebec3a957724895dca52c6b4")
@@ -60,10 +60,10 @@ func TestAddress(t *testing.T) {
 	assert.False(t, addr.IsEmpty())
 	_, err = addr.AccAddress()
 	assert.NotNil(t, err)
-	addr, err = NewAddress("BC1SW50QA3JX3S")
+	_, err = NewAddress("BC1SW50QA3JX3S")
 	assert.NotNil(t, err)
-	addr, err = NewAddress("bc1zw508d6qejxtdg4y5r3zarvaryvg6kdaj")
+	_, err = NewAddress("bc1zw508d6qejxtdg4y5r3zarvaryvg6kdaj")
 	assert.NotNil(t, err)
-	addr, err = NewAddress("bc1pfy63nact82mfmts5jv87p2uayxqs29gf8070td7kzhwzx6zc9ruq9u7xy7")
+	_, err = NewAddress("bc1pfy63nact82mfmts5jv87p2uayxqs29gf8070td7kzhwzx6zc9ruq9u7xy7")
 	assert.Nil(t, err)
 }

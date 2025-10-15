@@ -4,7 +4,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"
 
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 // GenerateGenesisState creates a randomized GenState of the module.

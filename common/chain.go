@@ -1,9 +1,10 @@
 package common
 
 import (
-	"btcq/app"
 	"errors"
 	"strings"
+
+	"github.com/btcq-org/btcq/app"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hashicorp/go-multierror"

@@ -38,8 +38,8 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
-	"btcq/docs"
-	btcqmodulekeeper "btcq/x/btcq/keeper"
+	"github.com/btcq-org/btcq/docs"
+	btcqmodulekeeper "github.com/btcq-org/btcq/x/btcq/keeper"
 )
 
 const (

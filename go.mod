@@ -1,4 +1,4 @@
-module btcq
+module github.com/btcq-org/btcq
 
 go 1.25
 

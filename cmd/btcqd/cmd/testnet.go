@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cast"
 	"github.com/spf13/cobra"
 
-	"btcq/app"
+	"github.com/btcq-org/btcq/app"
 )
 
 var flagAccountsToFund = "accounts-to-fund"

@@ -1,10 +1,11 @@
 package common
 
 import (
-	"btcq/app"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/btcq-org/btcq/app"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"

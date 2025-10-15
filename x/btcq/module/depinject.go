@@ -9,8 +9,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 
-	"btcq/x/btcq/keeper"
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/keeper"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 var _ depinject.OnePerModuleType = AppModule{}

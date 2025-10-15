@@ -1,7 +1,7 @@
 package keeper
 
 import (
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 type msgServer struct {

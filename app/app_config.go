@@ -1,8 +1,8 @@
 package app
 
 import (
-	_ "btcq/x/btcq/module"
-	btcqmoduletypes "btcq/x/btcq/types"
+	_ "github.com/btcq-org/btcq/x/btcq/module"
+	btcqmoduletypes "github.com/btcq-org/btcq/x/btcq/types"
 
 	runtimev1alpha1 "cosmossdk.io/api/cosmos/app/runtime/v1alpha1"
 	appv1alpha1 "cosmossdk.io/api/cosmos/app/v1alpha1"

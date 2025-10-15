@@ -37,7 +37,8 @@ func TestCoin(t *testing.T) {
 func TestCoins(t *testing.T) {
 	btcAsset, err := NewAsset("BTC.BTC")
 	assert.Nil(t, err)
-	btcqAsset, err := NewAsset("BTCQ.BTCQ")
+	btcqAsset, err1 := NewAsset("BTCQ.BTCQ")
+	assert.Nil(t, err1)
 	coins := Coins{
 		NewCoin(btcqAsset, math.NewUint(1000)),
 		NewCoin(btcAsset, math.NewUint(1000)),

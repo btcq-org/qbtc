@@ -14,8 +14,8 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 
-	"btcq/x/btcq/keeper"
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/keeper"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 var (

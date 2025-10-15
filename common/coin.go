@@ -85,7 +85,7 @@ func (c Coin) IsNative() bool {
 	return c.Asset.GetChain().Equals(BTCQChain)
 }
 
-// IsBTCQ checks whether the coin's Asset is RUNE.
+// IsBTCQ checks whether the coin's Asset is BTCQ.
 func (c Coin) IsBTCQ() bool {
 	return c.Asset.Equals(BTCQAsset)
 }
