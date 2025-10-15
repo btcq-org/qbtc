@@ -59,13 +59,13 @@ func NewCoins(coins ...Coin) Coins {
 }
 
 // Equals compare two coins to see whether they represent the same information
-func (c *Coin) Equals(cc Coin) bool {
+func (c Coin) Equals(cc Coin) bool {
 	return c.Asset.Equals(cc.Asset) &&
 		c.Amount.Equal(cc.Amount)
 }
 
 // IsEmpty check whether asset is empty or amount is zero
-func (c *Coin) IsEmpty() bool {
+func (c Coin) IsEmpty() bool {
 	return c.Asset.IsEmpty() || c.Amount.IsZero()
 }
 
