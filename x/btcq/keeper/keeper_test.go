@@ -13,9 +13,9 @@ import (
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 
-	"btcq/x/btcq/keeper"
-	module "btcq/x/btcq/module"
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/keeper"
+	module "github.com/btcq-org/btcq/x/btcq/module"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 type fixture struct {

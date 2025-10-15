@@ -17,7 +17,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/spf13/cobra"
 
-	"btcq/app"
+	"github.com/btcq-org/btcq/app"
 )
 
 // NewRootCmd creates a new root command for btcqd. It is called once in the main function.

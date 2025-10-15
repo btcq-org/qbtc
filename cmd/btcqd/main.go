@@ -7,8 +7,8 @@ import (
 	clienthelpers "cosmossdk.io/client/v2/helpers"
 	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 
-	"btcq/app"
-	"btcq/cmd/btcqd/cmd"
+	"github.com/btcq-org/btcq/app"
+	"github.com/btcq-org/btcq/cmd/btcqd/cmd"
 )
 
 func main() {

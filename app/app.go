@@ -38,15 +38,14 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
-	"btcq/docs"
-	btcqmodulekeeper "btcq/x/btcq/keeper"
+	"github.com/btcq-org/btcq/docs"
+	btcqmodulekeeper "github.com/btcq-org/btcq/x/btcq/keeper"
 )
 
 const (
 	// Name is the name of the application.
 	Name = "btcq"
-	// AccountAddressPrefix is the prefix for accounts addresses.
-	AccountAddressPrefix = "btcq"
+
 	// ChainCoinType is the coin type of the chain.
 	ChainCoinType = 118
 )
@@ -191,7 +190,7 @@ func New(
 		if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
 			return nil, err
 		}
-		return app.App.InitChainer(ctx, req)
+		return app.InitChainer(ctx, req)
 	})
 
 	if err := app.Load(loadLatest); err != nil {

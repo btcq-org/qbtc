@@ -3,7 +3,7 @@ package keeper_test
 import (
 	"testing"
 
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/types"
 
 	"github.com/stretchr/testify/require"
 )

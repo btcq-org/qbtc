@@ -8,7 +8,7 @@ import (
 	corestore "cosmossdk.io/core/store"
 	"github.com/cosmos/cosmos-sdk/codec"
 
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 type Keeper struct {

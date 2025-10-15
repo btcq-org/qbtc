@@ -24,7 +24,7 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 
-	"btcq/app"
+	"github.com/btcq-org/btcq/app"
 )
 
 func initRootCmd(

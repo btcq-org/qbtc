@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"btcq/x/btcq/keeper"
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/keeper"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 func TestParamsQuery(t *testing.T) {

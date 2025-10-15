@@ -3,7 +3,7 @@ package btcq
 import (
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
 
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 // AutoCLIOptions implements the autocli.HasAutoCLIConfig interface.

@@ -3,7 +3,7 @@ package keeper
 import (
 	"context"
 
-	"btcq/x/btcq/types"
+	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 // InitGenesis initializes the module's state from a provided genesis state.

@@ -19,6 +19,12 @@ ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
 
 BUILD_FLAGS := -ldflags '$(ldflags)'
 
+build:
+	@echo "Building $(APPNAME)d..."
+	@go build $(BUILD_FLAGS) -o ./build/$(APPNAME)d -mod=readonly ./cmd/$(APPNAME)d
+	@echo "Build complete. Binary is located at ./build/$(APPNAME)d"
+	@chmod +x ./build/$(APPNAME)d
+	@./build/$(APPNAME)d version
 ##############
 ###  Test  ###
 ##############
@@ -71,7 +77,7 @@ proto-deps:
 
 proto-gen:
 	@echo "Generating protobuf files..."
-	@ignite generate proto-go --yes
+	./scripts/protocgen.sh
 
 .PHONY: proto-gen
 
@@ -81,11 +87,11 @@ proto-gen:
 
 lint:
 	@echo "--> Running linter"
-	@go tool github.com/golangci/golangci-lint/cmd/golangci-lint run ./... --timeout 15m
+	@go tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint run ./... --timeout 15m -v
 
 lint-fix:
 	@echo "--> Running linter and fixing issues"
-	@go tool github.com/golangci/golangci-lint/cmd/golangci-lint run ./... --fix --timeout 15m
+	@go tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint run ./... --fix --timeout 15m
 
 .PHONY: lint lint-fix
 
@@ -99,7 +105,7 @@ govet:
 
 govulncheck:
 	@echo Running govulncheck...
-	@go tool golang.org/x/vuln/cmd/govulncheck@latest
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
 	@govulncheck ./...
 
 .PHONY: govet govulncheck
