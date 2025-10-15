@@ -1,6 +1,6 @@
 module btcq
 
-go 1.24.3
+go 1.25
 
 replace (
 	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20251013222417-a202e4a462b5
