@@ -28,10 +28,9 @@ func (s Symbol) Valid() error {
 }
 
 // Ticker return the ticker part of symbol
-func (s Symbol) Ticker() Ticker {
+func (s Symbol) Ticker() (Ticker, error) {
 	parts := strings.Split(s.String(), "-")
-	ticker, _ := NewTicker(parts[0])
-	return ticker
+	return NewTicker(parts[0])
 }
 
 // Equals check whether two symbol are the same

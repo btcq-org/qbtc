@@ -22,7 +22,7 @@ func NewAsset(input string) (Asset, error) {
 	var asset Asset
 	var sym string
 	var parts []string
-	re := regexp.MustCompile("[~./-]")
+	re := regexp.MustCompile("[.-]")
 
 	match := re.FindString(input)
 

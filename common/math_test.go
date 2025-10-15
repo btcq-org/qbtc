@@ -3,10 +3,15 @@ package common
 import (
 	"errors"
 	"math/big"
+	"testing"
 
 	"cosmossdk.io/math"
 	. "gopkg.in/check.v1"
 )
+
+func TestMath(t *testing.T) {
+	TestingT(t)
+}
 
 type MathSuite struct{}
 

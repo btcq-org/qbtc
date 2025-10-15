@@ -40,20 +40,24 @@ func (g Gas) Equals(gas2 Gas) bool {
 		return false
 	}
 
+	// make a copy of both lists, so we don't change the original order
+	g1 := make(Gas, len(g))
+	copy(g1, g)
+	g2 := make(Gas, len(gas2))
+	copy(g2, gas2)
 	// sort both lists
-	sort.Slice(g[:], func(i, j int) bool {
-		return g[i].Asset.String() < g[j].Asset.String()
+	sort.Slice(g1[:], func(i, j int) bool {
+		return g1[i].Asset.String() < g1[j].Asset.String()
 	})
-	sort.Slice(gas2[:], func(i, j int) bool {
-		return gas2[i].Asset.String() < gas2[j].Asset.String()
+	sort.Slice(g2[:], func(i, j int) bool {
+		return g2[i].Asset.String() < g2[j].Asset.String()
 	})
 
 	for i := range g {
-		if !g[i].Equals(gas2[i]) {
+		if !g1[i].Equals(g2[i]) {
 			return false
 		}
 	}
-
 	return true
 }
 

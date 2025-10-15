@@ -15,5 +15,5 @@ func NewFee(coins Coins, poolDeduct math.Uint) Fee {
 }
 
 func (f Fee) String() string {
-	return fmt.Sprintf("%d: %s", f.PoolDeduct.Uint64(), f.Coins.String())
+	return fmt.Sprintf("%s: %s", f.PoolDeduct, f.Coins)
 }

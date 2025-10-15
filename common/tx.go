@@ -2,9 +2,7 @@ package common
 
 import (
 	"fmt"
-	"math/big"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -21,6 +19,7 @@ var (
 	BlankTxID = TxID("0000000000000000000000000000000000000000000000000000000000000000")
 
 	regexIsCosmosIndexed = regexp.MustCompile(`^[0-9a-fA-F]{64}-[0-9]+$`)
+	regexHex64           = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 )
 
 // NewTxID parse the input hash as TxID
@@ -35,14 +34,9 @@ func NewTxID(hash string) (TxID, error) {
 
 	switch len(hash) {
 	case 64:
-		// do nothing
-	case 66: // ETH check
-		if !strings.HasPrefix(hash, "0x") {
-			err := fmt.Errorf("txid error: must be 66 characters (got %d)", len(hash))
-			return TxID(""), err
+		if !regexHex64.MatchString(hash) {
+			return TxID(""), fmt.Errorf("txid error: must be 64 hex characters")
 		}
-	case 87, 88:
-		// SOL transaction hash, do nothing
 	default:
 		err := fmt.Errorf("txid error: must be 64 characters (got %d)", len(hash))
 		return TxID(""), err
@@ -54,47 +48,6 @@ func NewTxID(hash string) (TxID, error) {
 // Equals check whether two TxID are the same
 func (tx TxID) Equals(tx2 TxID) bool {
 	return strings.EqualFold(tx.String(), tx2.String())
-}
-
-func (tx TxID) Int64() int64 {
-	if tx.IsEmpty() {
-		return 0
-	}
-
-	txIDStr := tx.String()
-
-	var indexHex string
-
-	if regexIsCosmosIndexed.MatchString(txIDStr) {
-		parts := strings.Split(txIDStr, "-")
-		if len(parts) != 2 {
-			panic("Failed to convert tx id to int64: " + tx.String())
-		}
-
-		txIDStr = parts[0]
-
-		index, err := strconv.ParseInt(parts[1], 10, 64)
-		if err != nil {
-			panic("Failed to parse index: " + tx.String())
-		}
-
-		indexHex = fmt.Sprintf("%x", index)
-	}
-
-	charsRemain := 8 - len(indexHex)
-
-	last8Chars := txIDStr[len(txIDStr)-charsRemain:] + indexHex
-
-	if len(last8Chars) != 8 {
-		panic("Failed to convert tx id to int64: amount of chars != 8: " + last8Chars)
-	}
-
-	// using last8 chars to prevent negative int64
-	val, success := new(big.Int).SetString(last8Chars, 16)
-	if !success {
-		panic("Failed to convert")
-	}
-	return val.Int64()
 }
 
 // IsEmpty return true when the tx represent empty string

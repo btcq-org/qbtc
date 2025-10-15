@@ -72,6 +72,8 @@ func (c Chain) AddressPrefix(cn ChainNetwork) string {
 			return chaincfg.MainNetParams.Bech32HRPSegwit
 		case MockNet:
 			return chaincfg.RegressionNetParams.Bech32HRPSegwit
+		case TestNet:
+			return chaincfg.TestNet3Params.Bech32HRPSegwit
 		}
 	case BTCQChain:
 		return app.AccountAddressPrefix
@@ -81,7 +83,14 @@ func (c Chain) AddressPrefix(cn ChainNetwork) string {
 func (c Chain) IsValidAddress(addr Address) bool {
 	network := CurrentChainNetwork
 	prefix := c.AddressPrefix(network)
-	return strings.HasPrefix(addr.String(), prefix)
+	if !strings.HasPrefix(addr.String(), prefix) {
+		return false
+	}
+	newAddr, err := NewAddress(addr.String())
+	if err != nil {
+		return false
+	}
+	return newAddr.Equals(addr)
 }
 
 func (c Chain) IsBTCQChain() bool {
