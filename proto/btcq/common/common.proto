@@ -3,7 +3,7 @@ package btcq.common;
 
 option go_package = "btcq/common";
 option (gogoproto.goproto_stringer_all) = false;
-option (gogoproto.stringer_all) = false;
+option (gogoproto.stringer_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
 import "amino/amino.proto";
@@ -72,4 +72,3 @@ enum Status {
   done = 1;
   reverted = 2;
 }
-

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"cosmossdk.io/log"
@@ -19,8 +18,6 @@ import (
 
 	"btcq/app"
 )
-
-const valVotingPower int64 = 900000000000000
 
 var flagAccountsToFund = "accounts-to-fund"
 
@@ -118,12 +115,4 @@ func getCommandArgs(appOpts servertypes.AppOptions) (valArgs, error) {
 	args.homeDir = homeDir
 
 	return args, nil
-}
-
-// handleErr prints the error and exits the program if the error is not nil
-func handleErr(err error) {
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
 }
