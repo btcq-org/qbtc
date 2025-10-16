@@ -43,11 +43,6 @@ func initFixture(t *testing.T) *fixture {
 		authority,
 	)
 
-	// Initialize params
-	if err := k.Params.Set(ctx, types.DefaultParams()); err != nil {
-		t.Fatalf("failed to set params: %v", err)
-	}
-
 	return &fixture{
 		ctx:          ctx,
 		keeper:       k,

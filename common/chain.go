@@ -4,8 +4,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/btcq-org/btcq/app"
-
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hashicorp/go-multierror"
 )
@@ -77,7 +75,7 @@ func (c Chain) AddressPrefix(cn ChainNetwork) string {
 			return chaincfg.TestNet3Params.Bech32HRPSegwit
 		}
 	case BTCQChain:
-		return app.AccountAddressPrefix
+		return AccountAddressPrefix
 	}
 	return ""
 }

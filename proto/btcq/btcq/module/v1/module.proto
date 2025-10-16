@@ -3,7 +3,7 @@ package btcq.btcq.module.v1;
 
 import "cosmos/app/v1alpha1/module.proto";
 
-option go_package = "btcq/x/btcq/types";
+option go_package = "github.com/btcq-org/btcq/x/btcq/types";
 
 // Module is the config object for the module.
 message Module {

@@ -8,7 +8,6 @@ cd proto
 
 buf generate --template buf.gen.gogo.yaml
 
-cp  btcq/common/*.pb.go ../common/
-cp -r btcq/x/* ../x
-rm -rf btcq/x
-rm -f btcq/common/*.pb.go
+cp  github.com/btcq-org/btcq/common/*.pb.go ../common/
+cp -r github.com/btcq-org/btcq/x/* ../x
+rm -rf github.com

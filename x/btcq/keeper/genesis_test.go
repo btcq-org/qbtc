@@ -9,9 +9,7 @@ import (
 )
 
 func TestGenesis(t *testing.T) {
-	genesisState := types.GenesisState{
-		Params: types.DefaultParams(),
-	}
+	genesisState := types.GenesisState{}
 
 	f := initFixture(t)
 	err := f.keeper.InitGenesis(f.ctx, genesisState)
@@ -20,5 +18,4 @@ func TestGenesis(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	require.EqualExportedValues(t, genesisState.Params, got.Params)
 }

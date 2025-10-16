@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/btcq-org/btcq/common"
 	_ "github.com/btcq-org/btcq/x/btcq/module"
 	btcqmoduletypes "github.com/btcq-org/btcq/x/btcq/types"
 
@@ -137,7 +138,7 @@ var (
 			{
 				Name: authtypes.ModuleName,
 				Config: appconfig.WrapAny(&authmodulev1.Module{
-					Bech32Prefix:                AccountAddressPrefix,
+					Bech32Prefix:                common.AccountAddressPrefix,
 					ModuleAccountPermissions:    moduleAccPerms,
 					EnableUnorderedTransactions: true,
 					// By default modules authority is the governance module. This is configurable with the following:

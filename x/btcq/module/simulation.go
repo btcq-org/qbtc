@@ -13,9 +13,7 @@ func (AppModule) GenerateGenesisState(simState *module.SimulationState) {
 	for i, acc := range simState.Accounts {
 		accs[i] = acc.Address.String()
 	}
-	btcqGenesis := types.GenesisState{
-		Params: types.DefaultParams(),
-	}
+	btcqGenesis := types.GenesisState{}
 	simState.GenState[types.ModuleName] = simState.Cdc.MustMarshalJSON(&btcqGenesis)
 }
 

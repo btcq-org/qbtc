@@ -25,6 +25,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	authsims "github.com/cosmos/cosmos-sdk/x/auth/simulation"
+	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
 	bankkeeper "github.com/cosmos/cosmos-sdk/x/bank/keeper"
@@ -40,6 +41,7 @@ import (
 
 	"github.com/btcq-org/btcq/docs"
 	btcqmodulekeeper "github.com/btcq-org/btcq/x/btcq/keeper"
+	btcqtypes "github.com/btcq-org/btcq/x/btcq/types"
 )
 
 const (
@@ -159,7 +161,11 @@ func New(
 	); err != nil {
 		panic(err)
 	}
-
+	txSigningOptions, err := tx.NewDefaultSigningOptions()
+	if err != nil {
+		panic(err)
+	}
+	btcqtypes.DefineCustomGetSigners(txSigningOptions)
 	// add to default baseapp options
 	// enable optimistic execution
 	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())

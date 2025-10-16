@@ -1,6 +1,6 @@
 //go:build mocknet
 
-package app
+package common
 
 const (
 	// AccountAddressPrefix is the prefix for accounts addresses.

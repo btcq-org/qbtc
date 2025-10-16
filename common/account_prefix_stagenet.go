@@ -1,8 +1,8 @@
 //go:build stagenet
 
-package app
+package common
 
 const (
 	// AccountAddressPrefix is the prefix for accounts addresses.
-	AccountAddressPrefix = "btcqs"
+	AccountAddressPrefix = "sbtcq"
 )

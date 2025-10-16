@@ -1,0 +1,23 @@
+syntax = "proto3";
+package btcq.btcq.v1;
+
+option go_package = "github.com/btcq-org/btcq/x/btcq/types";
+option (gogoproto.goproto_stringer_all) = true;
+
+import "btcq/common/common.proto";
+import "gogoproto/gogo.proto";
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+
+message MsgDeposit {
+  option (amino.name) = "btcq/MsgDeposit";
+
+  repeated common.Coin coins = 1 [
+    (gogoproto.castrepeated) = "github.com/btcq-org/btcq/common.Coins",
+    (gogoproto.nullable) = false
+  ];
+  string memo = 2;
+  string signer = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  option (cosmos.msg.v1.signer) = "signer";
+}

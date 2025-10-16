@@ -5,8 +5,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/btcq-org/btcq/app"
-
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/cosmos/btcutil/bech32"
@@ -35,7 +33,7 @@ func NewAddress(address string) (Address, error) {
 	}
 	// BTCQ address
 	hrp, _, err := bech32.DecodeNoLimit(address)
-	if err == nil && hrp == app.AccountAddressPrefix {
+	if err == nil && hrp == AccountAddressPrefix {
 		return Address(address), nil
 	}
 

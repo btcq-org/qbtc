@@ -1,11 +1,17 @@
 package keeper
 
 import (
+	"context"
+
 	"github.com/btcq-org/btcq/x/btcq/types"
 )
 
 type msgServer struct {
 	Keeper
+}
+
+func (k msgServer) Mimir(ctx context.Context, mimir *types.MsgMimir) (*types.MsgEmpty, error) {
+	panic("implement me")
 }
 
 // NewMsgServerImpl returns an implementation of the MsgServer interface

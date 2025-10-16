@@ -1,7 +1,7 @@
 syntax = "proto3";
 package btcq.common;
 
-option go_package = "btcq/common";
+option go_package = "github.com/btcq-org/btcq/common";
 option (gogoproto.goproto_stringer_all) = false;
 option (gogoproto.stringer_all) = false;
 option (gogoproto.goproto_getters_all) = false;
