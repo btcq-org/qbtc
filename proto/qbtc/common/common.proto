@@ -1,0 +1,18 @@
+syntax = "proto3";
+package qbtc.common;
+
+option go_package = "github.com/btcq-org/qbtc/common";
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) = false;
+option (gogoproto.goproto_getters_all) = false;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+
+message ProtoUint {
+  option (gogoproto.stringer) = true;
+  string value = 1 [
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+}

@@ -4,5 +4,5 @@ package common
 
 const (
 	// AccountAddressPrefix is the prefix for accounts addresses.
-	AccountAddressPrefix = "btcq"
+	AccountAddressPrefix = "qbtc"
 )

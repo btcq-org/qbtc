@@ -1,14 +1,14 @@
 package app
 
 import (
-	"github.com/btcq-org/btcq/common"
+	"github.com/btcq-org/qbtc/common"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 func init() {
 	// Set bond denom
 
-	sdk.DefaultBondDenom = "btcq"
+	sdk.DefaultBondDenom = "qbtc"
 
 	// Set address prefixes
 	accountPubKeyPrefix := common.AccountAddressPrefix + "pub"
