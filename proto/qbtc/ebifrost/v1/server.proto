@@ -1,0 +1,42 @@
+syntax = "proto3";
+package qbtc.ebifrost.v1;
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/ebifrost";
+
+import "qbtc/common/common.proto";
+
+// LocalhostBifrost exposes the enshrined bifrost control plane over gRPC.
+service LocalhostBifrost {
+
+  // SubscribeToEvents streams event notifications that match the requested
+  // types.
+  rpc SubscribeToEvents(SubscribeRequest) returns (stream EventNotification);
+}
+
+// SendQuorumTxResult is the empty return type
+message SendQuorumTxResult {}
+
+// SubscribeRequest is a request to subscribe to events emitted by btcq node.
+message SubscribeRequest {
+  // Optional fields to filter what events to subscribe to
+  repeated string event_types = 1;
+}
+
+// EventNotification is a notification of an event emitted by btcq node.
+message EventNotification {
+  string event_type = 1;
+  bytes payload = 2;
+  int64 timestamp = 3;
+}
+
+// SendQuorumNetworkFeeResult is the empty return type
+message SendQuorumNetworkFeeResult {}
+
+// SendQuorumSolvencyResult is the empty return type
+message SendQuorumSolvencyResult {}
+
+// SendQuorumErrataTxResult is the empty return type
+message SendQuorumErrataTxResult {}
+
+// SendQuorumPriceFeedBatchResult is the empty return type
+message SendQuorumPriceFeedBatchResult {}

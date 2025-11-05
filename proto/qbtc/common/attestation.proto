@@ -1,0 +1,17 @@
+syntax = "proto3";
+package qbtc.common;
+
+option go_package = "github.com/btcq-org/qbtc/common";
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) = false;
+option (gogoproto.goproto_getters_all) = false;
+
+import "gogoproto/gogo.proto";
+import "cosmos_proto/cosmos.proto";
+
+message Attestation {
+  option (gogoproto.stringer) = true;
+
+  string address = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  bytes signature = 2;
+}
