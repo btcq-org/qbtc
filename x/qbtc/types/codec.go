@@ -8,10 +8,10 @@ import (
 )
 
 func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
-	registrar.RegisterImplementations((*sdk.Msg)(nil))
+	registrar.RegisterImplementations((*sdk.Msg)(nil),
+		&MsgBtcBlock{})
 
 	msgservice.RegisterMsgServiceDesc(registrar, &_Msg_serviceDesc)
 }
 func DefineCustomGetSigners(signingOptions *signing.Options) {
-	//signingOptions.DefineCustomGetSigners(protoreflect.FullName("qbtc.qbtc.v1.MsgMimir"), MsgMimirCustomGetSigners)
 }
