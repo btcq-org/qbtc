@@ -15,5 +15,7 @@ const (
 	GovModuleName = "gov"
 )
 
-// ParamsKey is the prefix to retrieve all Params
-var ParamsKey = collections.NewPrefix("p_btcq")
+var (
+	// UTXOKeys is the prefix for UTXO store
+	UTXOKeys = collections.NewPrefix("utxo")
+)
