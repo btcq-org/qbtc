@@ -1,0 +1,15 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+message mimir {
+  string key = 1;
+  int64 value = 2;
+}
+// GenesisState defines the btcq module's genesis state.
+message GenesisState {
+  repeated mimir mimirs = 1 [ (gogoproto.nullable) = false ];
+}

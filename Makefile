@@ -1,6 +1,6 @@
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT := $(shell git log -1 --format='%H')
-APPNAME := btcq
+APPNAME := qbtc
 
 # do not override user values
 ifeq (,$(VERSION))
@@ -64,7 +64,6 @@ install:
 	@go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
 
 .PHONY: all install
-
 ##################
 ###  Protobuf  ###
 ##################
@@ -81,6 +80,29 @@ proto-gen:
 
 .PHONY: proto-gen
 
+###################
+###  Protobuf formatting ###
+###################
+protoVer=0.17.1
+protoImageName=ghcr.io/cosmos/proto-builder:$(protoVer)
+protoImage=docker run --rm -v $(CURDIR):/workspace --workdir /workspace $(protoImageName)
+
+proto-format:
+	@echo "Formatting Protobuf files"
+	@$(protoImage) find ./ -name "*.proto" -exec clang-format -i {} \;
+
+proto-format-check:
+	@echo "Checking Protobuf formatting"
+	@find ./ -name "*.proto" -print0 | xargs -0L1 $(protoImage) clang-format --dry-run -Werror
+
+proto-lint:
+	@$(protoImage) buf lint --error-format=json
+
+proto-check-breaking:
+	@$(protoImage) buf breaking --against $(HTTPS_GIT)#branch=develop
+
+.PHONY: buf-format buf-format-check
+
 #################
 ###  Linting  ###
 #################
@@ -93,7 +115,35 @@ lint-fix:
 	@echo "--> Running linter and fixing issues"
 	@go tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint run ./... --fix --timeout 15m
 
-.PHONY: lint lint-fix
+lint-md:
+	@echo "--> Running markdown linter"
+	@if [ -f "node_modules/.bin/markdownlint-cli2" ]; then \
+		npm run lint:md; \
+	elif command -v markdownlint-cli2 >/dev/null 2>&1; then \
+		markdownlint-cli2 "**/*.md" --config .markdownlint.json; \
+	else \
+		echo "markdownlint-cli2 not installed."; \
+		echo "Install locally: npm install"; \
+		echo "Or globally: npm install -g markdownlint-cli2"; \
+		echo "Skipping markdown linting..."; \
+	fi
+
+lint-md-fix:
+	@echo "--> Running markdown linter and fixing issues"
+	@if [ -f "node_modules/.bin/markdownlint-cli2" ]; then \
+		npm run lint:md:fix; \
+	elif command -v markdownlint-cli2 >/dev/null 2>&1; then \
+		markdownlint-cli2 --fix "**/*.md" --config .markdownlint.json; \
+	else \
+		echo "markdownlint-cli2 not installed."; \
+		echo "Install locally: npm install"; \
+		echo "Or globally: npm install -g markdownlint-cli2"; \
+		echo "Skipping markdown linting..."; \
+	fi
+
+check: proto-format lint lint-md
+
+.PHONY: lint lint-fix lint-md lint-md-fix check
 
 ###################
 ### Development ###

@@ -39,14 +39,14 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
-	"github.com/btcq-org/btcq/docs"
-	btcqmodulekeeper "github.com/btcq-org/btcq/x/btcq/keeper"
-	btcqtypes "github.com/btcq-org/btcq/x/btcq/types"
+	"github.com/btcq-org/qbtc/docs"
+	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
+	btcqtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 const (
 	// Name is the name of the application.
-	Name = "btcq"
+	Name = "qbtc"
 
 	// ChainCoinType is the coin type of the chain.
 	ChainCoinType = 118

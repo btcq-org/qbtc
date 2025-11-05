@@ -1,9 +1,9 @@
 package app
 
 import (
-	"github.com/btcq-org/btcq/common"
-	_ "github.com/btcq-org/btcq/x/btcq/module"
-	btcqmoduletypes "github.com/btcq-org/btcq/x/btcq/types"
+	"github.com/btcq-org/qbtc/common"
+	_ "github.com/btcq-org/qbtc/x/qbtc/module"
+	btcqmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
 
 	runtimev1alpha1 "cosmossdk.io/api/cosmos/app/runtime/v1alpha1"
 	appv1alpha1 "cosmossdk.io/api/cosmos/app/v1alpha1"

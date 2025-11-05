@@ -41,18 +41,6 @@ func (c Chain) IsEmpty() bool {
 	return strings.TrimSpace(c.String()) == ""
 }
 
-// GetGasAsset chain's base asset
-func (c Chain) GetGasAsset() Asset {
-	switch c {
-	case BTCQChain:
-		return BTCQAsset
-	case BTCChain:
-		return BTCAsset
-	default:
-		return EmptyAsset
-	}
-}
-
 // NewChain create a new Chain
 func NewChain(chainID string) (Chain, error) {
 	chain := Chain(strings.ToUpper(chainID))
@@ -78,18 +66,6 @@ func (c Chain) AddressPrefix(cn ChainNetwork) string {
 		return AccountAddressPrefix
 	}
 	return ""
-}
-func (c Chain) IsValidAddress(addr Address) bool {
-	network := CurrentChainNetwork
-	prefix := c.AddressPrefix(network)
-	if !strings.HasPrefix(addr.String(), prefix) {
-		return false
-	}
-	newAddr, err := NewAddress(addr.String())
-	if err != nil {
-		return false
-	}
-	return newAddr.Equals(addr)
 }
 
 func (c Chain) IsBTCQChain() bool {

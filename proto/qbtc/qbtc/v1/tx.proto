@@ -1,0 +1,15 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// Msg defines the Msg service.
+service Msg { option (cosmos.msg.v1.service) = true; }
+
+// MsgEmpty is the return type for all current Msg Server messages
+message MsgEmpty {}
