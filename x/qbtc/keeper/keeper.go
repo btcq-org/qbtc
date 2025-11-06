@@ -13,21 +13,29 @@ type Keeper struct {
 	cdc          codec.Codec
 	addressCodec address.Codec
 
-	Schema collections.Schema
-	Utxoes collections.Map[string, types.UTXO]
+	// Keepers
+	stakingKeeper types.StakingKeeper
+
+	// Collections
+	Schema  collections.Schema
+	Utxoes  collections.Map[string, types.UTXO]
+	NodeIPs collections.Map[string, string]
 }
 
 func NewKeeper(
 	storeService corestore.KVStoreService,
 	cdc codec.Codec,
 	addressCodec address.Codec,
+	stakingKeeper types.StakingKeeper,
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService: storeService,
-		cdc:          cdc,
-		addressCodec: addressCodec,
-		Utxoes:       collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		storeService:  storeService,
+		cdc:           cdc,
+		addressCodec:  addressCodec,
+		stakingKeeper: stakingKeeper,
+		Utxoes:        collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodeIPs:       collections.NewMap(sb, types.NodeIPKeys, "node_ips", collections.StringKey, collections.StringValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {

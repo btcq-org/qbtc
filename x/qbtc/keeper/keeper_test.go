@@ -36,6 +36,7 @@ func initFixture(t *testing.T) *fixture {
 		storeService,
 		encCfg.Codec,
 		addressCodec,
+		nil,
 	)
 
 	return &fixture{
