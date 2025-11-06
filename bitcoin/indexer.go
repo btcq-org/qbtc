@@ -39,11 +39,11 @@ func GetConfig() (*Config, error) {
 }
 
 type Config struct {
-	RpcHost     string `json:"rpc_host"`
-	RpcPort     int    `json:"rpc_port"`
-	RpcUser     string `json:"rpc_user"`
-	RpcPass     string `json:"rpc_pass"`
-	LocalDbPath string `json:"local_db_path"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	User        string `json:"user"`
+	Password    string `json:"password"`
+	LocalDBPath string `json:"local_db_path"`
 }
 type Indexer struct {
 	cfg    Config
@@ -56,12 +56,15 @@ type Indexer struct {
 
 // NewIndexer creates a new Indexer instance with the given configuration.
 func NewIndexer(cfg Config) (*Indexer, error) {
-	db, err := NewLevelDB(cfg.LocalDbPath, true)
+	db, err := NewLevelDB(cfg.LocalDBPath, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create level db: %w", err)
 	}
-	client, err := newClient(cfg.RpcHost, cfg.RpcUser, cfg.RpcPass)
+	client, err := newClient(cfg.Host, cfg.User, cfg.Password)
 	if err != nil {
+		if dbCloseErr := db.Close(); dbCloseErr != nil {
+			log.Error().Err(dbCloseErr).Str("module", "bitcoin_indexer").Msg("failed to close leveldb after rpc client creation error")
+		}
 		return nil, fmt.Errorf("failed to create rpc client: %w", err)
 	}
 	indexer := &Indexer{
@@ -214,7 +217,8 @@ func (i *Indexer) processVIn(ins []btcjson.Vin) {
 func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 	for _, out := range outs {
 		key := fmt.Sprintf("%s-%d", txid, out.N)
-		if err := i.db.Put([]byte(key), []byte(fmt.Sprintf("%f", out.Value)), nil); err != nil {
+		value := strconv.FormatFloat(out.Value, 'f', 8, 64)
+		if err := i.db.Put([]byte(key), []byte(value), nil); err != nil {
 			i.logger.Err(err).Msgf("failed to put key,txid: %s", txid)
 		}
 	}

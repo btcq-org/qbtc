@@ -27,6 +27,10 @@ func NewLevelDB(path string, compactOnInit bool) (*leveldb.DB, error) {
 		log.Info().Str("path", path).Msg("compacting leveldb...")
 		err = db.CompactRange(util.Range{})
 		if err != nil {
+			closeErr := db.Close()
+			if closeErr != nil {
+				log.Error().Err(closeErr).Str("path", path).Msg("failed to close leveldb after compaction error")
+			}
 			return nil, fmt.Errorf("failed to compact level db %s: %w", path, err)
 		}
 		log.Info().Str("path", path).Msg("leveldb compacted")

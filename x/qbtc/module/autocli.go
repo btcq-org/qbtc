@@ -12,16 +12,6 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 		Query: &autocliv1.ServiceCommandDescriptor{
 			Service:           types.Query_serviceDesc.ServiceName,
 			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
-				//{
-				//	RpcMethod: "Node",
-				//	Use:       "node",
-				//	Short:     "query node",
-				//},
-				//{
-				//	RpcMethod: "Nodes",
-				//	Use:       "nodes",
-				//	Short:     "query nodes",
-				//},
 				// this line is used by ignite scaffolding # autocli/query
 			},
 		},
@@ -29,10 +19,7 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 			Service:              types.Msg_serviceDesc.ServiceName,
 			EnhanceCustomCommand: true, // only required if you want to use the custom command
 			RpcCommandOptions:    []*autocliv1.RpcCommandOptions{
-				//{
-				//	RpcMethod: "UpdateParams",
-				//	Skip:      true, // skipped because authority gated
-				//},
+
 				// this line is used by ignite scaffolding # autocli/tx
 			},
 		},

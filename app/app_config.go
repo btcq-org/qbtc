@@ -3,7 +3,7 @@ package app
 import (
 	"github.com/btcq-org/qbtc/common"
 	_ "github.com/btcq-org/qbtc/x/qbtc/module"
-	btcqmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	qbtcmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
 
 	runtimev1alpha1 "cosmossdk.io/api/cosmos/app/runtime/v1alpha1"
 	appv1alpha1 "cosmossdk.io/api/cosmos/app/v1alpha1"
@@ -59,6 +59,7 @@ var (
 		{Account: stakingtypes.NotBondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
 		{Account: ibctransfertypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: icatypes.ModuleName},
+		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 	}
 
 	// blocked account addresses
@@ -94,14 +95,14 @@ var (
 						// ibc modules
 						ibcexported.ModuleName,
 						// chain modules
-						btcqmoduletypes.ModuleName,
+						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
 						stakingtypes.ModuleName,
 						feegrant.ModuleName,
 						// chain modules
-						btcqmoduletypes.ModuleName,
+						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
@@ -130,7 +131,7 @@ var (
 						ibctransfertypes.ModuleName,
 						icatypes.ModuleName,
 						// chain modules
-						btcqmoduletypes.ModuleName,
+						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
 					},
 				}),
@@ -193,8 +194,8 @@ var (
 				Config: appconfig.WrapAny(&epochsmodulev1.Module{}),
 			},
 			{
-				Name:   btcqmoduletypes.ModuleName,
-				Config: appconfig.WrapAny(&btcqmoduletypes.Module{}),
+				Name:   qbtcmoduletypes.ModuleName,
+				Config: appconfig.WrapAny(&qbtcmoduletypes.Module{}),
 			},
 			// this line is used by starport scaffolding # stargate/app/moduleConfig
 		},
