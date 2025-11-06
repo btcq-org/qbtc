@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,7 +10,13 @@ import (
 	"github.com/btcq-org/qbtc/bitcoin"
 )
 
+var (
+	exportUTXO     = flag.Bool("export-utxo", false, "export utxo from db and exit")
+	exportUTXOFile = flag.String("export-utxo-file", "", "path to write exported utxos (default stdout)")
+)
+
 func main() {
+	flag.Parse()
 	cfg, err := bitcoin.GetConfig()
 	if err != nil {
 		panic(err)
@@ -17,6 +24,13 @@ func main() {
 	indexer, err := bitcoin.NewIndexer(*cfg)
 	if err != nil {
 		panic(err)
+	}
+	// if export flag is set, export and exit
+	if *exportUTXO {
+		if err := indexer.ExportUTXO(*exportUTXOFile); err != nil {
+			panic(err)
+		}
+		return
 	}
 	if err := indexer.Start(); err != nil {
 		panic(err)

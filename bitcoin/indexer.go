@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -265,4 +266,39 @@ func extractBTCError(err error) error {
 
 	// return the error message
 	return btcjson.NewRPCError(response.Error.Code, response.Error.Message)
+}
+
+// ExportUTXO writes DB entries that mention "utxo" in the key to the named file (base64-encoded values).
+// If outPath is empty, it writes to stdout instead.
+func (i *Indexer) ExportUTXO(outPath string) error {
+	if outPath == "" {
+		return fmt.Errorf("output filepath is empty")
+	}
+	f, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("failed to create export file: %w", err)
+	}
+	// close file only if we created one (not stdout)
+	defer func() {
+		if f != nil {
+			if err := f.Close(); err != nil {
+				i.logger.Error().Err(err).Msg("failed to close export file")
+			}
+		}
+	}()
+
+	it := i.db.NewIterator(nil, nil)
+	defer it.Release()
+	for it.First(); it.Valid(); it.Next() {
+		k := it.Key()
+		v := it.Value()
+		line := fmt.Sprintf("%s-%s\n", string(k), string(v))
+		if _, err := f.WriteString(line); err != nil {
+			return fmt.Errorf("failed to write export: %w", err)
+		}
+	}
+	if err := it.Error(); err != nil {
+		i.logger.Error().Err(err).Str("module", "bitcoin_indexer")
+	}
+	return nil
 }
