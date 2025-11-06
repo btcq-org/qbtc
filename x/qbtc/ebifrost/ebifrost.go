@@ -16,6 +16,7 @@ import (
 const (
 	// ebifrostSignerAcc is the dummy address to submit injected transactions.
 	// generated: bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte("ebifrost_signer")))
+	// nolint:unused
 	ebifrostSignerAcc = "btcq102aqxl4u8h9q4lcsruq56kkmeey0v699s5q0ll"
 	// number of most recent blocks to keep in the cache
 	cachedBlocks                   = 10
@@ -33,6 +34,7 @@ type EnshrinedBifrost struct {
 	started   bool
 
 	// subscribers
+	// nolint:unused
 	subscribersMu sync.Mutex
 
 	subscribers map[string][]chan *EventNotification
@@ -102,6 +104,7 @@ func (eb *EnshrinedBifrost) Stop() {
 	eb.s.Stop()
 }
 
+// nolint:unused
 func (eb *EnshrinedBifrost) broadcastEvent(eventType string, payload []byte) {
 	event := &EventNotification{
 		EventType: eventType,

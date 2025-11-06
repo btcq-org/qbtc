@@ -9,6 +9,8 @@ func (a *Attestation) Equals(other *Attestation) bool {
 	return a.Address == other.Address && bytes.Equal(a.Signature, other.Signature)
 }
 
+// removeAttestations removes attestations from a list of attestations
+// nolint:unused
 func removeAttestations(
 	existing []*Attestation,
 	toRemove []*Attestation,
