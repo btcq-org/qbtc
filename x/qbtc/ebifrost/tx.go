@@ -40,7 +40,7 @@ func NewInjectTx(cdc codec.Codec, msgs []sdk.Msg) wInjectTx {
 }
 
 func (w wInjectTx) GetMsgs() []sdk.Msg {
-	msgs, err := sdktx.GetMsgs(w.Tx.Messages, "thorchain.InjectTx")
+	msgs, err := sdktx.GetMsgs(w.Tx.Messages, "qbtc.InjectTx")
 	if err != nil {
 		panic(err)
 	}

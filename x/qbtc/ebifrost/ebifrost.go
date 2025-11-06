@@ -19,8 +19,7 @@ const (
 	// nolint:unused
 	ebifrostSignerAcc = "btcq102aqxl4u8h9q4lcsruq56kkmeey0v699s5q0ll"
 	// number of most recent blocks to keep in the cache
-	cachedBlocks                   = 10
-	EventQuorumNetworkFeeCommitted = "quorum_network_fee_committed"
+	cachedBlocks = 10
 )
 
 // EnshrinedBifrost is an embedded btcq service that is used to communicate with bifrost
