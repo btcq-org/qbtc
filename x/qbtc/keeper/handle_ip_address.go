@@ -15,17 +15,20 @@ func (k Keeper) SetIPAddress(ctx context.Context, msg *types.MsgSetIPAddress) (*
 		return nil, err
 	}
 
-	signer, err := sdk.ValAddressFromBech32(msg.Signer)
+	signerAcc, err := sdk.AccAddressFromBech32(msg.Signer)
 	if err != nil {
 		return nil, err
 	}
 
+	// Convert account address to validator address
+	signer := sdk.ValAddress(signerAcc)
 	// Get the validator
 	validator, err := k.stakingKeeper.GetValidator(ctx, signer)
 	if err != nil {
 		return nil, err
 	}
 
+	// Check if the validator is bonded (Active)
 	if validator.Status != stakingtypes.Bonded {
 		return nil, errors.New("validator is not bonded")
 	}
