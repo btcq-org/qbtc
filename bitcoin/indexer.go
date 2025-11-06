@@ -143,6 +143,7 @@ func (i *Indexer) Stop() {
 	} else {
 		i.logger.Info().Str("module", "bitcoin_indexer").Msg("leveldb closed")
 	}
+	i.client.Close()
 	i.logger.Info().Str("module", "bitcoin_indexer").Msg("indexer stopped")
 }
 
@@ -194,6 +195,9 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 				i.processTransaction(tx)
 			}
 			currentHeight++
+			if err := i.setStartBlockHeight(currentHeight); err != nil {
+				i.logger.Error().Err(err).Str("module", "bitcoin_indexer").Msg("failed to save current block height on shutdown")
+			}
 		}
 	}
 }
@@ -302,7 +306,7 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 		}
 	}
 	if err := it.Error(); err != nil {
-		i.logger.Error().Err(err).Str("module", "bitcoin_indexer")
+		return fmt.Errorf("iterator error during export: %w", err)
 	}
 	return nil
 }
