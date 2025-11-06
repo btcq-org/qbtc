@@ -38,7 +38,7 @@ type ModuleInputs struct {
 type ModuleOutputs struct {
 	depinject.Out
 
-	BtcqKeeper keeper.Keeper
+	QbtcKeeper keeper.Keeper
 	Module     appmodule.AppModule
 }
 
@@ -50,5 +50,5 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.AddressCodec)
 	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper)
 
-	return ModuleOutputs{BtcqKeeper: k, Module: m}
+	return ModuleOutputs{QbtcKeeper: k, Module: m}
 }
