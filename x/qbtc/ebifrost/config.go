@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	flagEnabled = "ebifrost.enable"
-	flagAddress = "ebifrost.address"
+	flagEnabled      = "ebifrost.enable"
+	flagAddress      = "ebifrost.address"
+	flagCacheItemTTL = "ebifrost.cache_item_ttl"
 )
 
 type EBifrostConfig struct {
@@ -55,6 +56,7 @@ func AddModuleInitFlags(startCmd *cobra.Command) {
 	defaults := DefaultEBifrostConfig()
 	startCmd.Flags().Bool(flagEnabled, defaults.Enable, "Enable the local enshrined bifrost GRPC listener")
 	startCmd.Flags().String(flagAddress, defaults.Address, "Listen address of the enshrined bifrost GRPC listener")
+	startCmd.Flags().Duration(flagCacheItemTTL, defaults.CacheItemTTL, "Cache item TTL for the enshrined bifrost inject cache")
 }
 
 // ReadEBifrostConfig reads the ebifrost specific configuration
@@ -75,5 +77,19 @@ func ReadEBifrostConfig(opts servertypes.AppOptions) (EBifrostConfig, error) {
 		}
 	}
 
+	if v := opts.Get(flagCacheItemTTL); v != nil {
+		switch t := v.(type) {
+		case time.Duration:
+			cfg.CacheItemTTL = t
+		case string:
+			parsed, err := time.ParseDuration(t)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.CacheItemTTL = parsed
+		default:
+			return cfg, fmt.Errorf("expected duration or string for %s, got %T", flagCacheItemTTL, v)
+		}
+	}
 	return cfg, nil
 }

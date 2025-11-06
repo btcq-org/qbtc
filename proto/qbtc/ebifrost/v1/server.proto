@@ -3,8 +3,6 @@ package qbtc.ebifrost.v1;
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/ebifrost";
 
-import "qbtc/common/common.proto";
-
 // LocalhostBifrost exposes the enshrined bifrost control plane over gRPC.
 service LocalhostBifrost {
 

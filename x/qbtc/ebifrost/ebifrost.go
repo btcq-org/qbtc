@@ -1,6 +1,7 @@
 package ebifrost
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -67,13 +68,15 @@ func (eb *EnshrinedBifrost) Start() error {
 	if eb.started {
 		return ErrAlreadyStarted
 	}
-	eb.started = true
+
 	lis, err := net.Listen("tcp", eb.cfg.Address)
 	if err != nil {
 		return err
 	}
+	eb.started = true
 	go func() {
-		if err := eb.s.Serve(lis); err != nil {
+		if err := eb.s.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			eb.logger.Error("Enshrined bifrost gRPC server exited", "error", err)
 			panic(fmt.Errorf("failed to start enshrined bifrost grpc server: %w", err))
 		}
 	}()
