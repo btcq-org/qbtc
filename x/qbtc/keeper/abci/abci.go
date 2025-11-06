@@ -44,7 +44,11 @@ func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrep
 
 	// Modify request for upstream handler with reduced max tx size
 	origMaxTxBytes := req.MaxTxBytes
-	req.MaxTxBytes -= txBzLen
+	if txBzLen >= req.MaxTxBytes {
+		req.MaxTxBytes = 0
+	} else {
+		req.MaxTxBytes -= txBzLen
+	}
 
 	// Let default handler process original txs with reduced size
 	resp, err := h.prepareProposalHandler(ctx, req)
