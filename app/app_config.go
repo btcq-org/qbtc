@@ -27,7 +27,7 @@ import (
 	upgradetypes "cosmossdk.io/x/upgrade/types"
 	"github.com/btcq-org/qbtc/common"
 	_ "github.com/btcq-org/qbtc/x/qbtc/module"
-	btcqmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	qbtcmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	_ "github.com/cosmos/cosmos-sdk/x/auth/tx/config" // import for side-effects
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -67,6 +67,7 @@ var (
 		{Account: stakingtypes.NotBondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
 		{Account: ibctransfertypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: icatypes.ModuleName},
+		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 	}
 
@@ -110,7 +111,7 @@ var (
 						// ibc modules
 						ibcexported.ModuleName,
 						// chain modules
-						btcqmoduletypes.ModuleName,
+						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
@@ -118,7 +119,7 @@ var (
 						stakingtypes.ModuleName,
 						feegrant.ModuleName,
 						// chain modules
-						btcqmoduletypes.ModuleName,
+						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
@@ -151,7 +152,7 @@ var (
 						ibctransfertypes.ModuleName,
 						icatypes.ModuleName,
 						// chain modules
-						btcqmoduletypes.ModuleName,
+						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
 					},
 				}),
@@ -226,8 +227,8 @@ var (
 				Config: appconfig.WrapAny(&epochsmodulev1.Module{}),
 			},
 			{
-				Name:   btcqmoduletypes.ModuleName,
-				Config: appconfig.WrapAny(&btcqmoduletypes.Module{}),
+				Name:   qbtcmoduletypes.ModuleName,
+				Config: appconfig.WrapAny(&qbtcmoduletypes.Module{}),
 			},
 			// this line is used by starport scaffolding # stargate/app/moduleConfig
 		},
