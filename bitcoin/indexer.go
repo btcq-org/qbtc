@@ -221,8 +221,12 @@ func (i *Indexer) processVIn(ins []btcjson.Vin) {
 func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 	for _, out := range outs {
 		key := fmt.Sprintf("%s-%d", txid, out.N)
-		value := strconv.FormatFloat(out.Value, 'f', 8, 64)
-		if err := i.db.Put([]byte(key), []byte(value), nil); err != nil {
+		outBuff, err := json.Marshal(out)
+		if err != nil {
+			i.logger.Err(err).Msgf("failed to marshal vout,txid: %s", txid)
+			continue
+		}
+		if err := i.db.Put([]byte(key), outBuff, nil); err != nil {
 			i.logger.Err(err).Msgf("failed to put key,txid: %s", txid)
 		}
 	}
