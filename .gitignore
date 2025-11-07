@@ -12,3 +12,4 @@ build/
 qbtcd
 debug_container.svg
 .golangci.bck.yml
+.qbtclocalnode/

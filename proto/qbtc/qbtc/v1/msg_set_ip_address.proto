@@ -1,0 +1,18 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// MsgSetIPAddress allows authorized validators to update their IP address.
+message MsgSetIPAddress {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "qbtc/MsgSetIPAddress";
+
+  string ip_address = 1 [ (gogoproto.customname) = "IPAddress" ];
+  string signer = 2 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+}
