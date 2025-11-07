@@ -8,6 +8,7 @@ release/
 *.log
 *.ign
 btcqd
+build/
 qbtcd
 debug_container.svg
 .golangci.bck.yml
