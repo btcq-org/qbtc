@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
@@ -9,9 +11,6 @@ import (
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
-	"github.com/btcq-org/qbtc/docs"
-	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
-	btcqtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
@@ -43,6 +42,12 @@ import (
 	icahostkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/host/keeper"
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
+
+	"github.com/btcq-org/qbtc/docs"
+	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
+	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
+	btcqtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 const (
@@ -70,6 +75,8 @@ type App struct {
 	appCodec          codec.Codec
 	txConfig          client.TxConfig
 	interfaceRegistry codectypes.InterfaceRegistry
+
+	EnshrinedBifrost *ebifrost.EnshrinedBifrost
 
 	// keepers
 	// only keepers required by the app are exposed
@@ -145,6 +152,11 @@ func New(
 		)
 	)
 
+	ebifrostConfig, err := ebifrost.ReadEBifrostConfig(appOpts)
+	if err != nil {
+		panic(fmt.Sprintf("error while reading ebifrost config: %s", err))
+	}
+
 	var appModules map[string]appmodule.AppModule
 	if err := depinject.Inject(appConfig,
 		&appBuilder,
@@ -181,6 +193,18 @@ func New(
 	if err := app.registerIBCModules(appOpts); err != nil {
 		panic(err)
 	}
+
+	app.EnshrinedBifrost = ebifrost.NewEnshrinedBifrost(ebifrostConfig, app.AppCodec(), logger)
+	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
+	eBifrostProposalHandler := qbtcabi.NewProposalHandler(
+		&app.BtcqKeeper,
+		app.EnshrinedBifrost,
+		app.interfaceRegistry,
+		defaultProposalHandler.PrepareProposalHandler(),
+		defaultProposalHandler.ProcessProposalHandler(),
+	)
+	app.SetPrepareProposal(eBifrostProposalHandler.PrepareProposal)
+	app.SetProcessProposal(eBifrostProposalHandler.ProcessProposal)
 
 	/****  Module Options ****/
 
@@ -255,6 +279,20 @@ func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig
 
 	// register app's OpenAPI routes.
 	docs.RegisterOpenAPIService(Name, apiSvr.Router)
+}
+
+// RegisterNodeService registers the node services for the application.
+func (app *App) RegisterNodeService(ctx client.Context, config config.Config) {
+	app.App.RegisterNodeService(ctx, config)
+	if err := app.EnshrinedBifrost.Start(); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
+		panic(fmt.Errorf("failed to start bifrost service: %w", err))
+	}
+}
+
+// Close stops enshrined bifrost and closes the application.
+func (app *App) Close() error {
+	app.EnshrinedBifrost.Stop()
+	return app.App.Close()
 }
 
 // GetMaccPerms returns a copy of the module account permissions
