@@ -42,7 +42,7 @@ func GetConfig() (*Config, error) {
 type Config struct {
 	Host        string `mapstructure:"host" json:"host"`
 	Port        int64  `mapstructure:"port" json:"port"`
-	RpcUser     string `mapstructure:"rpc_user" json:"rpc_user"`
+	RPCUser     string `mapstructure:"rpc_user" json:"rpc_user"`
 	Password    string `mapstructure:"password" json:"password"`
 	LocalDBPath string `mapstructure:"local_db_path" json:"local_db_path"`
 }
@@ -61,7 +61,7 @@ func NewIndexer(cfg Config) (*Indexer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create level db: %w", err)
 	}
-	client, err := newClient(cfg.Host, cfg.Port, cfg.RpcUser, cfg.Password)
+	client, err := newClient(cfg.Host, cfg.Port, cfg.RPCUser, cfg.Password)
 	if err != nil {
 		if dbCloseErr := db.Close(); dbCloseErr != nil {
 			log.Error().Err(dbCloseErr).Str("module", "bitcoin_indexer").Msg("failed to close leveldb after rpc client creation error")
