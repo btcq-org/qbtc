@@ -22,6 +22,69 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type ScriptPubKeyResult struct {
+	// The script public key in hex format
+	Hex string `protobuf:"bytes,1,opt,name=hex,proto3" json:"hex,omitempty"`
+	// The type of the script public key (e.g., "pubkeyhash", "scripthash")
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// The addresses associated with this script public key
+	Address string `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+}
+
+func (m *ScriptPubKeyResult) Reset()         { *m = ScriptPubKeyResult{} }
+func (m *ScriptPubKeyResult) String() string { return proto.CompactTextString(m) }
+func (*ScriptPubKeyResult) ProtoMessage()    {}
+func (*ScriptPubKeyResult) Descriptor() ([]byte, []int) {
+	return fileDescriptor_6f20580ae8da58f8, []int{0}
+}
+func (m *ScriptPubKeyResult) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ScriptPubKeyResult) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ScriptPubKeyResult.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ScriptPubKeyResult) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ScriptPubKeyResult.Merge(m, src)
+}
+func (m *ScriptPubKeyResult) XXX_Size() int {
+	return m.Size()
+}
+func (m *ScriptPubKeyResult) XXX_DiscardUnknown() {
+	xxx_messageInfo_ScriptPubKeyResult.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ScriptPubKeyResult proto.InternalMessageInfo
+
+func (m *ScriptPubKeyResult) GetHex() string {
+	if m != nil {
+		return m.Hex
+	}
+	return ""
+}
+
+func (m *ScriptPubKeyResult) GetType() string {
+	if m != nil {
+		return m.Type
+	}
+	return ""
+}
+
+func (m *ScriptPubKeyResult) GetAddress() string {
+	if m != nil {
+		return m.Address
+	}
+	return ""
+}
+
 type UTXO struct {
 	// The transaction ID where this UTXO originates
 	Txid string `protobuf:"bytes,1,opt,name=txid,proto3" json:"txid,omitempty"`
@@ -33,13 +96,15 @@ type UTXO struct {
 	IsSpent bool `protobuf:"varint,4,opt,name=is_spent,json=isSpent,proto3" json:"is_spent,omitempty"`
 	// the amount entitled to claim from this UTXO
 	EntitledAmount uint64 `protobuf:"varint,5,opt,name=entitled_amount,json=entitledAmount,proto3" json:"entitled_amount,omitempty"`
+	// The script public key associated with this UTXO
+	ScriptPubKey *ScriptPubKeyResult `protobuf:"bytes,6,opt,name=script_pub_key,json=scriptPubKey,proto3" json:"script_pub_key,omitempty"`
 }
 
 func (m *UTXO) Reset()         { *m = UTXO{} }
 func (m *UTXO) String() string { return proto.CompactTextString(m) }
 func (*UTXO) ProtoMessage()    {}
 func (*UTXO) Descriptor() ([]byte, []int) {
-	return fileDescriptor_6f20580ae8da58f8, []int{0}
+	return fileDescriptor_6f20580ae8da58f8, []int{1}
 }
 func (m *UTXO) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -103,29 +168,86 @@ func (m *UTXO) GetEntitledAmount() uint64 {
 	return 0
 }
 
+func (m *UTXO) GetScriptPubKey() *ScriptPubKeyResult {
+	if m != nil {
+		return m.ScriptPubKey
+	}
+	return nil
+}
+
 func init() {
+	proto.RegisterType((*ScriptPubKeyResult)(nil), "qbtc.qbtc.v1.ScriptPubKeyResult")
 	proto.RegisterType((*UTXO)(nil), "qbtc.qbtc.v1.UTXO")
 }
 
 func init() { proto.RegisterFile("qbtc/qbtc/v1/type_utxo.proto", fileDescriptor_6f20580ae8da58f8) }
 
 var fileDescriptor_6f20580ae8da58f8 = []byte{
-	// 229 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x29, 0x4c, 0x2a, 0x49,
-	0xd6, 0x07, 0x13, 0x65, 0x86, 0xfa, 0x25, 0x95, 0x05, 0xa9, 0xf1, 0xa5, 0x25, 0x15, 0xf9, 0x7a,
-	0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0x3c, 0x20, 0x09, 0x3d, 0x30, 0x51, 0x66, 0xa8, 0xd4, 0xc5,
-	0xc8, 0xc5, 0x12, 0x1a, 0x12, 0xe1, 0x2f, 0x24, 0xc4, 0xc5, 0x52, 0x52, 0x91, 0x99, 0x22, 0xc1,
-	0xa8, 0xc0, 0xa8, 0xc1, 0x19, 0x04, 0x66, 0x83, 0xc4, 0xca, 0xf2, 0x4b, 0x4b, 0x24, 0x98, 0x14,
-	0x18, 0x35, 0x78, 0x83, 0xc0, 0x6c, 0x21, 0x31, 0x2e, 0xb6, 0xc4, 0xdc, 0xfc, 0xd2, 0xbc, 0x12,
-	0x09, 0x66, 0x05, 0x46, 0x0d, 0x96, 0x20, 0x28, 0x4f, 0x48, 0x92, 0x8b, 0x23, 0xb3, 0x38, 0xbe,
-	0xb8, 0x20, 0x35, 0xaf, 0x44, 0x82, 0x45, 0x81, 0x51, 0x83, 0x23, 0x88, 0x3d, 0xb3, 0x38, 0x18,
-	0xc4, 0x15, 0x52, 0xe7, 0xe2, 0x4f, 0xcd, 0x2b, 0xc9, 0x2c, 0xc9, 0x49, 0x4d, 0x89, 0x87, 0xea,
-	0x65, 0x05, 0xeb, 0xe5, 0x83, 0x09, 0x3b, 0x82, 0x45, 0x9d, 0xec, 0x4f, 0x3c, 0x92, 0x63, 0xbc,
-	0xf0, 0x48, 0x8e, 0xf1, 0xc1, 0x23, 0x39, 0xc6, 0x09, 0x8f, 0xe5, 0x18, 0x2e, 0x3c, 0x96, 0x63,
-	0xb8, 0xf1, 0x58, 0x8e, 0x21, 0x4a, 0x35, 0x3d, 0xb3, 0x24, 0xa3, 0x34, 0x49, 0x2f, 0x39, 0x3f,
-	0x57, 0x3f, 0xa9, 0x24, 0xb9, 0x50, 0x37, 0xbf, 0x28, 0x1d, 0xe2, 0xc3, 0x0a, 0x08, 0x05, 0xf2,
-	0x65, 0x71, 0x12, 0x1b, 0xd8, 0x8b, 0xc6, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0x68, 0xd0, 0x12,
-	0x55, 0x02, 0x01, 0x00, 0x00,
+	// 313 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x91, 0xc1, 0x4a, 0x33, 0x31,
+	0x14, 0x85, 0x9b, 0xbf, 0xf3, 0xb7, 0x35, 0xd6, 0x2a, 0x59, 0xc8, 0x08, 0x32, 0x0c, 0x05, 0xb1,
+	0x1b, 0xa7, 0x54, 0x1f, 0x40, 0x74, 0xe1, 0xc6, 0x85, 0x92, 0x56, 0x10, 0x37, 0x43, 0x33, 0x13,
+	0xda, 0x60, 0xdb, 0x4c, 0x27, 0x37, 0x65, 0xfa, 0x16, 0x3e, 0x96, 0xcb, 0xe2, 0xca, 0xa5, 0xb4,
+	0x2f, 0x22, 0xb9, 0x9d, 0x42, 0xc1, 0xcd, 0xcd, 0xb9, 0x27, 0x9c, 0x0f, 0x72, 0x42, 0xcf, 0xe7,
+	0x02, 0x92, 0x2e, 0x8e, 0x45, 0xaf, 0x0b, 0xcb, 0x4c, 0xc6, 0x16, 0x0a, 0x1d, 0x65, 0xb9, 0x06,
+	0xcd, 0x9a, 0xee, 0x22, 0xc2, 0xb1, 0xe8, 0xb5, 0x07, 0x94, 0xf5, 0x93, 0x5c, 0x65, 0xf0, 0x6c,
+	0xc5, 0xa3, 0x5c, 0x72, 0x69, 0xec, 0x04, 0xd8, 0x09, 0xad, 0x8e, 0x65, 0xe1, 0x93, 0x90, 0x74,
+	0x0e, 0xb8, 0x93, 0x8c, 0x51, 0xcf, 0x81, 0xfc, 0x7f, 0x68, 0xa1, 0x66, 0x3e, 0xad, 0x0f, 0xd3,
+	0x34, 0x97, 0xc6, 0xf8, 0x55, 0xb4, 0x77, 0x6b, 0xfb, 0x8b, 0x50, 0xef, 0x65, 0xf0, 0xfa, 0x84,
+	0xb1, 0x42, 0xa5, 0x25, 0x09, 0xb5, 0xf3, 0x16, 0xda, 0x02, 0xa2, 0x8e, 0x38, 0x6a, 0x76, 0x4a,
+	0x6b, 0xc3, 0xa9, 0xb6, 0x33, 0x40, 0x92, 0xc7, 0xcb, 0x8d, 0x9d, 0xd1, 0x86, 0x32, 0xb1, 0xc9,
+	0xe4, 0x0c, 0x7c, 0x2f, 0x24, 0x9d, 0x06, 0xaf, 0x2b, 0xd3, 0x77, 0x2b, 0xbb, 0xa4, 0xc7, 0x72,
+	0x06, 0x0a, 0x26, 0x32, 0x8d, 0xcb, 0xec, 0x7f, 0xcc, 0xb6, 0x76, 0xf6, 0xdd, 0x96, 0xf1, 0x40,
+	0x5b, 0x06, 0x9f, 0x18, 0x67, 0x56, 0xc4, 0xef, 0x72, 0xe9, 0xd7, 0x42, 0xd2, 0x39, 0xbc, 0x0e,
+	0xa3, 0xfd, 0x26, 0xa2, 0xbf, 0x35, 0xf0, 0xa6, 0xd9, 0xf3, 0xee, 0x6f, 0x3f, 0xd7, 0x01, 0x59,
+	0xad, 0x03, 0xf2, 0xb3, 0x0e, 0xc8, 0xc7, 0x26, 0xa8, 0xac, 0x36, 0x41, 0xe5, 0x7b, 0x13, 0x54,
+	0xde, 0x2e, 0x46, 0x0a, 0xc6, 0x56, 0x44, 0x89, 0x9e, 0x76, 0x05, 0x24, 0xf3, 0x2b, 0x9d, 0x8f,
+	0xb6, 0xfd, 0x17, 0xdb, 0xc3, 0xd5, 0x65, 0x44, 0x0d, 0x3f, 0xe0, 0xe6, 0x37, 0x00, 0x00, 0xff,
+	0xff, 0x1d, 0x7a, 0x44, 0x4a, 0xa0, 0x01, 0x00, 0x00,
+}
+
+func (m *ScriptPubKeyResult) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ScriptPubKeyResult) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ScriptPubKeyResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Address) > 0 {
+		i -= len(m.Address)
+		copy(dAtA[i:], m.Address)
+		i = encodeVarintTypeUtxo(dAtA, i, uint64(len(m.Address)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Type) > 0 {
+		i -= len(m.Type)
+		copy(dAtA[i:], m.Type)
+		i = encodeVarintTypeUtxo(dAtA, i, uint64(len(m.Type)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Hex) > 0 {
+		i -= len(m.Hex)
+		copy(dAtA[i:], m.Hex)
+		i = encodeVarintTypeUtxo(dAtA, i, uint64(len(m.Hex)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *UTXO) Marshal() (dAtA []byte, err error) {
@@ -148,6 +270,18 @@ func (m *UTXO) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.ScriptPubKey != nil {
+		{
+			size, err := m.ScriptPubKey.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypeUtxo(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x32
+	}
 	if m.EntitledAmount != 0 {
 		i = encodeVarintTypeUtxo(dAtA, i, uint64(m.EntitledAmount))
 		i--
@@ -194,6 +328,27 @@ func encodeVarintTypeUtxo(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *ScriptPubKeyResult) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Hex)
+	if l > 0 {
+		n += 1 + l + sovTypeUtxo(uint64(l))
+	}
+	l = len(m.Type)
+	if l > 0 {
+		n += 1 + l + sovTypeUtxo(uint64(l))
+	}
+	l = len(m.Address)
+	if l > 0 {
+		n += 1 + l + sovTypeUtxo(uint64(l))
+	}
+	return n
+}
+
 func (m *UTXO) Size() (n int) {
 	if m == nil {
 		return 0
@@ -216,6 +371,10 @@ func (m *UTXO) Size() (n int) {
 	if m.EntitledAmount != 0 {
 		n += 1 + sovTypeUtxo(uint64(m.EntitledAmount))
 	}
+	if m.ScriptPubKey != nil {
+		l = m.ScriptPubKey.Size()
+		n += 1 + l + sovTypeUtxo(uint64(l))
+	}
 	return n
 }
 
@@ -224,6 +383,152 @@ func sovTypeUtxo(x uint64) (n int) {
 }
 func sozTypeUtxo(x uint64) (n int) {
 	return sovTypeUtxo(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *ScriptPubKeyResult) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTypeUtxo
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ScriptPubKeyResult: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ScriptPubKeyResult: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Hex", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypeUtxo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Hex = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypeUtxo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Type = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypeUtxo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Address = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTypeUtxo(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *UTXO) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -363,6 +668,42 @@ func (m *UTXO) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ScriptPubKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypeUtxo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypeUtxo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ScriptPubKey == nil {
+				m.ScriptPubKey = &ScriptPubKeyResult{}
+			}
+			if err := m.ScriptPubKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTypeUtxo(dAtA[iNdEx:])

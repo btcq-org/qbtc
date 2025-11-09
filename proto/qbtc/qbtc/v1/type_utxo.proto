@@ -3,6 +3,15 @@ package qbtc.qbtc.v1;
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
+message ScriptPubKeyResult {
+  // The script public key in hex format
+  string hex = 1;
+  // The type of the script public key (e.g., "pubkeyhash", "scripthash")
+  string type = 2;
+  // The addresses associated with this script public key
+  string address = 3;
+}
+
 message UTXO {
   // The transaction ID where this UTXO originates
   string txid = 1;
@@ -14,4 +23,6 @@ message UTXO {
   bool is_spent = 4;
   // the amount entitled to claim from this UTXO
   uint64 entitled_amount = 5;
+  // The script public key associated with this UTXO
+  ScriptPubKeyResult script_pub_key = 6;
 }
