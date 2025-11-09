@@ -11,3 +11,5 @@ btcqd
 qbtcd
 debug_container.svg
 .golangci.bck.yml
+config.json
+config.yml

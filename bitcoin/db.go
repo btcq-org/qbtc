@@ -10,6 +10,7 @@ import (
 )
 
 func NewLevelDB(path string, compactOnInit bool) (*leveldb.DB, error) {
+	fmt.Println("Opening leveldb at path:", path)
 	// if path is empty, use in memory db
 	if path == "" {
 		memStorage := storage.NewMemStorage()

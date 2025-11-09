@@ -25,6 +25,7 @@ func GetConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".")
 	viper.SetConfigType("json")
+	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
@@ -39,11 +40,11 @@ func GetConfig() (*Config, error) {
 }
 
 type Config struct {
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	User        string `json:"user"`
-	Password    string `json:"password"`
-	LocalDBPath string `json:"local_db_path"`
+	Host        string `mapstructure:"host" json:"host"`
+	Port        int64  `mapstructure:"port" json:"port"`
+	RpcUser     string `mapstructure:"rpc_user" json:"rpc_user"`
+	Password    string `mapstructure:"password" json:"password"`
+	LocalDBPath string `mapstructure:"local_db_path" json:"local_db_path"`
 }
 type Indexer struct {
 	cfg    Config
@@ -60,7 +61,7 @@ func NewIndexer(cfg Config) (*Indexer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create level db: %w", err)
 	}
-	client, err := newClient(cfg.Host, cfg.User, cfg.Password)
+	client, err := newClient(cfg.Host, cfg.Port, cfg.RpcUser, cfg.Password)
 	if err != nil {
 		if dbCloseErr := db.Close(); dbCloseErr != nil {
 			log.Error().Err(dbCloseErr).Str("module", "bitcoin_indexer").Msg("failed to close leveldb after rpc client creation error")
@@ -79,7 +80,7 @@ func NewIndexer(cfg Config) (*Indexer, error) {
 }
 
 // newClient returns a client connection to a UTXO daemon.
-func newClient(host, user, password string) (*rpc.Client, error) {
+func newClient(host string, port int64, user, password string) (*rpc.Client, error) {
 	authFn := func(h http.Header) error {
 		auth := base64.StdEncoding.EncodeToString([]byte(user + ":" + password))
 		h.Set("Authorization", fmt.Sprintf("Basic %s", auth))
@@ -90,7 +91,9 @@ func newClient(host, user, password string) (*rpc.Client, error) {
 	if !strings.Contains(host, "://") {
 		host = "http://" + host
 	}
-
+	if port != 80 && port != 443 {
+		host = fmt.Sprintf("%s:%d", host, port)
+	}
 	c, err := rpc.DialOptions(context.Background(), host, rpc.WithHTTPAuth(authFn))
 	if err != nil {
 		return nil, err
@@ -105,7 +108,7 @@ func (i *Indexer) getStartBlockHeight() (int64, error) {
 		if errors.Is(err, leveldb.ErrNotFound) {
 			return 0, nil
 		}
-		return 0, fmt.Errorf("failed to get start block height: %w", err)
+		return 1, fmt.Errorf("failed to get start block height: %w", err)
 	}
 	height, err := strconv.ParseInt(string(value), 10, 64)
 	if err != nil {
@@ -156,7 +159,10 @@ func (i *Indexer) shouldBackoff(err error) bool {
 func (i *Indexer) DownloadBlocks(startHeight int64) {
 	defer i.wg.Done()
 	currentHeight := startHeight
-	i.logger.Info().Str("module", "bitcoin_indexer").Msgf("indexer starting from block height: %d", startHeight)
+	if currentHeight == 0 {
+		currentHeight = 1 // Bitcoin block height starts from 1
+	}
+	i.logger.Info().Str("module", "bitcoin_indexer").Msgf("indexer starting from block height: %d", currentHeight)
 	defer func() {
 		// save the current height to db on exit
 		if err := i.setStartBlockHeight(currentHeight); err != nil {
@@ -181,6 +187,7 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 				i.logger.Error().Err(err).Str("module", "bitcoin_indexer").Msg("failed to get block hash")
 				continue
 			}
+			i.logger.Info().Str("module", "bitcoin_indexer").Msgf("block hash: %s", hash)
 			block, err := i.GetBlockVerboseTxs(hash)
 			if err != nil {
 				if i.shouldBackoff(err) {
@@ -191,6 +198,8 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 				i.logger.Error().Err(err).Str("module", "bitcoin_indexer").Msg("failed to get block")
 				continue
 			}
+			i.logger.Info().Str("module", "bitcoin_indexer").Msgf("(%d) txs in block height %d,hash: %s", len(block.Tx), block.Height, block.Hash)
+			// process transactions
 			for _, tx := range block.Tx {
 				i.processTransaction(tx)
 			}
