@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
 )
@@ -23,6 +24,7 @@ func initAppConfig() (string, interface{}) {
 	// The following code snippet is just for reference.
 	type CustomAppConfig struct {
 		serverconfig.Config `mapstructure:",squash"`
+		EBifrost            ebifrost.EBifrostConfig `mapstructure:"ebifrost"`
 	}
 
 	// Optionally allow the chain developer to overwrite the SDK's default
@@ -40,13 +42,14 @@ func initAppConfig() (string, interface{}) {
 	//   own app.toml to override, or use this default value.
 	//
 	// In tests, we set the min gas prices to 0.
-	// srvCfg.MinGasPrices = "0stake"
+	srvCfg.MinGasPrices = "0uqbtc"
 
 	customAppConfig := CustomAppConfig{
-		Config: *srvCfg,
+		Config:   *srvCfg,
+		EBifrost: ebifrost.DefaultEBifrostConfig(),
 	}
 
-	customAppTemplate := serverconfig.DefaultConfigTemplate
+	customAppTemplate := serverconfig.DefaultConfigTemplate + ebifrost.ConfigTemplate(customAppConfig.EBifrost)
 	// Edit the default template file
 	//
 	// customAppTemplate := serverconfig.DefaultConfigTemplate + `
