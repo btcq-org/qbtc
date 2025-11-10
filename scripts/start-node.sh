@@ -10,7 +10,7 @@ $APPD config set client keyring-backend test --home $QBTC_HOME
 $APPD config set client output json --home $QBTC_HOME
 yes | $APPD keys add validator --home $QBTC_HOME
 VALIDATOR=$($APPD keys show validator -a --home $QBTC_HOME)
-DENOM=uqbtc
+DENOM=qbtc
 
 
 $APPD init qbtc --chain-id localnet-1 --home $QBTC_HOME
