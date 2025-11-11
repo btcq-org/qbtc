@@ -16,6 +16,15 @@ func (eb *EnshrinedBifrost) startPruneTimer() {
 			select {
 			case <-ticker.C:
 				eb.logger.Debug("Pruning expired cache items", "ttl", eb.cfg.CacheItemTTL.String())
+				prunedBlocks := eb.btcBlockCache.PruneExpiredItems(eb.cfg.CacheItemTTL)
+				for _, block := range prunedBlocks {
+					eb.logger.Warn(
+						"EBifrost pruned btcq block",
+						"height", block.Height,
+						"hash", block.Hash,
+						"attestations", len(block.Attestations),
+					)
+				}
 
 			case <-eb.stopCh:
 				return
