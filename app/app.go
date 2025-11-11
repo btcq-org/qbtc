@@ -43,6 +43,7 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
+	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
 	"github.com/btcq-org/qbtc/docs"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
@@ -90,6 +91,7 @@ type App struct {
 	StakingKeeper         *stakingkeeper.Keeper
 	SlashingKeeper        slashingkeeper.Keeper
 	GovKeeper             *govkeeper.Keeper
+	FeeGrantKeeper        feegrantkeeper.Keeper
 
 	// ibc keepers
 	IBCKeeper           *ibckeeper.Keeper
@@ -174,6 +176,7 @@ func New(
 		&app.StakingKeeper,
 		&app.SlashingKeeper,
 		&app.BtcqKeeper,
+		&app.FeeGrantKeeper,
 	); err != nil {
 		panic(err)
 	}
@@ -215,6 +218,9 @@ func New(
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 
 	app.sm.RegisterStoreDecoders()
+
+	// set custom ante handler
+	app.setAnteHandler(app.txConfig)
 
 	// A custom InitChainer sets if extra pre-init-genesis logic is required.
 	// This is necessary for manually registered modules that do not support app wiring.

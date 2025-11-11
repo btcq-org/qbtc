@@ -3,6 +3,7 @@ package ebifrost
 import (
 	"fmt"
 
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	se "github.com/cosmos/cosmos-sdk/types/errors"
@@ -14,11 +15,16 @@ func NewInjectedTxDecorator() InjectedTxDecorator {
 	return InjectedTxDecorator{}
 }
 
+// AnteHandle is the ante handler for the injected tx decorator
+// checks that enshired txs should only be allowed via proposal inject tx
+// and not through regular tx flow.
 func (itd InjectedTxDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (newCtx sdk.Context, err error) {
 	if _, ok := tx.(wInjectTx); !ok {
 		for _, m := range tx.GetMsgs() {
 			switch m.(type) {
-			// TODO: handle utxo injection
+			case *types.MsgBtcBlock:
+				// only allowed through an InjectTx, fail.
+				return ctx, se.ErrUnauthorized.Wrap(fmt.Sprintf("msg only allowed via proposal inject tx: %T", m))
 			default:
 				// proceed
 			}
