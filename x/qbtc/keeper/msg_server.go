@@ -5,13 +5,15 @@ import (
 )
 
 type msgServer struct {
-	Keeper
+	k Keeper
 }
 
 // NewMsgServerImpl returns an implementation of the MsgServer interface
 // for the provided Keeper.
-func NewMsgServerImpl(keeper Keeper) types.MsgServer {
-	return &msgServer{Keeper: keeper}
+func NewMsgServerImpl(k Keeper) types.MsgServer {
+	return &msgServer{
+		k: k,
+	}
 }
 
-var _ types.MsgServer = msgServer{}
+var _ types.MsgServer = &msgServer{}

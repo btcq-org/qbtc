@@ -153,7 +153,10 @@ func (i *Indexer) Stop() {
 func (i *Indexer) shouldBackoff(err error) bool {
 	var rpcError *btcjson.RPCError
 	ok := errors.As(err, &rpcError)
-	return ok && rpcError.Code == btcjson.ErrRPCBlockNotFound
+	if strings.Contains(err.Error(), "Block not available") {
+		return true
+	}
+	return ok && (rpcError.Code == btcjson.ErrRPCBlockNotFound || strings.Contains(rpcError.Message, "Block not available"))
 }
 
 func (i *Indexer) DownloadBlocks(startHeight int64) {
