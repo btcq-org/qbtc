@@ -18,6 +18,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
 	// unzip block content
 	rawBlockContent, err := types.GzipUnzip(msg.BlockContent)
 	if err != nil {
@@ -27,19 +28,21 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	if err := json.Unmarshal(rawBlockContent, &block); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("failed to unmarshal block content")
 	}
+	cacheContext, writeCache := sdkCtx.CacheContext()
 	// process the reported block
 	for _, tx := range block.Tx {
-		if err := s.processTransaction(sdkCtx, tx); err != nil {
-			sdkCtx.Logger().Error("failed to process transaction", "txid", tx.Txid, "error", err)
+		if err := s.processTransaction(cacheContext, tx); err != nil {
+			cacheContext.Logger().Error("failed to process transaction", "txid", tx.Txid, "error", err)
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", tx.Txid, err)
 		}
 	}
+	// write the cache context to the main context if we reach here without error
+	writeCache()
 	return &types.MsgEmpty{}, nil
 }
 
 func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) error {
-	totalClamable, totalInput, hasClaimed := s.processVIn(ctx, tx.Vin)
-
+	totalClaimable, totalInput, hasClaimed := s.processVIn(ctx, tx.Vin)
 	totalOutput := uint64(0)
 	for _, out := range tx.Vout {
 		if out.Value == 0 {
@@ -49,12 +52,11 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 	}
 	// calculate the transaction fee
 	fee := totalInput - totalOutput
-	totalClamable = totalClamable - fee
-	if totalClamable > 0 {
-		if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClamable, hasClaimed); err != nil {
-			return err
-		}
+	totalClaimable = totalClaimable - fee
+	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalInput); err != nil {
+		return err
 	}
+
 	return nil
 }
 func getUTXOKey(txID string, vOut uint32) string {
@@ -71,6 +73,8 @@ func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint
 		key := getUTXOKey(in.Txid, in.Vout)
 		existingUtxo, err := s.k.Utxoes.Get(ctx, key)
 		if err != nil {
+			// UTXO not found, it must have been spent already
+			// on production environment , it should not happen, because we will load all unspent UTXOs from bitcoin node at genesis
 			if !errors.Is(err, collections.ErrNotFound) {
 				ctx.Logger().Error("failed to get UTXO", "key", key, "error", err)
 			}
@@ -90,24 +94,24 @@ func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint
 	return totalClaimableAmount, totalInputAmount, hasClaimed
 }
 
-func (s *msgServer) processVOuts(ctx sdk.Context, outs []btcjson.Vout, txid string, totalClaimableAmount uint64, hasClaim bool) error {
-	totalLegalOutput := 0
+func (s *msgServer) processVOuts(ctx sdk.Context,
+	outs []btcjson.Vout,
+	txID string,
+	totalClaimableAmount uint64,
+	hasClaim bool,
+	totalInputAmount uint64) error {
 	for _, out := range outs {
 		if out.Value == 0 {
 			continue
 		}
-		totalLegalOutput += 1
-	}
-	for _, out := range outs {
-		if out.Value == 0 {
-			continue
-		}
+		// when none of the txout has been claimed before, each utxo can claim the same amount as its value
+		// when any of the txout has been claimed before, each utxo can claim an amount proportional to its value
 		entitleAmount := uint64(out.Value * 1e8)
 		if hasClaim {
-			entitleAmount = totalClaimableAmount / uint64(totalLegalOutput)
+			entitleAmount = totalClaimableAmount * uint64(out.Value*1e8) / totalInputAmount
 		}
 		utxo := types.UTXO{
-			Txid:           txid,
+			Txid:           txID,
 			Vout:           out.N,
 			Amount:         uint64(out.Value * 1e8),
 			EntitledAmount: entitleAmount,
