@@ -7,18 +7,54 @@ import (
 	"fmt"
 
 	"cosmossdk.io/collections"
+	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
+func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.MsgBtcBlock) error {
+	validPower := math.ZeroInt()
+	for _, attestation := range msg.Attestations {
+		valAddr, err := sdk.ValAddressFromBech32(attestation.Address)
+		if err != nil {
+			ctx.Logger().Error("invalid validator address in attestation", "address", attestation.Address, "error", err)
+			continue
+		}
+		val, err := s.k.stakingKeeper.GetValidator(ctx, valAddr)
+		if err != nil {
+			ctx.Logger().Error("failed to get validator for attestation", "address", attestation.Address, "error", err)
+			continue
+		}
+		publicKey, err := val.ConsPubKey()
+		if err != nil {
+			ctx.Logger().Error("failed to get consensus public key for validator", "address", attestation.Address, "error", err)
+			continue
+		}
+		if publicKey.VerifySignature(msg.BlockContent, attestation.Signature) {
+			validPower = validPower.Add(math.NewInt(val.ConsensusPower(s.k.stakingKeeper.PowerReduction(ctx))))
+		}
+	}
+	totalPower, err := s.k.stakingKeeper.GetLastTotalPower(ctx)
+	if err != nil {
+		return sdkerror.ErrUnknownRequest.Wrapf("failed to get total staking power: %v", err)
+	}
+	// require more than 2/3 of total staking power to attest the block
+	requiredPower := totalPower.Mul(math.NewInt(2)).Quo(math.NewInt(3))
+	if validPower.LT(requiredPower) {
+		return sdkerror.ErrUnauthorized.Wrapf("insufficient attestation power: %s, required: %s", validPower.String(), requiredPower.String())
+	}
+	return nil
+}
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-
+	if err := s.ValidateMsgBtcBlockAttestation(sdkCtx, msg); err != nil {
+		return nil, err
+	}
 	// unzip block content
 	rawBlockContent, err := types.GzipUnzip(msg.BlockContent)
 	if err != nil {
@@ -51,9 +87,6 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 		totalOutput += uint64(out.Value * 1e8)
 	}
 	if totalInput > 0 {
-		if totalOutput > totalInput {
-			return fmt.Errorf("invalid transaction %s: total output %d greater than total input %d", tx.Txid, totalOutput, totalInput)
-		}
 		// calculate the transaction fee
 		fee := totalInput - totalOutput
 		if totalClaimable > fee {

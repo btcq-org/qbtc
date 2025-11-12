@@ -7,21 +7,18 @@ import (
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
-	"github.com/cometbft/cometbft/crypto/mldsa"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSetMsgReportBlock(t *testing.T) {
-	f := initFixture(t)
-
 	inputs := []struct {
 		name      string
 		fileName  string
 		blockHash string
 		height    uint64
-		setup     func(st *testing.T)
-		checkFunc func(st *testing.T)
+		setup     func(st *testing.T, f *fixture)
+		checkFunc func(st *testing.T, f *fixture)
 	}{
 		{
 			name:      "block 0",
@@ -29,7 +26,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 			blockHash: "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
 			fileName:  "../../../testdata/block/1.json",
 			setup:     nil,
-			checkFunc: func(st *testing.T) {
+			checkFunc: func(st *testing.T, f *fixture) {
 				// make sure coinbase UTXO is created
 				key := "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b-0"
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, key)
@@ -44,7 +41,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 			blockHash: "000000000000000082aee4ff546c1db5e1aa5f9bfbaa0c76300a792b3e91fce7",
 			fileName:  "../../../testdata/block/300003.json",
 			setup:     nil,
-			checkFunc: func(st *testing.T) {
+			checkFunc: func(st *testing.T, f *fixture) {
 				// since we didn't preload utxos , so all the utxo is spent , which means
 				coinbaseKey := "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3-0"
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
@@ -64,7 +61,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 			height:    300003,
 			blockHash: "000000000000000082aee4ff546c1db5e1aa5f9bfbaa0c76300a792b3e91fce7",
 			fileName:  "../../../testdata/block/300003.json",
-			setup: func(st *testing.T) {
+			setup: func(st *testing.T, f *fixture) {
 				key := "c99a1454100bc1a57ff5206dcfcaf196907f5724417d9e0a496741949fe0d20d-963"
 				utxo := types.UTXO{
 					Txid:           "c99a1454100bc1a57ff5206dcfcaf196907f5724417d9e0a496741949fe0d20d",
@@ -80,7 +77,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				err := f.keeper.Utxoes.Set(f.ctx, key, utxo)
 				require.NoError(st, err)
 			},
-			checkFunc: func(st *testing.T) {
+			checkFunc: func(st *testing.T, f *fixture) {
 				// since we didn't preload utxos , so all the utxo is spent , which means
 				coinbaseKey := "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3-0"
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
@@ -106,7 +103,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 			height:    300003,
 			blockHash: "000000000000000082aee4ff546c1db5e1aa5f9bfbaa0c76300a792b3e91fce7",
 			fileName:  "../../../testdata/block/300003.json",
-			setup: func(st *testing.T) {
+			setup: func(st *testing.T, f *fixture) {
 				key := "d510799f177184922edfb98adcc023b1f13d087c2bad700798972f0defcffdca-1"
 				utxo := types.UTXO{
 					Txid:           "d510799f177184922edfb98adcc023b1f13d087c2bad700798972f0defcffdca",
@@ -149,7 +146,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				}
 				require.NoError(st, f.keeper.Utxoes.Set(f.ctx, key2, utxo2))
 			},
-			checkFunc: func(st *testing.T) {
+			checkFunc: func(st *testing.T, f *fixture) {
 				// since we didn't preload utxos , so all the utxo is spent , which means
 				coinbaseKey := "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3-0"
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
@@ -173,14 +170,16 @@ func TestSetMsgReportBlock(t *testing.T) {
 	}
 	for _, tc := range inputs {
 		t.Run(tc.name, func(st *testing.T) {
+			f := initFixture(st)
 			fileContent, err := os.ReadFile(tc.fileName)
 			assert.Nil(st, err)
 			compressedContent, err := types.GzipDeterministic(fileContent, gzip.BestCompression)
 			assert.Nil(st, err, "failed to compress block data")
-			privateKey := mldsa.GenPrivKey()
-			address, err := f.GetAddressFromPubKey(privateKey.PubKey().Address())
+			address, err := f.GetValidatorAddress(f.privateKey.PubKey().Address())
 			assert.Nil(st, err)
-			signature, err := privateKey.Sign(compressedContent)
+			signerAddr, err := f.GetRandomQbtcAddress()
+			assert.NoError(st, err)
+			signature, err := f.privateKey.Sign(compressedContent)
 			assert.Nil(st, err, "failed to sign compressed data")
 			msg := &types.MsgBtcBlock{
 				Height:       tc.height,
@@ -192,15 +191,16 @@ func TestSetMsgReportBlock(t *testing.T) {
 						Signature: signature,
 					},
 				},
-				Signer: address,
+				Signer: signerAddr,
 			}
 			if tc.setup != nil {
-				tc.setup(st)
+				tc.setup(st, f)
 			}
+
 			server := keeper.NewMsgServerImpl(f.keeper)
 			_, err = server.SetMsgReportBlock(f.ctx, msg)
 			assert.NoError(st, err)
-			tc.checkFunc(st)
+			tc.checkFunc(st, f)
 		})
 	}
 
