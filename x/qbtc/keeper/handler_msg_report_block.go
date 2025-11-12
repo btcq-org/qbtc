@@ -16,7 +16,12 @@ import (
 
 func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.MsgBtcBlock) error {
 	validPower := math.ZeroInt()
+	processedValidator := make(map[string]bool, len(msg.Attestations))
 	for _, attestation := range msg.Attestations {
+		if processedValidator[attestation.Address] {
+			// skip duplicate attestation from the same validator
+			continue
+		}
 		valAddr, err := sdk.ValAddressFromBech32(attestation.Address)
 		if err != nil {
 			ctx.Logger().Error("invalid validator address in attestation", "address", attestation.Address, "error", err)
@@ -35,6 +40,7 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 		if publicKey.VerifySignature(msg.BlockContent, attestation.Signature) {
 			validPower = validPower.Add(math.NewInt(val.ConsensusPower(s.k.stakingKeeper.PowerReduction(ctx))))
 		}
+		processedValidator[attestation.Address] = true
 	}
 	totalPower, err := s.k.stakingKeeper.GetLastTotalPower(ctx)
 	if err != nil {
@@ -42,7 +48,7 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 	}
 	// require more than 2/3 of total staking power to attest the block
 	requiredPower := totalPower.Mul(math.NewInt(2)).Quo(math.NewInt(3))
-	if validPower.LT(requiredPower) {
+	if validPower.LTE(requiredPower) {
 		return sdkerror.ErrUnauthorized.Wrapf("insufficient attestation power: %s, required: %s", validPower.String(), requiredPower.String())
 	}
 	return nil
