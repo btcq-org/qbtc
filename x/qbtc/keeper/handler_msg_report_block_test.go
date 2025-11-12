@@ -183,7 +183,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 			signature, err := privateKey.Sign(compressedContent)
 			assert.Nil(st, err, "failed to sign compressed data")
 			msg := &types.MsgBtcBlock{
-				Height:       0,
+				Height:       tc.height,
 				Hash:         tc.blockHash,
 				BlockContent: compressedContent,
 				Attestations: []*types.Attestation{

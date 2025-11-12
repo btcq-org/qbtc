@@ -51,9 +51,16 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 		totalOutput += uint64(out.Value * 1e8)
 	}
 	if totalInput > 0 {
+		if totalOutput > totalInput {
+			return fmt.Errorf("invalid transaction %s: total output %d greater than total input %d", tx.Txid, totalOutput, totalInput)
+		}
 		// calculate the transaction fee
 		fee := totalInput - totalOutput
-		totalClaimable = totalClaimable - fee
+		if totalClaimable > fee {
+			totalClaimable = totalClaimable - fee
+		} else {
+			totalClaimable = 0
+		}
 	}
 	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalOutput); err != nil {
 		return err
