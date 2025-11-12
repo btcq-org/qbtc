@@ -120,7 +120,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 
 				key1 := "b66a7f1e6e9030cecf87a0d450f257857c34de737934fc013be8ebe76982e20c-1"
 				utxo1 := types.UTXO{
-					Txid:           "d510799f177184922edfb98adcc023b1f13d087c2bad700798972f0defcffdca",
+					Txid:           "b66a7f1e6e9030cecf87a0d450f257857c34de737934fc013be8ebe76982e20c",
 					Vout:           1,
 					Amount:         13766651,
 					EntitledAmount: 13766651,
@@ -134,7 +134,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 
 				key2 := "bc84b6ec6473499eb9c5cbd266cc17dfb177efe2a35c9da843b884106be829aa-0"
 				utxo2 := types.UTXO{
-					Txid:           "d510799f177184922edfb98adcc023b1f13d087c2bad700798972f0defcffdca",
+					Txid:           "bc84b6ec6473499eb9c5cbd266cc17dfb177efe2a35c9da843b884106be829aa",
 					Vout:           0,
 					Amount:         11825990,
 					EntitledAmount: 0,

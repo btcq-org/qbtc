@@ -56,9 +56,9 @@ func initFixture(t *testing.T) *fixture {
 	validator.Status = stakingtypes.Bonded
 	validator.Tokens = math.NewInt(1000000000)
 
-	stakingKeeper.EXPECT().GetLastTotalPower(gomock.Any()).Return(math.NewInt(1000000), nil)
-	stakingKeeper.EXPECT().GetValidator(gomock.Any(), gomock.Any()).Return(validator, nil)
-	stakingKeeper.EXPECT().PowerReduction(gomock.Any()).Return(math.NewInt(1000))
+	stakingKeeper.EXPECT().GetLastTotalPower(gomock.Any()).AnyTimes().Return(math.NewInt(1000000), nil)
+	stakingKeeper.EXPECT().GetValidator(gomock.Any(), gomock.Any()).AnyTimes().Return(validator, nil)
+	stakingKeeper.EXPECT().PowerReduction(gomock.Any()).AnyTimes().Return(math.NewInt(1000))
 
 	k := keeper.NewKeeper(
 		storeService,

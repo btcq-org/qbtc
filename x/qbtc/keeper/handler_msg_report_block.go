@@ -78,7 +78,10 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 }
 
 func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) error {
-	totalClaimable, totalInput, hasClaimed := s.processVIn(ctx, tx.Vin)
+	totalClaimable, totalInput, hasClaimed, err := s.processVIn(ctx, tx.Vin)
+	if err != nil {
+		return err
+	}
 	totalOutput := uint64(0)
 	for _, out := range tx.Vout {
 		if out.Value == 0 {
@@ -107,7 +110,7 @@ func getUTXOKey(txID string, vOut uint32) string {
 
 // processVIn remove the UTXOs from the key value store since it has been spent , can't be claim anymore
 // return the total amount that can be claimed
-func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint64, bool) {
+func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint64, bool, error) {
 	totalClaimableAmount := uint64(0)
 	totalInputAmount := uint64(0)
 	hasClaimed := false
@@ -134,11 +137,10 @@ func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint
 		totalInputAmount = totalInputAmount + existingUtxo.Amount
 		// delete the UTXO since it has been spent
 		if err := s.k.Utxoes.Remove(ctx, key); err != nil {
-			ctx.Logger().Error("failed to delete UTXO", "key", key, "error", err)
-			continue
+			return 0, 0, false, fmt.Errorf("fail to delete UTXO,error: %w", err)
 		}
 	}
-	return totalClaimableAmount, totalInputAmount, hasClaimed
+	return totalClaimableAmount, totalInputAmount, hasClaimed, nil
 }
 
 func (s *msgServer) processVOuts(ctx sdk.Context,

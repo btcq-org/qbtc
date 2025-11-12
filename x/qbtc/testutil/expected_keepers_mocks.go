@@ -17,7 +17,6 @@ type MockStakingKeeperRecorder struct {
 type MockStakingKeeper struct {
 	ctrl     *gomock.Controller
 	recorder *MockStakingKeeperRecorder
-	isgomock struct{}
 }
 
 var _ types.StakingKeeper = &MockStakingKeeper{}
