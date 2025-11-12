@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"cosmossdk.io/core/address"
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
@@ -24,6 +25,9 @@ type BankKeeper interface {
 // StakingKeeper defines the expected interface for the Staking module.
 type StakingKeeper interface {
 	GetValidator(context.Context, sdk.ValAddress) (stakingtypes.Validator, error)
+	GetAllValidators(ctx context.Context) (validators []stakingtypes.Validator, err error)
+	GetLastTotalPower(ctx context.Context) (math.Int, error)
+	PowerReduction(ctx context.Context) math.Int
 }
 
 // ParamSubspace defines the expected Subspace interface for parameters.

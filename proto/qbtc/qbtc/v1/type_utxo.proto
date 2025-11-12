@@ -19,10 +19,8 @@ message UTXO {
   uint32 vout = 2;
   // The amount of BTC in satoshis
   uint64 amount = 3;
-  // whether this UTXO has been spent
-  bool is_spent = 4;
   // the amount entitled to claim from this UTXO
-  uint64 entitled_amount = 5;
+  uint64 entitled_amount = 4;
   // The script public key associated with this UTXO
-  ScriptPubKeyResult script_pub_key = 6;
+  ScriptPubKeyResult script_pub_key = 5;
 }
