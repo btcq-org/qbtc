@@ -8,10 +8,6 @@ import (
 var _ sdk.Msg = &MsgBtcBlock{}
 
 func (m *MsgBtcBlock) ValidateBasic() error {
-	if m.Height <= 0 {
-		return errors.ErrInvalidRequest.Wrap("height must be greater than 0")
-	}
-
 	if len(m.Hash) == 0 {
 		return errors.ErrInvalidRequest.Wrap("block hash cannot be empty")
 	}

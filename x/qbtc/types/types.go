@@ -17,9 +17,9 @@ func GzipDeterministic(data []byte, level int) ([]byte, error) {
 		return nil, err
 	}
 	// Make gzip header deterministic
-	gw.Header.ModTime = time.Time{} // zero value -> fixed mtime
-	gw.Header.Name = ""
-	gw.Header.Comment = ""
+	gw.ModTime = time.Time{} // zero value -> fixed mtime
+	gw.Name = ""
+	gw.Comment = ""
 	defer func() {
 		_ = gw.Close()
 	}()

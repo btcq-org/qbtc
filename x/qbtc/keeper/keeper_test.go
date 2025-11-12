@@ -6,9 +6,11 @@ import (
 
 	"cosmossdk.io/core/address"
 	storetypes "cosmossdk.io/store/types"
+	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	module "github.com/btcq-org/qbtc/x/qbtc/module"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/cometbft/cometbft/crypto/mldsa"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	"github.com/cosmos/cosmos-sdk/testutil"
@@ -24,9 +26,9 @@ type fixture struct {
 
 func initFixture(t *testing.T) *fixture {
 	t.Helper()
-
+	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
 	encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
-	addressCodec := addresscodec.NewBech32Codec(sdk.GetConfig().GetBech32AccountAddrPrefix())
+	addressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix)
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
 
 	storeService := runtime.NewKVStoreService(storeKey)
@@ -44,4 +46,12 @@ func initFixture(t *testing.T) *fixture {
 		keeper:       k,
 		addressCodec: addressCodec,
 	}
+}
+func (f *fixture) GetAddressFromPubKey(pubKey []byte) (string, error) {
+	return f.addressCodec.BytesToString(pubKey)
+}
+func (f *fixture) GetRandomQbtcAddress() (string, error) {
+	privateKey := mldsa.GenPrivKey()
+	pubKey := privateKey.PubKey()
+	return f.GetAddressFromPubKey(pubKey.Address().Bytes())
 }

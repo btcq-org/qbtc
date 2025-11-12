@@ -50,10 +50,12 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 		}
 		totalOutput += uint64(out.Value * 1e8)
 	}
-	// calculate the transaction fee
-	fee := totalInput - totalOutput
-	totalClaimable = totalClaimable - fee
-	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalInput); err != nil {
+	if totalInput > 0 {
+		// calculate the transaction fee
+		fee := totalInput - totalOutput
+		totalClaimable = totalClaimable - fee
+	}
+	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalOutput); err != nil {
 		return err
 	}
 
@@ -70,6 +72,9 @@ func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint
 	totalInputAmount := uint64(0)
 	hasClaimed := false
 	for _, in := range ins {
+		if in.IsCoinBase() {
+			continue
+		}
 		key := getUTXOKey(in.Txid, in.Vout)
 		existingUtxo, err := s.k.Utxoes.Get(ctx, key)
 		if err != nil {
@@ -77,6 +82,8 @@ func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint
 			// on production environment , it should not happen, because we will load all unspent UTXOs from bitcoin node at genesis
 			if !errors.Is(err, collections.ErrNotFound) {
 				ctx.Logger().Error("failed to get UTXO", "key", key, "error", err)
+			} else {
+				hasClaimed = true
 			}
 			continue
 		}
@@ -99,7 +106,7 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 	txID string,
 	totalClaimableAmount uint64,
 	hasClaim bool,
-	totalInputAmount uint64) error {
+	totalOutputAmount uint64) error {
 	for _, out := range outs {
 		if out.Value == 0 {
 			continue
@@ -108,7 +115,7 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 		// when any of the txout has been claimed before, each utxo can claim an amount proportional to its value
 		entitleAmount := uint64(out.Value * 1e8)
 		if hasClaim {
-			entitleAmount = totalClaimableAmount * uint64(out.Value*1e8) / totalInputAmount
+			entitleAmount = totalClaimableAmount * uint64(out.Value*1e8) / totalOutputAmount
 		}
 		utxo := types.UTXO{
 			Txid:           txID,
