@@ -9,6 +9,8 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 )
 
 var _ depinject.OnePerModuleType = AppModule{}
@@ -44,12 +46,18 @@ type ModuleOutputs struct {
 }
 
 func ProvideModule(in ModuleInputs) ModuleOutputs {
-
+	// default to governance authority if not provided
+	authority := authtypes.NewModuleAddress(govtypes.ModuleName)
+	if in.Config.Authority != "" {
+		authority = authtypes.NewModuleAddressOrBech32Address(in.Config.Authority)
+	}
 	k := keeper.NewKeeper(
 		in.StoreService,
 		in.Cdc,
 		in.AddressCodec,
 		in.StakingKeeper,
+		in.BankKeeper,
+		authority.String(),
 	)
 	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper)
 
