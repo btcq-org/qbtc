@@ -3,9 +3,14 @@ package app
 import (
 	"errors"
 
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/runtime"
 
+	corestoretypes "cosmossdk.io/core/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth/ante"
 )
@@ -13,6 +18,9 @@ import (
 // HandlerOptions are the options required for constructing a default SDK AnteHandler.
 type HandlerOptions struct {
 	ante.HandlerOptions
+	QbtcKeeper            keeper.Keeper
+	WasmConfig            *wasmtypes.WasmConfig
+	TXCounterStoreService corestoretypes.KVStoreService
 }
 
 // NewAnteHandler returns an AnteHandler that checks and increments sequence
@@ -29,6 +37,12 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 
 	if options.SignModeHandler == nil {
 		return nil, errors.New("sign mode handler is required for ante builder")
+	}
+	if options.WasmConfig == nil {
+		return nil, errors.New("wasm config is required for ante builder")
+	}
+	if options.TXCounterStoreService == nil {
+		return nil, errors.New("tx counter store service is required for ante builder")
 	}
 
 	anteDecorators := []sdk.AnteDecorator{
@@ -47,21 +61,28 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ante.NewSigGasConsumeDecorator(options.AccountKeeper, options.SigGasConsumer),
 		ante.NewSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewIncrementSequenceDecorator(options.AccountKeeper),
+		// wasm decorators
+		wasmkeeper.NewLimitSimulationGasDecorator(options.WasmConfig.SimulationGasLimit),
+		wasmkeeper.NewCountTXDecorator(options.TXCounterStoreService),
 	}
 
 	return sdk.ChainAnteDecorators(anteDecorators...), nil
 }
 
 func (app *App) setAnteHandler(txConfig client.TxConfig) {
+	wasmConfig := wasmtypes.DefaultWasmConfig()
 	anteHandler, err := NewAnteHandler(
 		HandlerOptions{
-			ante.HandlerOptions{
+			HandlerOptions: ante.HandlerOptions{
 				AccountKeeper:   app.AuthKeeper,
 				BankKeeper:      app.BankKeeper,
 				SignModeHandler: txConfig.SignModeHandler(),
 				FeegrantKeeper:  app.FeeGrantKeeper,
 				SigGasConsumer:  ante.DefaultSigVerificationGasConsumer,
 			},
+			QbtcKeeper:            app.QbtcKeeper,
+			WasmConfig:            &wasmConfig,
+			TXCounterStoreService: runtime.NewKVStoreService(app.GetKey(wasmtypes.StoreKey)), // TX counter uses main store, not transient
 		},
 	)
 	if err != nil {

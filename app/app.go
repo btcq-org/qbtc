@@ -44,6 +44,7 @@ import (
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
 	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	"github.com/btcq-org/qbtc/docs"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
@@ -99,9 +100,12 @@ type App struct {
 	ICAHostKeeper       *icahostkeeper.Keeper
 	TransferKeeper      *ibctransferkeeper.Keeper
 
+	// wasm keeper
+	WasmKeeper wasmkeeper.Keeper
+
 	// simulation manager
 	sm         *module.SimulationManager
-	BtcqKeeper btcqmodulekeeper.Keeper
+	QbtcKeeper btcqmodulekeeper.Keeper
 }
 
 func init() {
@@ -175,7 +179,7 @@ func New(
 		&app.ConsensusParamsKeeper,
 		&app.StakingKeeper,
 		&app.SlashingKeeper,
-		&app.BtcqKeeper,
+		&app.QbtcKeeper,
 		&app.FeeGrantKeeper,
 	); err != nil {
 		panic(err)
@@ -200,7 +204,7 @@ func New(
 	app.EnshrinedBifrost = ebifrost.NewEnshrinedBifrost(ebifrostConfig, app.AppCodec(), logger)
 	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
 	eBifrostProposalHandler := qbtcabi.NewProposalHandler(
-		&app.BtcqKeeper,
+		&app.QbtcKeeper,
 		app.EnshrinedBifrost,
 		app.interfaceRegistry,
 		defaultProposalHandler.PrepareProposalHandler(),
