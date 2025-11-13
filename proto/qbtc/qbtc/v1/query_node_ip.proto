@@ -1,0 +1,21 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.marshaler_all) = true;
+
+message QueryNodeIPRequest { string address = 1; }
+
+message QueryAllNodeIPsRequest {}
+
+message QueryNodeIPResponse {
+  string address = 1;
+  string ip = 2 [ (gogoproto.customname) = "IP" ];
+}
+
+message QueryAllNodeIPsResponse {
+  repeated QueryNodeIPResponse node_ips = 1
+      [ (gogoproto.customname) = "NodeIPs" ];
+}

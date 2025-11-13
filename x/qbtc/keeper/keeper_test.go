@@ -14,7 +14,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
+
+type mockStakingKeeper struct{}
+
+func (m mockStakingKeeper) GetValidator(ctx context.Context, addr sdk.ValAddress) (stakingtypes.Validator, error) {
+	return stakingtypes.Validator{}, nil
+}
 
 type fixture struct {
 	ctx          context.Context
@@ -32,11 +39,12 @@ func initFixture(t *testing.T) *fixture {
 	storeService := runtime.NewKVStoreService(storeKey)
 	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
 
+	mockStakingKeeper := mockStakingKeeper{}
 	k := keeper.NewKeeper(
 		storeService,
 		encCfg.Codec,
 		addressCodec,
-		nil,
+		mockStakingKeeper,
 	)
 
 	return &fixture{
