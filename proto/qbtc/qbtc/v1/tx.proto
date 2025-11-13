@@ -6,6 +6,7 @@ import "cosmos/msg/v1/msg.proto";
 import "cosmos_proto/cosmos.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/msg_set_ip_address.proto";
+import "qbtc/qbtc/v1/msg_report_block.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
@@ -14,6 +15,7 @@ service Msg {
   option (cosmos.msg.v1.service) = true;
   // SetIPAddress allows authorized validators to update their IP address.
   rpc SetIPAddress(MsgSetIPAddress) returns (MsgEmpty);
+  rpc SetMsgReportBlock(MsgBtcBlock) returns (MsgEmpty);
 }
 
 // MsgEmpty is the return type for all current Msg Server messages

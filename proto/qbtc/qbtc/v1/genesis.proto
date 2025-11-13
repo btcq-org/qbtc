@@ -3,6 +3,7 @@ package qbtc.qbtc.v1;
 
 import "amino/amino.proto";
 import "gogoproto/gogo.proto";
+import "qbtc/qbtc/v1/type_utxo.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 message mimir {
@@ -17,6 +18,7 @@ message GenesisState {
     (gogoproto.jsontag) = "node_ips",
     (gogoproto.customname) = "NodeIPs"
   ];
+  repeated UTXO utxos = 3;
 }
 
 message GenesisNodeIP {
