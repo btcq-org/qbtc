@@ -1,11 +1,17 @@
 package app
 
 import (
+	"path/filepath"
+
 	"cosmossdk.io/core/appmodule"
 	storetypes "cosmossdk.io/store/types"
+	"github.com/CosmWasm/wasmd/x/wasm"
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
@@ -23,13 +29,26 @@ import (
 	ibctransferv2 "github.com/cosmos/ibc-go/v10/modules/apps/transfer/v2"
 	ibc "github.com/cosmos/ibc-go/v10/modules/core"
 	ibcclienttypes "github.com/cosmos/ibc-go/v10/modules/core/02-client/types" // nolint:staticcheck // Deprecated: params key table is needed for params migration
+	portkeeper "github.com/cosmos/ibc-go/v10/modules/core/05-port/keeper"
 	porttypes "github.com/cosmos/ibc-go/v10/modules/core/05-port/types"
 	ibcapi "github.com/cosmos/ibc-go/v10/modules/core/api"
 	ibcexported "github.com/cosmos/ibc-go/v10/modules/core/exported"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 	solomachine "github.com/cosmos/ibc-go/v10/modules/light-clients/06-solomachine"
 	ibctm "github.com/cosmos/ibc-go/v10/modules/light-clients/07-tendermint"
+	"github.com/spf13/cast"
 )
+
+// portKeeperWrapper wraps IBC v10 PortKeeper to satisfy wasmd interface
+type portKeeperWrapper struct {
+	keeper *portkeeper.Keeper
+}
+
+func (w *portKeeperWrapper) BindPort(ctx sdk.Context, portID string) error {
+	// IBC v10: PortKeeper doesn't have BindPort anymore, ports are bound differently
+	// For WASM, we just return nil as ports are auto-bound
+	return nil
+}
 
 // registerIBCModules register IBC keepers and non dependency inject modules.
 func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
@@ -39,6 +58,8 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 		storetypes.NewKVStoreKey(ibctransfertypes.StoreKey),
 		storetypes.NewKVStoreKey(icahosttypes.StoreKey),
 		storetypes.NewKVStoreKey(icacontrollertypes.StoreKey),
+		storetypes.NewKVStoreKey(wasmtypes.StoreKey),
+		storetypes.NewTransientStoreKey(wasmtypes.TStoreKey),
 	); err != nil {
 		return err
 	}
@@ -51,53 +72,89 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 	app.IBCKeeper = ibckeeper.NewKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(app.GetKey(ibcexported.StoreKey)),
+		nil, // ParamSubspace - IBC v10 doesn't use legacy params
 		app.UpgradeKeeper,
 		govModuleAddr,
 	)
 
 	// Create IBC transfer keeper
-	app.TransferKeeper = ibctransferkeeper.NewKeeper(
+	transferKeeper := ibctransferkeeper.NewKeeper(
 		app.appCodec,
-		app.AuthKeeper.AddressCodec(),
 		runtime.NewKVStoreService(app.GetKey(ibctransfertypes.StoreKey)),
+		nil, // ParamSubspace - IBC v10 doesn't use legacy params
+		app.IBCKeeper.ChannelKeeper,
 		app.IBCKeeper.ChannelKeeper,
 		app.MsgServiceRouter(),
 		app.AuthKeeper,
 		app.BankKeeper,
 		govModuleAddr)
-
+	app.TransferKeeper = &transferKeeper
 	// Create interchain account keepers
-	app.ICAHostKeeper = icahostkeeper.NewKeeper(
+	icaHostKeeper := icahostkeeper.NewKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(app.GetKey(icahosttypes.StoreKey)),
+		nil,
 		app.IBCKeeper.ChannelKeeper, // ICS4Wrapper
+		app.IBCKeeper.ChannelKeeper,
 		app.AuthKeeper,
 		app.MsgServiceRouter(),
 		app.GRPCQueryRouter(),
 		govModuleAddr,
 	)
+	app.ICAHostKeeper = &icaHostKeeper
 
-	app.ICAControllerKeeper = icacontrollerkeeper.NewKeeper(
+	icaControolerKeeper := icacontrollerkeeper.NewKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(app.GetKey(icacontrollertypes.StoreKey)),
+		nil,
+		app.IBCKeeper.ChannelKeeper,
 		app.IBCKeeper.ChannelKeeper,
 		app.MsgServiceRouter(),
 		govModuleAddr,
 	)
+	app.ICAControllerKeeper = &icaControolerKeeper
+	// Initialize Wasm Keeper
+	homePath := cast.ToString(appOpts.Get("home"))
+	wasmDir := filepath.Join(homePath, "wasm")
+	wasmConfig := wasmtypes.DefaultWasmConfig()
 
+	// Supported capabilities (must be []string)
+	supportedFeatures := []string{"iterator", "staking", "stargate", "cosmwasm_1_1", "cosmwasm_1_2", "cosmwasm_1_3", "cosmwasm_1_4"}
+
+	app.WasmKeeper = wasmkeeper.NewKeeper(
+		app.appCodec,
+		runtime.NewKVStoreService(app.GetKey(wasmtypes.StoreKey)),
+		app.AuthKeeper,
+		app.BankKeeper,
+		app.StakingKeeper,
+		nil, // distr keeper - optional
+		app.IBCKeeper.ChannelKeeper,
+		app.IBCKeeper.ChannelKeeper,
+		&portKeeperWrapper{app.IBCKeeper.PortKeeper}, // IBC v10: wrap to satisfy interface
+		nil, // scoped keeper - set later if needed
+		app.TransferKeeper,
+		app.MsgServiceRouter(),
+		app.GRPCQueryRouter(),
+		wasmDir,
+		wasmConfig,
+		supportedFeatures,
+		govModuleAddr,
+	)
 	// create IBC module from bottom to top of stack
 	var (
-		transferStack      porttypes.IBCModule = ibctransfer.NewIBCModule(app.TransferKeeper)
-		transferStackV2    ibcapi.IBCModule    = ibctransferv2.NewIBCModule(app.TransferKeeper)
-		icaControllerStack porttypes.IBCModule = icacontroller.NewIBCMiddleware(app.ICAControllerKeeper)
-		icaHostStack       porttypes.IBCModule = icahost.NewIBCModule(app.ICAHostKeeper)
+		transferStack      porttypes.IBCModule = ibctransfer.NewIBCModule(*app.TransferKeeper)
+		transferStackV2    ibcapi.IBCModule    = ibctransferv2.NewIBCModule(*app.TransferKeeper)
+		icaControllerStack porttypes.IBCModule = icacontroller.NewIBCMiddleware(*app.ICAControllerKeeper)
+		icaHostStack       porttypes.IBCModule = icahost.NewIBCModule(*app.ICAHostKeeper)
+		wasmStack          porttypes.IBCModule = wasm.NewIBCHandler(app.WasmKeeper, app.IBCKeeper.ChannelKeeper, app.IBCKeeper.ChannelKeeper)
 	)
 
 	// create IBC v1 router, add transfer route, then set it on the keeper
 	ibcRouter := porttypes.NewRouter().
 		AddRoute(ibctransfertypes.ModuleName, transferStack).
 		AddRoute(icacontrollertypes.SubModuleName, icaControllerStack).
-		AddRoute(icahosttypes.SubModuleName, icaHostStack)
+		AddRoute(icahosttypes.SubModuleName, icaHostStack).
+		AddRoute(wasmtypes.ModuleName, wasmStack)
 
 	// create IBC v2 router, add transfer route, then set it on the keeper
 	ibcv2Router := ibcapi.NewRouter().
@@ -120,10 +177,11 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 	// register IBC modules
 	if err := app.RegisterModules(
 		ibc.NewAppModule(app.IBCKeeper),
-		ibctransfer.NewAppModule(app.TransferKeeper),
+		ibctransfer.NewAppModule(*app.TransferKeeper),
 		icamodule.NewAppModule(app.ICAControllerKeeper, app.ICAHostKeeper),
 		ibctm.NewAppModule(tmLightClientModule),
 		solomachine.NewAppModule(soloLightClientModule),
+		wasm.NewAppModule(app.appCodec, &app.WasmKeeper, app.StakingKeeper, app.AuthKeeper, app.BankKeeper, app.MsgServiceRouter(), nil), // IBC v10: no param subspace
 	); err != nil {
 		return err
 	}
@@ -137,10 +195,11 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 func RegisterIBC(cdc codec.Codec) map[string]appmodule.AppModule {
 	modules := map[string]appmodule.AppModule{
 		ibcexported.ModuleName:      ibc.NewAppModule(&ibckeeper.Keeper{}),
-		ibctransfertypes.ModuleName: ibctransfer.NewAppModule(&ibctransferkeeper.Keeper{}),
+		ibctransfertypes.ModuleName: ibctransfer.NewAppModule(ibctransferkeeper.Keeper{}),
 		icatypes.ModuleName:         icamodule.NewAppModule(&icacontrollerkeeper.Keeper{}, &icahostkeeper.Keeper{}),
 		ibctm.ModuleName:            ibctm.NewAppModule(ibctm.NewLightClientModule(cdc, ibcclienttypes.StoreProvider{})),
 		solomachine.ModuleName:      solomachine.NewAppModule(solomachine.NewLightClientModule(cdc, ibcclienttypes.StoreProvider{})),
+		wasmtypes.ModuleName:        wasm.NewAppModule(cdc, &wasmkeeper.Keeper{}, nil, nil, nil, nil, nil), // WASM module for genesis
 	}
 
 	for _, m := range modules {

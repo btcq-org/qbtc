@@ -23,7 +23,7 @@ BUILD_FLAGS := -ldflags '$(ldflags)'
 
 build:
 	@echo "Building $(APPNAME)d..."
-	@go build $(BUILD_FLAGS) -o ./build/$(APPNAME)d -mod=readonly ./cmd/$(APPNAME)d
+	@GOPRIVATE=github.com/btcq-org/wasmd go build $(BUILD_FLAGS) -o ./build/$(APPNAME)d -mod=readonly ./cmd/$(APPNAME)d
 	@echo "Build complete. Binary is located at ./build/$(APPNAME)d"
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version

@@ -26,6 +26,8 @@ import (
 	_ "cosmossdk.io/x/feegrant/module" // import for side-effects
 	_ "cosmossdk.io/x/upgrade"         // import for side-effects
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+	_ "github.com/CosmWasm/wasmd/x/wasm" // import for side-effects
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/btcq-org/qbtc/common"
 	_ "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtcmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
@@ -70,6 +72,7 @@ var (
 		{Account: icatypes.ModuleName},
 		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
+		{Account: wasmtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 	}
 
 	// blocked account addresses
@@ -113,6 +116,8 @@ var (
 						ibcexported.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
+						// wasm module
+						wasmtypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
@@ -121,6 +126,8 @@ var (
 						feegrant.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
+						// wasm module - must be after bank staking,and IBC
+						wasmtypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
@@ -155,6 +162,7 @@ var (
 						// chain modules
 						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
+						wasmtypes.ModuleName,
 					},
 				}),
 			},
