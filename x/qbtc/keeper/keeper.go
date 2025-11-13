@@ -40,6 +40,7 @@ func NewKeeper(
 		cdc:           cdc,
 		addressCodec:  addressCodec,
 		stakingKeeper: stakingKeeper,
+		bankKeeper:    bankKeeper,
 		Utxoes:        collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
 		NodeIPs:       collections.NewMap(sb, types.NodeIPKeys, "node_ips", collections.StringKey, collections.StringValue),
 	}
