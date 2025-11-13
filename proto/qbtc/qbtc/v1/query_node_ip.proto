@@ -28,6 +28,6 @@ message QueryAllNodeIPsResponse {
   // node_ips is the list of all node IP mappings.
   repeated QueryNodeIPResponse node_ips = 1
       [ (gogoproto.customname) = "NodeIPs" ];
-  // pagination is the pagination request.
-  cosmos.base.query.v1beta1.PageResponse pagination = 3;
+  // pagination is the pagination response.
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }

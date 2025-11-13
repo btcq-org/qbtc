@@ -33,7 +33,8 @@ func TestQueryNodeIP(t *testing.T) {
 
 	// Set all node IPs
 	for address, ip := range testData {
-		_ = f.keeper.NodeIPs.Set(f.ctx, address, ip)
+		err := f.keeper.NodeIPs.Set(f.ctx, address, ip)
+		require.NoError(t, err)
 	}
 
 	// Test single query for each address
