@@ -5,7 +5,13 @@ import "amino/amino.proto";
 import "cosmos/base/query/v1beta1/pagination.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
+import "qbtc/qbtc/v1/query_node_ip.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // Query defines the gRPC querier service.
-service Query {}
+service Query {
+  // NodeIP returns the IP address of the node.
+  rpc NodeIP(QueryNodeIPRequest) returns (QueryNodeIPResponse);
+  // AllNodeIPs returns all the IP addresses of the nodes.
+  rpc AllNodeIPs(QueryAllNodeIPsRequest) returns (QueryAllNodeIPsResponse);
+}
