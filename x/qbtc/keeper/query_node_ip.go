@@ -4,9 +4,13 @@ import (
 	"context"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	se "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 func (qs queryServer) NodeIP(ctx context.Context, req *types.QueryNodeIPRequest) (*types.QueryNodeIPResponse, error) {
+	if req.Address == "" {
+		return nil, se.ErrInvalidAddress.Wrap("address is required")
+	}
 	ip, err := qs.k.NodeIPs.Get(ctx, req.Address)
 	if err != nil {
 		return nil, err
