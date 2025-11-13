@@ -12,8 +12,10 @@ func (s *msgServer) GovClaimUTXO(ctx context.Context, msg *types.MsgGovClaimUTXO
 		return nil, sdkerror.ErrUnauthorized.Wrap("unauthorized")
 	}
 
-	if err := s.k.ClaimUTXO(ctx, msg.Txid, msg.Vout); err != nil {
-		return nil, err
+	for _, utxo := range msg.Utxos {
+		if err := s.k.ClaimUTXO(ctx, utxo.Txid, utxo.Vout); err != nil {
+			return nil, err
+		}
 	}
 	return &types.MsgEmpty{}, nil
 }

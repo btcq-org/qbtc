@@ -7,6 +7,11 @@ import "gogoproto/gogo.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
+// ClaimUTXO is the message for claiming a UTXO by the governance module.
+message ClaimUTXO {
+  string txid = 1;
+  uint32 vout = 2;
+}
 // MsgGovClaimUTXO is the message for claiming a UTXO by the governance module.
 // The UTXO is identified by its transaction ID and output index.
 // The authority is the address of the governance module.
@@ -17,9 +22,6 @@ message MsgGovClaimUTXO {
   // The authority is the address of the governance module.
   string authority = 1;
 
-  // The transaction ID.
-  string txid = 2;
-
-  // The output index in the transaction.
-  uint32 vout = 3;
+  // The UTXOs to claim.
+  repeated ClaimUTXO utxos = 2;
 }
