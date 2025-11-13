@@ -2,6 +2,7 @@ syntax = "proto3";
 package qbtc.qbtc.v1;
 
 import "gogoproto/gogo.proto";
+import "cosmos/base/query/v1beta1/pagination.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 option (gogoproto.marshaler_all) = true;
@@ -10,7 +11,9 @@ option (gogoproto.marshaler_all) = true;
 message QueryNodeIPRequest { string address = 1; }
 
 // QueryAllNodeIPsRequest requests all node IP mappings.
-message QueryAllNodeIPsRequest {}
+message QueryAllNodeIPsRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
 
 // QueryNodeIPResponse contains the IP address for a node.
 message QueryNodeIPResponse {
@@ -25,4 +28,6 @@ message QueryAllNodeIPsResponse {
   // node_ips is the list of all node IP mappings.
   repeated QueryNodeIPResponse node_ips = 1
       [ (gogoproto.customname) = "NodeIPs" ];
+  // pagination is the pagination request.
+  cosmos.base.query.v1beta1.PageResponse pagination = 3;
 }

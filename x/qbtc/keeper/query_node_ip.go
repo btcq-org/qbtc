@@ -5,6 +5,7 @@ import (
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	se "github.com/cosmos/cosmos-sdk/types/errors"
+	"github.com/cosmos/cosmos-sdk/types/query"
 )
 
 func (qs queryServer) NodeIP(ctx context.Context, req *types.QueryNodeIPRequest) (*types.QueryNodeIPResponse, error) {
@@ -19,13 +20,12 @@ func (qs queryServer) NodeIP(ctx context.Context, req *types.QueryNodeIPRequest)
 }
 
 func (qs queryServer) AllNodeIPs(ctx context.Context, req *types.QueryAllNodeIPsRequest) (*types.QueryAllNodeIPsResponse, error) {
-	nodeIPs := make([]*types.QueryNodeIPResponse, 0)
-	err := qs.k.NodeIPs.Walk(ctx, nil, func(key string, value string) (stop bool, err error) {
-		nodeIPs = append(nodeIPs, &types.QueryNodeIPResponse{Address: key, IP: value})
-		return false, nil
+	nodeIPs, pageRes, err := query.CollectionPaginate(ctx, qs.k.NodeIPs, req.Pagination, func(key string, value string) (*types.QueryNodeIPResponse, error) {
+		return &types.QueryNodeIPResponse{Address: key, IP: value}, nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
-	return &types.QueryAllNodeIPsResponse{NodeIPs: nodeIPs}, nil
+	return &types.QueryAllNodeIPsResponse{NodeIPs: nodeIPs, Pagination: pageRes}, nil
 }

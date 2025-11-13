@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/stretchr/testify/require"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
@@ -64,6 +65,50 @@ func TestQueryNodeIP(t *testing.T) {
 	for address, expectedIP := range testData {
 		actualIP, exists := returnedMap[address]
 		require.True(t, exists, "Address %s should be in the response", address)
+		require.Equal(t, expectedIP, actualIP, "IP for address %s should match", address)
+	}
+
+	// Test paginated query with limit 2
+	pageReq := &query.PageRequest{
+		Limit: 2,
+	}
+	allNodes := make(map[string]string)
+	pageCount := 0
+	maxPages := 10 // safety limit
+
+	for pageReq != nil && pageCount < maxPages {
+		paginatedResp, err := queryClient.AllNodeIPs(f.ctx, &types.QueryAllNodeIPsRequest{
+			Pagination: pageReq,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, paginatedResp)
+		require.LessOrEqual(t, len(paginatedResp.NodeIPs), 2, "Page should have at most 2 items")
+
+		// Collect all nodes from this page
+		for _, nodeIP := range paginatedResp.NodeIPs {
+			allNodes[nodeIP.Address] = nodeIP.IP
+		}
+
+		// Check if there's a next page
+		if paginatedResp.Pagination != nil && len(paginatedResp.Pagination.NextKey) > 0 {
+			pageReq = &query.PageRequest{
+				Key:   paginatedResp.Pagination.NextKey,
+				Limit: 2,
+			}
+		} else {
+			pageReq = nil
+		}
+		pageCount++
+	}
+
+	// Verify we got all 5 nodes through pagination
+	require.Len(t, allNodes, len(testData), "Should have collected all nodes through pagination")
+	require.Greater(t, pageCount, 1, "Should have required multiple pages")
+
+	// Verify all returned node IPs match what we set
+	for address, expectedIP := range testData {
+		actualIP, exists := allNodes[address]
+		require.True(t, exists, "Address %s should be in the paginated response", address)
 		require.Equal(t, expectedIP, actualIP, "IP for address %s should match", address)
 	}
 }
