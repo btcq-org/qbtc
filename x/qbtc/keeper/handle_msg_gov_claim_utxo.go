@@ -8,12 +8,12 @@ import (
 )
 
 func (s *msgServer) GovClaimUTXO(ctx context.Context, msg *types.MsgGovClaimUTXO) (*types.MsgEmpty, error) {
+	// validate the message
+	if err := msg.ValidateBasic(); err != nil {
+		return nil, err
+	}
 	if msg.Authority != s.k.GetAuthority() {
 		return nil, sdkerror.ErrUnauthorized.Wrap("unauthorized")
-	}
-
-	if len(msg.Utxos) == 0 {
-		return nil, sdkerror.ErrInvalidRequest.Wrap("must provide at least one UTXO to claim")
 	}
 
 	for _, utxo := range msg.Utxos {
