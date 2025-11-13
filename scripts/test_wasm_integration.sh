@@ -2,12 +2,12 @@
 set -e
 
 # WASM Integration End-to-End Test Script
-# This script tests the full WASM integration in btcq
+# This script tests the full WASM integration in qbtc
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BINARY="${PROJECT_ROOT}/build/qbtcd"
-CHAIN_ID="btcq-wasm-test"
+CHAIN_ID="qbtc-wasm-test"
 TEST_DIR="/tmp/qbtc-wasm-test"
 NODE_HOME="${TEST_DIR}/node"
 MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -49,7 +49,7 @@ log_info "Step 1: Building qbtcd binary..."
 cd "${PROJECT_ROOT}"
 if [ ! -f "${BINARY}" ]; then
     log_info "Binary not found, building..."
-    CGO_ENABLED=1 go build -tags muslc -o "${BINARY}" ./cmd/qbtcd
+    go build  -o "${BINARY}" ./cmd/qbtcd
 fi
 log_success "Binary ready: ${BINARY}"
 
@@ -188,7 +188,7 @@ if [ -n "${TEST_CONTRACT}" ] && [ -f "${TEST_CONTRACT}" ]; then
     STORE_TX=$("${BINARY}" tx wasm store "${TEST_CONTRACT}" \
         --from validator \
         --gas 3000000 \
-        --gas-prices 0.025btcq \
+        --gas-prices 0.025qbtc \
         --chain-id "${CHAIN_ID}" \
         --keyring-backend test \
         --home "${NODE_HOME}" \
@@ -238,7 +238,7 @@ if [ -n "${TEST_CONTRACT}" ] && [ -f "${TEST_CONTRACT}" ]; then
                     --label "test-token-1" \
                     --admin "${VALIDATOR_ADDR}" \
                     --gas 500000 \
-                    --gas-prices 0.025btcq \
+                    --gas-prices 0.025qbtc \
                     --chain-id "${CHAIN_ID}" \
                     --keyring-backend test \
                     --home "${NODE_HOME}" \
@@ -378,7 +378,7 @@ echo ""
 log_success "🎉 WASM integration test completed!"
 echo ""
 log_info "To interact with the test node manually:"
-echo "  export BTCQ_HOME='${NODE_HOME}'"
+echo "  export QBTC_HOME='${NODE_HOME}'"
 echo "  ${BINARY} q wasm list-code --home '${NODE_HOME}'"
 echo ""
 log_info "Test files will be cleaned up on exit"

@@ -103,7 +103,7 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 	)
 	app.ICAHostKeeper = &icaHostKeeper
 
-	icaControolerKeeper := icacontrollerkeeper.NewKeeper(
+	icaControllerKeeper := icacontrollerkeeper.NewKeeper(
 		app.appCodec,
 		runtime.NewKVStoreService(app.GetKey(icacontrollertypes.StoreKey)),
 		nil,
@@ -112,7 +112,7 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 		app.MsgServiceRouter(),
 		govModuleAddr,
 	)
-	app.ICAControllerKeeper = &icaControolerKeeper
+	app.ICAControllerKeeper = &icaControllerKeeper
 	// Initialize Wasm Keeper
 	homePath := cast.ToString(appOpts.Get("home"))
 	wasmDir := filepath.Join(homePath, "wasm")
@@ -127,7 +127,7 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 		app.AuthKeeper,
 		app.BankKeeper,
 		app.StakingKeeper,
-		nil, // distr keeper - optional
+		nil,
 		app.IBCKeeper.ChannelKeeper,
 		app.IBCKeeper.ChannelKeeper,
 		&portKeeperWrapper{app.IBCKeeper.PortKeeper}, // IBC v10: wrap to satisfy interface
