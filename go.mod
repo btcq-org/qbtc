@@ -3,14 +3,26 @@ module github.com/btcq-org/qbtc
 go 1.25
 
 replace (
+	// fork wasmd to work with SDK v0.53.4 + IBC v10
+	github.com/CosmWasm/wasmd => github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e
 	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20251013222417-a202e4a462b5
 	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20251014013101-b996bdc2bac0
+
+	// stub packages for wasmd test_common.go imports
+	github.com/cosmos/cosmos-sdk/x/crisis => ./x/crisis
+	github.com/cosmos/cosmos-sdk/x/group => ./x/group
 	// fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
 	// replace broken goleveldb
 	github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	// replace broken vanity url
 	nhooyr.io/websocket => github.com/coder/websocket v1.8.7
+)
+
+// Exclude problematic transitive test dependencies from wasmd
+exclude (
+	github.com/cosmos/cosmos-sdk/x/crisis v0.1.1
+	github.com/cosmos/cosmos-sdk/x/group v0.2.0-rc.1
 )
 
 require (
@@ -28,13 +40,14 @@ require (
 	cosmossdk.io/x/feegrant v0.1.1
 	cosmossdk.io/x/tx v0.14.0
 	cosmossdk.io/x/upgrade v0.2.0
+	github.com/CosmWasm/wasmd v0.53.0
 	github.com/btcsuite/btcd v0.24.2
 	github.com/cometbft/cometbft v0.38.18
 	github.com/cosmos/cosmos-db v1.1.3
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5
 	github.com/cosmos/cosmos-sdk v0.53.4
 	github.com/cosmos/gogoproto v1.7.0
-	github.com/cosmos/ibc-go/v10 v10.0.0-beta.0.0.20251010183609-fb4029e96277
+	github.com/cosmos/ibc-go/v10 v10.0.0
 	github.com/ethereum/go-ethereum v1.16.3
 	github.com/golang/mock v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -94,6 +107,7 @@ require (
 	github.com/Antonboom/testifylint v1.6.4 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
+	github.com/CosmWasm/wasmvm/v2 v2.1.2 // indirect
 	github.com/DataDog/datadog-go v4.8.3+incompatible // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/Djarvur/go-err113 v0.1.1 // indirect
@@ -181,9 +195,13 @@ require (
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.17.0 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
+	github.com/cosmos/cosmos-sdk/x/crisis v0.0.0-00010101000000-000000000000 // indirect
+	github.com/cosmos/cosmos-sdk/x/group v0.0.0-00010101000000-000000000000 // indirect
 	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
 	github.com/cosmos/iavl v1.2.6 // indirect
+	github.com/cosmos/ibc-go/modules/capability v1.0.1 // indirect
+	github.com/cosmos/ibc-go/v8 v8.7.0 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v0.16.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
@@ -268,6 +286,7 @@ require (
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.20.6 // indirect
+	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/orderedcode v0.0.1 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -392,6 +411,7 @@ require (
 	github.com/securego/gosec/v2 v2.22.8 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.3 // indirect
+	github.com/shamaton/msgpack/v2 v2.2.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
