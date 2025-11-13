@@ -115,7 +115,8 @@ type MsgClient interface {
 	SetIPAddress(ctx context.Context, in *MsgSetIPAddress, opts ...grpc.CallOption) (*MsgEmpty, error)
 	// SetMsgReportBlock is the message for reporting a Bitcoin block.
 	SetMsgReportBlock(ctx context.Context, in *MsgBtcBlock, opts ...grpc.CallOption) (*MsgEmpty, error)
-	// MsgGovClaimUTXO is the message for claiming a UTXO by the governance module.
+	// MsgGovClaimUTXO is the message for claiming a UTXO by the governance
+	// module.
 	GovClaimUTXO(ctx context.Context, in *MsgGovClaimUTXO, opts ...grpc.CallOption) (*MsgEmpty, error)
 }
 
@@ -160,7 +161,8 @@ type MsgServer interface {
 	SetIPAddress(context.Context, *MsgSetIPAddress) (*MsgEmpty, error)
 	// SetMsgReportBlock is the message for reporting a Bitcoin block.
 	SetMsgReportBlock(context.Context, *MsgBtcBlock) (*MsgEmpty, error)
-	// MsgGovClaimUTXO is the message for claiming a UTXO by the governance module.
+	// MsgGovClaimUTXO is the message for claiming a UTXO by the governance
+	// module.
 	GovClaimUTXO(context.Context, *MsgGovClaimUTXO) (*MsgEmpty, error)
 }
 

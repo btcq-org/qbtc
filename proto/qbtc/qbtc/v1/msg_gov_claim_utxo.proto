@@ -3,7 +3,6 @@ package qbtc.qbtc.v1;
 
 import "amino/amino.proto";
 import "cosmos/msg/v1/msg.proto";
-import "cosmos_proto/cosmos.proto";
 import "gogoproto/gogo.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
@@ -13,7 +12,7 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 // The authority is the address of the governance module.
 message MsgGovClaimUTXO {
   option (cosmos.msg.v1.signer) = "authority";
-  option (amino.name) = "btcq/MsgGovClaimUtxo";
+  option (amino.name) = "btcq/MsgGovClaimUTXO";
 
   // The authority is the address of the governance module.
   string authority = 1;
