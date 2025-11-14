@@ -2,9 +2,12 @@ package keeper
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
@@ -78,6 +81,14 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", tx.Txid, err)
 		}
 	}
+
+	for _, tx := range block.Tx {
+		if err := s.processClaimTx(cacheContext, tx); err != nil {
+			// if we failed to process claim tx, just log the error and continue
+			cacheContext.Logger().Error("failed to process claim transaction", "txid", tx.Txid, "error", err)
+			continue
+		}
+	}
 	// write the cache context to the main context if we reach here without error
 	writeCache()
 	return &types.MsgEmpty{}, nil
@@ -110,6 +121,124 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 
 	return nil
 }
+
+const claimPrefix = "claim:"
+const nullDataType = "nulldata"
+
+func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) error {
+	// ignore if vOut length is not 2
+	if len(tx.Vout) != 2 {
+		return nil
+	}
+	memo := s.getClaimMemo(ctx, tx.Vout)
+	// no claim memo found
+	if memo == "" {
+		return nil
+	}
+	isSentToItself, err := s.hasUtxoSendToItself(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("fail to check whether utxo is sent to itself,err: %w", err)
+	}
+	if !isSentToItself {
+		// only process the claim tx that is sent to itself
+		return nil
+	}
+	// make sure the memo address is a valid QBTC address
+	memoAddr, err := sdk.AccAddressFromBech32(memo)
+	if err != nil {
+		return fmt.Errorf("%s is an invalid qbtc address,%w", memo, err)
+	}
+
+	for _, out := range tx.Vout {
+		if out.Value == 0 {
+			continue
+		}
+		utxoKey := getUTXOKey(tx.Txid, out.N)
+		existingUtxo, err := s.k.Utxoes.Get(ctx, utxoKey)
+		if err != nil {
+			if !errors.Is(err, collections.ErrNotFound) {
+				ctx.Logger().Error("failed to get UTXO", "key", utxoKey, "error", err)
+			}
+			continue
+		}
+		coin := sdk.NewInt64Coin(sdk.DefaultBondDenom, int64(existingUtxo.EntitledAmount))
+		if err := s.k.bankKeeper.MintCoins(ctx, types.ReserveModuleName, sdk.NewCoins(coin)); err != nil {
+			return fmt.Errorf("fail to mint coins for claim tx,error: %w", err)
+		}
+		if err := s.k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ReserveModuleName, memoAddr, sdk.NewCoins(coin)); err != nil {
+			return fmt.Errorf("fail to send coins to claimant address,error: %w", err)
+		}
+		// update the entitled address
+		existingUtxo.EntitledAmount = 0
+		// mint to address
+		if err := s.k.Utxoes.Set(ctx, existingUtxo.GetKey(), existingUtxo); err != nil {
+			ctx.Logger().Error("failed to update UTXO entitled address", "key", existingUtxo.GetKey(), "error", err)
+			return fmt.Errorf("fail to update UTXO entitled address,error: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, tx btcjson.TxRawResult) (bool, error) {
+	var sourceAddress []string
+	for _, in := range tx.Vin {
+		// if one of the inputs is coinbase , which means newly mined coins, we consider it is not sent to itself
+		if in.IsCoinBase() {
+			return false, nil
+		}
+
+		// UTXO must already exist since it is used as input
+		utxoKey := getUTXOKey(in.Txid, in.Vout)
+		utxo, err := s.k.Utxoes.Get(ctx, utxoKey)
+		if err != nil {
+			return false, err
+		}
+		sourceAddress = append(sourceAddress, utxo.ScriptPubKey.Address)
+	}
+
+	var destAddress []string
+	for _, out := range tx.Vout {
+		if out.Value == 0 {
+			continue
+		}
+		destAddress = append(destAddress, out.ScriptPubKey.Address)
+	}
+
+	for _, dest := range destAddress {
+		found := slices.Contains(sourceAddress, dest)
+		if !found {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// hasClaimMemo checks if any of the vOuts contains a claim memo
+func (s *msgServer) getClaimMemo(ctx sdk.Context, vOuts []btcjson.Vout) string {
+	for _, item := range vOuts {
+		switch item.ScriptPubKey.Type {
+		case nullDataType:
+			fields := strings.Fields(item.ScriptPubKey.Asm)
+			if fields[0] != "OP_RETURN" {
+				continue
+			}
+			memo, err := hex.DecodeString(fields[1])
+			if err != nil {
+				ctx.Logger().Error("failed to decode memo", "error", err)
+				continue
+			}
+			memoStr := strings.ToLower(string(memo))
+			if !strings.HasPrefix(memoStr, claimPrefix) {
+				continue
+			}
+			after, _ := strings.CutPrefix(memoStr, claimPrefix)
+			return after
+		}
+	}
+	return ""
+}
+
+// getUTXOKey returns the key used to store UTXO in the key value store
 func getUTXOKey(txID string, vOut uint32) string {
 	return fmt.Sprintf("%s-%d", txID, vOut)
 }
