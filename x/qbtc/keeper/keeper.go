@@ -13,8 +13,12 @@ type Keeper struct {
 	cdc          codec.Codec
 	addressCodec address.Codec
 
+	// Authority is the address of the governance module
+	authority string
+
 	// Keepers
 	stakingKeeper types.StakingKeeper
+	bankKeeper    types.BankKeeper
 
 	// Collections
 	Schema  collections.Schema
@@ -27,6 +31,8 @@ func NewKeeper(
 	cdc codec.Codec,
 	addressCodec address.Codec,
 	stakingKeeper types.StakingKeeper,
+	bankKeeper types.BankKeeper,
+	authority string,
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
@@ -34,6 +40,8 @@ func NewKeeper(
 		cdc:           cdc,
 		addressCodec:  addressCodec,
 		stakingKeeper: stakingKeeper,
+		bankKeeper:    bankKeeper,
+		authority:     authority,
 		Utxoes:        collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
 		NodeIPs:       collections.NewMap(sb, types.NodeIPKeys, "node_ips", collections.StringKey, collections.StringValue),
 	}
@@ -44,4 +52,8 @@ func NewKeeper(
 	k.Schema = schema
 
 	return k
+}
+
+func (k Keeper) GetAuthority() string {
+	return k.authority
 }

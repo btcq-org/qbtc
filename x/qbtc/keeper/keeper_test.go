@@ -19,6 +19,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -60,11 +61,14 @@ func initFixture(t *testing.T) *fixture {
 	stakingKeeper.EXPECT().GetValidator(gomock.Any(), gomock.Any()).AnyTimes().Return(validator, nil)
 	stakingKeeper.EXPECT().PowerReduction(gomock.Any()).AnyTimes().Return(math.NewInt(1000))
 
+	bankKeeper := qbtctestutil.NewMockBankKeeper(ctrl)
 	k := keeper.NewKeeper(
 		storeService,
 		encCfg.Codec,
 		addressCodec,
 		stakingKeeper,
+		bankKeeper,
+		govtypes.ModuleName,
 	)
 
 	return &fixture{

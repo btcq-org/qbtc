@@ -1,0 +1,27 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// ClaimUTXO is the message for claiming a UTXO by the governance module.
+message ClaimUTXO {
+  string txid = 1;
+  uint32 vout = 2;
+}
+// MsgGovClaimUTXO is the message for claiming a UTXO by the governance module.
+// The UTXO is identified by its transaction ID and output index.
+// The authority is the address of the governance module.
+message MsgGovClaimUTXO {
+  option (cosmos.msg.v1.signer) = "authority";
+  option (amino.name) = "btcq/MsgGovClaimUTXO";
+
+  // The authority is the address of the governance module.
+  string authority = 1;
+
+  // The UTXOs to claim.
+  repeated ClaimUTXO utxos = 2;
+}
