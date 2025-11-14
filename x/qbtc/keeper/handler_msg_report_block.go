@@ -161,6 +161,10 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) erro
 			if !errors.Is(err, collections.ErrNotFound) {
 				ctx.Logger().Error("failed to get UTXO", "key", utxoKey, "error", err)
 			}
+			return fmt.Errorf("fail to get UTXO for claim tx,error: %w", err)
+		}
+		if existingUtxo.EntitledAmount == 0 {
+			// nothing to claim
 			continue
 		}
 		coin := sdk.NewInt64Coin(sdk.DefaultBondDenom, int64(existingUtxo.EntitledAmount))
@@ -222,7 +226,7 @@ func (s *msgServer) getClaimMemo(ctx sdk.Context, vOuts []btcjson.Vout) string {
 		switch item.ScriptPubKey.Type {
 		case nullDataType:
 			fields := strings.Fields(item.ScriptPubKey.Asm)
-			if fields[0] != "OP_RETURN" {
+			if len(fields) < 2 || fields[0] != "OP_RETURN" {
 				continue
 			}
 			memo, err := hex.DecodeString(fields[1])
