@@ -1,0 +1,98 @@
+{
+  "hash": "000000000000000082aee4ff546c1db5e1aa5f9bfbaa0c76300a792b3e91fce7",
+  "confirmations": 623218,
+  "height": 300003,
+  "version": 2,
+  "versionHex": "00000002",
+  "merkleroot": "925d9e7b0c4b312a896775cce1d3bf344494326a9e17a0ba76887cd3c861aaa7",
+  "time": 1399705127,
+  "mediantime": 1399702707,
+  "nonce": 2067570852,
+  "bits": "1900896c",
+  "target": "0000000000000000896c00000000000000000000000000000000000000000000",
+  "difficulty": 8000872135.968163,
+  "chainwork": "000000000000000000000000000000000000000000005a80d2f35d93ded88b84",
+  "nTx": 173,
+  "previousblockhash": "0000000000000000862b5e29021a6b352a4954c153230ec1b3e9fdb0c01f502c",
+  "nextblockhash": "000000000000000084a98fcbfc7b3b908aa2e235f2268e80902418005814d557",
+  "strippedsize": 87918,
+  "size": 87918,
+  "weight": 351672,
+  "tx": [
+    {
+      "txid": "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3",
+      "hash": "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3",
+      "version": 1,
+      "size": 125,
+      "vsize": 125,
+      "weight": 500,
+      "locktime": 0,
+      "vin": [
+        {
+          "coinbase": "03e39304062f503253482f0428ce6d53083063e2ab00004c9a0e326238303838612f736c7573682f",
+          "sequence": 0
+        }
+      ],
+      "vout": [
+        {
+          "value": 25.02766489,
+          "n": 0,
+          "scriptPubKey": {
+            "asm": "OP_DUP OP_HASH160 6be318f57ccd5b85d7ee9cc15a3c5da4f98064af OP_EQUALVERIFY OP_CHECKSIG",
+            "desc": "addr(1AqTMY7kmHZxBuLUR5wJjPFUvqGs23sesr)#ly0s4hw3",
+            "hex": "76a9146be318f57ccd5b85d7ee9cc15a3c5da4f98064af88ac",
+            "address": "1AqTMY7kmHZxBuLUR5wJjPFUvqGs23sesr",
+            "type": "pubkeyhash"
+          }
+        }
+      ],
+      "hex": "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff2803e39304062f503253482f0428ce6d53083063e2ab00004c9a0e326238303838612f736c7573682f0000000001992f2d95000000001976a9146be318f57ccd5b85d7ee9cc15a3c5da4f98064af88ac00000000"
+    },
+    {
+      "txid": "e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714",
+      "hash": "e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714",
+      "version": 1,
+      "size": 258,
+      "vsize": 258,
+      "weight": 1032,
+      "locktime": 0,
+      "vin": [
+        {
+          "txid": "dbdd7837a8f7e113f6038b6cf659600538c53b7a742e2b9b1f22de3039e912ba",
+          "vout": 0,
+          "scriptSig": {
+            "asm": "3045022100f76eaca58658ef7ee8da56503317e95b003673dd8f5e9f599e46caf4517fbe99022025ded07c21e15638bf5b3bbf8dbd032eb2da6cccd5151a8c7024813214ae9d7f[ALL] 04959c0fa786572e0fd3eba884aec8670be8bd985601206c2dceae83d2c1e63e517e255bf2c4d4470b5323e280364d2fa5f48ed45c73e99b5d81d1720717b3f61c",
+            "hex": "483045022100f76eaca58658ef7ee8da56503317e95b003673dd8f5e9f599e46caf4517fbe99022025ded07c21e15638bf5b3bbf8dbd032eb2da6cccd5151a8c7024813214ae9d7f014104959c0fa786572e0fd3eba884aec8670be8bd985601206c2dceae83d2c1e63e517e255bf2c4d4470b5323e280364d2fa5f48ed45c73e99b5d81d1720717b3f61c"
+          },
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "value": 881.09900000,
+          "n": 0,
+          "scriptPubKey": {
+            "asm": "OP_DUP OP_HASH160 1f0dd0b30ae8360683ae0d8f5f9666b565936624 OP_EQUALVERIFY OP_CHECKSIG",
+            "desc": "addr(13qCVr4a2ryEkM8fA3r85QzWFqMNV7p3nB)#v9t4cnu4",
+            "hex": "76a9141f0dd0b30ae8360683ae0d8f5f9666b56593662488ac",
+            "address": "13qCVr4a2ryEkM8fA3r85QzWFqMNV7p3nB",
+            "type": "pubkeyhash"
+          }
+        },
+        {
+          "value": 0.0,
+          "n": 1,
+          "scriptPubKey": {
+            "asm": "OP_RETURN 434C41494D3A71627463317663706A373232666565387738326C6C727876396767683439707765356A777A39356C6D676A",
+            "desc": "addr(18B7w59jJtFAtQ4YLo4HKnoArsEa2TaWF2)#q23u7zjw",
+            "hex": "76a9144eb2d3adc8a627687d62e13a56df89bc777ffc8988ac",
+            "address": "13qCVr4a2ryEkM8fA3r85QzWFqMNV7p3nB",
+            "type": "nulldata"
+          }
+        }
+      ],
+      "fee": 0.00050000,
+      "hex": "0100000001ba12e93930de221f9b2b2e747a3bc538056059f66c8b03f613e1f7a83778dddb000000008b483045022100f76eaca58658ef7ee8da56503317e95b003673dd8f5e9f599e46caf4517fbe99022025ded07c21e15638bf5b3bbf8dbd032eb2da6cccd5151a8c7024813214ae9d7f014104959c0fa786572e0fd3eba884aec8670be8bd985601206c2dceae83d2c1e63e517e255bf2c4d4470b5323e280364d2fa5f48ed45c73e99b5d81d1720717b3f61cffffffff02e060c283140000001976a9141f0dd0b30ae8360683ae0d8f5f9666b56593662488ac00a02526000000001976a9144eb2d3adc8a627687d62e13a56df89bc777ffc8988ac00000000"
+    }
+  ]
+}

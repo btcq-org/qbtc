@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
@@ -15,11 +16,13 @@ func (s *msgServer) GovClaimUTXO(ctx context.Context, msg *types.MsgGovClaimUTXO
 	if msg.Authority != s.k.GetAuthority() {
 		return nil, sdkerror.ErrUnauthorized.Wrap("unauthorized")
 	}
-
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	cacheCtx, write := sdkCtx.CacheContext()
 	for _, utxo := range msg.Utxos {
-		if err := s.k.ClaimUTXO(ctx, utxo.Txid, utxo.Vout); err != nil {
+		if err := s.k.ClaimUTXO(cacheCtx, utxo.Txid, utxo.Vout); err != nil {
 			return nil, err
 		}
 	}
+	write()
 	return &types.MsgEmpty{}, nil
 }
