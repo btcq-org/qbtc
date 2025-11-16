@@ -15,3 +15,4 @@ debug_container.svg
 .qbtclocalnode/
 config.json
 config.yml
+utxo-indexer
