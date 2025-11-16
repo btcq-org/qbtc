@@ -56,6 +56,8 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 	}
 	return nil
 }
+
+// SetMsgReportBlock processes a reported Bitcoin block.
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
@@ -74,8 +76,14 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 		return nil, sdkerror.ErrInvalidRequest.Wrap("failed to unmarshal block content")
 	}
 	cacheContext, writeCache := sdkCtx.CacheContext()
+	claimTxIds := make([]string, 0)
 	// process the reported block
 	for _, tx := range block.Tx {
+		// check if it is a claim transaction , need to check it before the transaction is processed
+		// because utxo that has been spent will be removed from the store, so we can't check it after processing the transaction
+		if s.isClaimTx(cacheContext, tx) {
+			claimTxIds = append(claimTxIds, tx.Txid)
+		}
 		if err := s.processTransaction(cacheContext, tx); err != nil {
 			cacheContext.Logger().Error("failed to process transaction", "txid", tx.Txid, "error", err)
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", tx.Txid, err)
@@ -83,6 +91,9 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	}
 
 	for _, tx := range block.Tx {
+		if !slices.Contains(claimTxIds, tx.Txid) {
+			continue
+		}
 		if err := s.processClaimTx(cacheContext, tx); err != nil {
 			// if we failed to process claim tx, just log the error and continue
 			cacheContext.Logger().Error("failed to process claim transaction", "txid", tx.Txid, "error", err)
@@ -125,6 +136,33 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 const claimPrefix = "claim:"
 const nullDataType = "nulldata"
 
+func (s *msgServer) isClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) bool {
+	// ignore if vOut length is not 2
+	if len(tx.Vout) != 2 {
+		return false
+	}
+	memo := s.getClaimMemo(ctx, tx.Vout)
+	// no claim memo found
+	if memo == "" {
+		return false
+	}
+	isSentToItself, err := s.hasUtxoSendToItself(ctx, tx)
+	if err != nil {
+		return false
+	}
+	if !isSentToItself {
+		// only process the claim tx that is sent to itself
+		return false
+	}
+	// make sure the memo address is a valid QBTC address
+	_, err = sdk.AccAddressFromBech32(memo)
+	if err != nil {
+		ctx.Logger().Error("invalid qbtc address in claim memo", "memo", memo, "error", err)
+		return false
+	}
+	return true
+}
+
 func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) error {
 	// ignore if vOut length is not 2
 	if len(tx.Vout) != 2 {
@@ -135,14 +173,7 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) erro
 	if memo == "" {
 		return nil
 	}
-	isSentToItself, err := s.hasUtxoSendToItself(ctx, tx)
-	if err != nil {
-		return fmt.Errorf("fail to check whether utxo is sent to itself,err: %w", err)
-	}
-	if !isSentToItself {
-		// only process the claim tx that is sent to itself
-		return nil
-	}
+
 	// make sure the memo address is a valid QBTC address
 	memoAddr, err := sdk.AccAddressFromBech32(memo)
 	if err != nil {

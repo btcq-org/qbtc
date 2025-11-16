@@ -32,6 +32,8 @@ type fixture struct {
 	validatorAddressCodec address.Codec
 	validator             stakingtypes.Validator
 	privateKey            mldsa.PrivKey
+	stakingKeeper         *qbtctestutil.MockStakingKeeper
+	bankKeeper            *qbtctestutil.MockBankKeeper
 }
 
 func initFixture(t *testing.T) *fixture {
@@ -78,6 +80,8 @@ func initFixture(t *testing.T) *fixture {
 		validator:             validator,
 		privateKey:            privateKey,
 		validatorAddressCodec: validatorAddressCodec,
+		stakingKeeper:         stakingKeeper,
+		bankKeeper:            bankKeeper,
 	}
 }
 func (f *fixture) GetAddressFromPubKey(pubKey []byte) (string, error) {

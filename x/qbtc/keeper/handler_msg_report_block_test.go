@@ -7,6 +7,7 @@ import (
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +34,19 @@ func TestSetMsgReportBlock(t *testing.T) {
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
 				require.Equal(st, utxo.EntitledAmount, uint64(5000000000))
+			},
+		},
+		{
+			name:      "block 923828",
+			height:    923828,
+			blockHash: "00000000000000000000dddb246d85ece1541da3cf95e5044def6b2f7d733a0d",
+			fileName:  "../../../testdata/block/923828.json",
+			setup:     nil,
+			checkFunc: func(st *testing.T, f *fixture) {
+				// make sure coinbase UTXO is created
+				key := "8eb9d5922df115ccea20adf84f2b1e6664fd9a2c196a3f863303283353d52a33-0"
+				_, err := f.keeper.Utxoes.Get(f.ctx, key)
+				require.Error(st, err)
 			},
 		},
 		{
@@ -204,4 +218,53 @@ func TestSetMsgReportBlock(t *testing.T) {
 		})
 	}
 
+}
+func TestSetMsgReportBlock_WithClaim(t *testing.T) {
+	f := initFixture(t)
+	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	fileContent, err := os.ReadFile("../../../testdata/block/withclaim.json")
+	assert.Nil(t, err)
+	compressedContent, err := types.GzipDeterministic(fileContent, gzip.BestCompression)
+	assert.Nil(t, err, "failed to compress block data")
+	address, err := f.GetValidatorAddress(f.privateKey.PubKey().Address())
+	assert.Nil(t, err)
+	signerAddr, err := f.GetRandomQbtcAddress()
+	assert.NoError(t, err)
+	signature, err := f.privateKey.Sign(compressedContent)
+	assert.Nil(t, err, "failed to sign compressed data")
+	msg := &types.MsgBtcBlock{
+		Height:       700000,
+		Hash:         "0000000000000000000a025260e08314c2f60e060c283140000001976a9144eb2d3adc8a627687d62e13a56df89bc777ffc8988ac",
+		BlockContent: compressedContent,
+		Attestations: []*types.Attestation{
+			{
+				Address:   address,
+				Signature: signature,
+			},
+		},
+		Signer: signerAddr,
+	}
+	// preload utxo to be claimed
+	utxoToClaim := types.UTXO{
+		Txid:           "dbdd7837a8f7e113f6038b6cf659600538c53b7a742e2b9b1f22de3039e912ba",
+		Vout:           0,
+		Amount:         88109900000,
+		EntitledAmount: 88109900000,
+		ScriptPubKey: &types.ScriptPubKeyResult{
+			Hex:     "76a9144eb2d3adc8a627687d62e13a56df89bc777ffc8988ac",
+			Type:    "pubkeyhash",
+			Address: "13qCVr4a2ryEkM8fA3r85QzWFqMNV7p3nB",
+		},
+	}
+	key := utxoToClaim.GetKey()
+	assert.NoError(t, f.keeper.Utxoes.Set(f.ctx, key, utxoToClaim))
+	server := keeper.NewMsgServerImpl(f.keeper)
+	_, err = server.SetMsgReportBlock(f.ctx, msg)
+	assert.NoError(t, err)
+
+	utxoAfterClaim, err := f.keeper.Utxoes.Get(f.ctx, "e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714-0")
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(0), utxoAfterClaim.EntitledAmount)
+	// check claimed utxo
 }
