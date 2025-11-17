@@ -30,23 +30,26 @@ var (
 
 // AppModule implements the AppModule interface that defines the inter-dependent methods that modules need to implement
 type AppModule struct {
-	cdc        codec.Codec
-	keeper     keeper.Keeper
-	authKeeper types.AuthKeeper
-	bankKeeper types.BankKeeper
+	cdc            codec.Codec
+	keeper         keeper.Keeper
+	authKeeper     types.AuthKeeper
+	bankKeeper     types.BankKeeper
+	networkManager *keeper.NetworkManager
 }
 
 func NewAppModule(
 	cdc codec.Codec,
-	keeper keeper.Keeper,
+	k keeper.Keeper,
 	authKeeper types.AuthKeeper,
 	bankKeeper types.BankKeeper,
 ) AppModule {
+	networkMgr := keeper.NewNetworkManager(k)
 	return AppModule{
-		cdc:        cdc,
-		keeper:     keeper,
-		authKeeper: authKeeper,
-		bankKeeper: bankKeeper,
+		cdc:            cdc,
+		keeper:         k,
+		authKeeper:     authKeeper,
+		bankKeeper:     bankKeeper,
+		networkManager: networkMgr,
 	}
 }
 
@@ -138,6 +141,7 @@ func (am AppModule) BeginBlock(_ context.Context) error {
 
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
-func (am AppModule) EndBlock(_ context.Context) error {
-	return nil
+func (am AppModule) EndBlock(ctx context.Context) error {
+	return am.networkManager.ProcessNetworkReward(ctx)
+
 }

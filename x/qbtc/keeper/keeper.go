@@ -1,11 +1,16 @@
 package keeper
 
 import (
+	"context"
+	"errors"
+
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/address"
 	corestore "cosmossdk.io/core/store"
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cosmos/cosmos-sdk/codec"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 type Keeper struct {
@@ -19,11 +24,13 @@ type Keeper struct {
 	// Keepers
 	stakingKeeper types.StakingKeeper
 	bankKeeper    types.BankKeeper
+	authKeeper    types.AuthKeeper
 
 	// Collections
-	Schema  collections.Schema
-	Utxoes  collections.Map[string, types.UTXO]
-	NodeIPs collections.Map[string, string]
+	Schema         collections.Schema
+	Utxoes         collections.Map[string, types.UTXO]
+	NodeIPs        collections.Map[string, string]
+	ConstOverrides collections.Map[string, int64]
 }
 
 func NewKeeper(
@@ -32,18 +39,21 @@ func NewKeeper(
 	addressCodec address.Codec,
 	stakingKeeper types.StakingKeeper,
 	bankKeeper types.BankKeeper,
+	authKeeper types.AuthKeeper,
 	authority string,
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService:  storeService,
-		cdc:           cdc,
-		addressCodec:  addressCodec,
-		stakingKeeper: stakingKeeper,
-		bankKeeper:    bankKeeper,
-		authority:     authority,
-		Utxoes:        collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodeIPs:       collections.NewMap(sb, types.NodeIPKeys, "node_ips", collections.StringKey, collections.StringValue),
+		storeService:   storeService,
+		cdc:            cdc,
+		addressCodec:   addressCodec,
+		stakingKeeper:  stakingKeeper,
+		bankKeeper:     bankKeeper,
+		authority:      authority,
+		Utxoes:         collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodeIPs:        collections.NewMap(sb, types.NodeIPKeys, "node_ips", collections.StringKey, collections.StringValue),
+		ConstOverrides: collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		authKeeper:     authKeeper,
 	}
 	schema, err := sb.Build()
 	if err != nil {
@@ -56,4 +66,22 @@ func NewKeeper(
 
 func (k Keeper) GetAuthority() string {
 	return k.authority
+}
+
+func (k Keeper) GetBalanceOfModule(ctx context.Context, moduleName string, denom string) sdk.Coin {
+	moduleAddr := k.authKeeper.GetModuleAddress(moduleName)
+	return k.bankKeeper.GetBalance(ctx, moduleAddr, denom)
+}
+func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int64 {
+	keyName := constName.String()
+	// if the key is in constOverrides , which means nodes use mimir to override the const value
+	// only mimir with super majority vote will be written into constOverrides
+	v, err := k.ConstOverrides.Get(ctx, keyName)
+	if err != nil {
+		if !errors.Is(err, collections.ErrNotFound) {
+			ctx.Logger().Error("failed to get const override", "const", keyName, "error", err)
+		}
+		return constants.DefaultValues[constName]
+	}
+	return v
 }
