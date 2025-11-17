@@ -23,4 +23,6 @@ var (
 
 	// NodeIPKeys is the prefix for validators to store their bifrost IP
 	NodeIPKeys = collections.NewPrefix("node_ip")
+	// ConstOverrideKeys is the prefix for constant overrides
+	ConstOverrideKeys = collections.NewPrefix("const_override")
 )

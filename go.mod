@@ -6,7 +6,7 @@ replace (
 	// fork wasmd to work with SDK v0.53.4 + IBC v10
 	github.com/CosmWasm/wasmd => github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e
 	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20251013222417-a202e4a462b5
-	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20251014013101-b996bdc2bac0
+	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20251117040207-129ec8172d1a
 
 	// stub packages for wasmd test_common.go imports
 	github.com/cosmos/cosmos-sdk/x/crisis => ./x/crisis

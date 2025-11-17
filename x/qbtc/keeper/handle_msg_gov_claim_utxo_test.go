@@ -247,6 +247,8 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			stakingKeeper.EXPECT().GetValidator(gomock.Any(), gomock.Any()).AnyTimes().Return(validator, nil)
 			stakingKeeper.EXPECT().PowerReduction(gomock.Any()).AnyTimes().Return(math.NewInt(1000))
 
+			authKeeper := qbtctestutil.NewMockAuthKeeper(ctrl)
+
 			bankKeeper := qbtctestutil.NewMockBankKeeper(ctrl)
 			k := keeper.NewKeeper(
 				storeService,
@@ -254,6 +256,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 				addressCodec,
 				stakingKeeper,
 				bankKeeper,
+				authKeeper,
 				govtypes.ModuleName,
 			)
 

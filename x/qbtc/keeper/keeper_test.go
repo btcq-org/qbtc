@@ -34,6 +34,7 @@ type fixture struct {
 	privateKey            mldsa.PrivKey
 	stakingKeeper         *qbtctestutil.MockStakingKeeper
 	bankKeeper            *qbtctestutil.MockBankKeeper
+	authKeeper            *qbtctestutil.MockAuthKeeper
 }
 
 func initFixture(t *testing.T) *fixture {
@@ -64,12 +65,14 @@ func initFixture(t *testing.T) *fixture {
 	stakingKeeper.EXPECT().PowerReduction(gomock.Any()).AnyTimes().Return(math.NewInt(1000))
 
 	bankKeeper := qbtctestutil.NewMockBankKeeper(ctrl)
+	authKeeper := qbtctestutil.NewMockAuthKeeper(ctrl)
 	k := keeper.NewKeeper(
 		storeService,
 		encCfg.Codec,
 		addressCodec,
 		stakingKeeper,
 		bankKeeper,
+		authKeeper,
 		govtypes.ModuleName,
 	)
 
@@ -82,6 +85,7 @@ func initFixture(t *testing.T) *fixture {
 		validatorAddressCodec: validatorAddressCodec,
 		stakingKeeper:         stakingKeeper,
 		bankKeeper:            bankKeeper,
+		authKeeper:            authKeeper,
 	}
 }
 func (f *fixture) GetAddressFromPubKey(pubKey []byte) (string, error) {
