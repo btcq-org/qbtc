@@ -27,7 +27,8 @@ func (nm *NetworkManager) ProcessNetworkReward(ctx context.Context) error {
 	blocksPerYear := nm.k.GetConfig(sdkCtx, constants.BlocksPerYear)
 	systemIncome := qbtcReserveCoin.Amount.Quo(math.NewInt(emissionCurve)).Quo(math.NewInt(blocksPerYear))
 
-	// TODO: double check , send income to fee collector, will staking module auto distribute to stakers?
+	// Transfer reward from reserve module to fee collector
+	// Collected fee will be distributed to stakers by the distribution module
 	return nm.k.bankKeeper.SendCoinsFromModuleToModule(sdkCtx, types.ReserveModuleName, authtypes.FeeCollectorName,
 		sdk.NewCoins(
 			sdk.NewCoin(sdk.DefaultBondDenom, systemIncome)))
