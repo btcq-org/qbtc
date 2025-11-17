@@ -25,6 +25,9 @@ func (nm *NetworkManager) ProcessNetworkReward(ctx context.Context) error {
 	qbtcReserveCoin := nm.k.GetBalanceOfModule(ctx, types.ReserveModuleName, sdk.DefaultBondDenom)
 	emissionCurve := nm.k.GetConfig(sdkCtx, constants.EmissionCurve)
 	blocksPerYear := nm.k.GetConfig(sdkCtx, constants.BlocksPerYear)
+	if emissionCurve <= 0 || blocksPerYear <= 0 {
+		return nil
+	}
 	systemIncome := qbtcReserveCoin.Amount.Quo(math.NewInt(emissionCurve)).Quo(math.NewInt(blocksPerYear))
 
 	// Transfer reward from reserve module to fee collector
