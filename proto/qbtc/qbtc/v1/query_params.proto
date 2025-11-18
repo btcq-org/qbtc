@@ -1,0 +1,21 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.marshaler_all) = true;
+
+message Param {
+  string key = 1;
+  int64 value = 2;
+}
+
+// QueryParamsRequest is the request type for the Query/Params RPC method.
+message QueryParamsRequest { string key = 1; }
+// QueryParamsResponse is the response type for the Query/Params RPC method.
+message QueryParamsResponse { Param param = 1; }
+
+message QueryAllParamsRequest {}
+
+message QueryAllParamsResponse { repeated Param params = 1; }

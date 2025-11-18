@@ -9,3 +9,14 @@ const (
 	EmissionCurve ConstantName = iota
 	BlocksPerYear
 )
+
+func FromString(s string) (ConstantName, bool) {
+	switch s {
+	case "EmissionCurve":
+		return EmissionCurve, true
+	case "BlocksPerYear":
+		return BlocksPerYear, true
+	default:
+		return 0, false
+	}
+}
