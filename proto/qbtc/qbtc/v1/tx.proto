@@ -8,6 +8,7 @@ import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/msg_set_node_peer_address.proto";
 import "qbtc/qbtc/v1/msg_report_block.proto";
 import "qbtc/qbtc/v1/msg_gov_claim_utxo.proto";
+import "qbtc/qbtc/v1/msg_update_param.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
@@ -22,6 +23,7 @@ service Msg {
   // MsgGovClaimUTXO is the message for claiming a UTXO by the governance
   // module.
   rpc GovClaimUTXO(MsgGovClaimUTXO) returns (MsgEmpty);
+  rpc UpdateParam(MsgUpdateParam) returns (MsgEmpty);
 }
 
 // MsgEmpty is the return type for all current Msg Server messages

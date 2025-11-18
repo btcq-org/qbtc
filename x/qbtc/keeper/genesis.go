@@ -21,6 +21,12 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set UTXO %s: %w", utxo.Txid, err)
 		}
 	}
+	for _, item := range genState.Params {
+		err := k.ConstOverrides.Set(ctx, item.Key, item.Value)
+		if err != nil {
+			return fmt.Errorf("failed to set param %s: %w", item.Key, err)
+		}
+	}
 	return nil
 }
 
@@ -45,6 +51,19 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 	}); err != nil {
 		return nil, fmt.Errorf("failed to export UTXOs: %w", err)
 	}
+
+	// export const overrides as params
+	params := make([]*types.Param, 0)
+	if err := k.ConstOverrides.Walk(ctx, nil, func(key string, value int64) (stop bool, err error) {
+		params = append(params, &types.Param{
+			Key:   key,
+			Value: value,
+		})
+		return false, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to export params: %w", err)
+	}
+	genesis.Params = params
 
 	return genesis, nil
 }

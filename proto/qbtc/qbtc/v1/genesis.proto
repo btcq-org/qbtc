@@ -4,6 +4,7 @@ package qbtc.qbtc.v1;
 import "amino/amino.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/type_utxo.proto";
+import "qbtc/qbtc/v1/query_params.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 message mimir {
@@ -19,6 +20,7 @@ message GenesisState {
     (gogoproto.customname) = "PeerAddresses"
   ];
   repeated UTXO utxos = 3;
+  repeated Param params = 4;
 }
 
 message GenesisPeerAddress {
