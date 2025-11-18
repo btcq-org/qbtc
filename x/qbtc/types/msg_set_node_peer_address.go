@@ -14,23 +14,23 @@ var (
 	_ sdk.LegacyMsg        = &MsgSetNodePeerAddress{}
 )
 
-// ValidatePeerAddress validates the format of a peer address: <peerId>@<host>:<port>
+// ValidatePeerAddress validates the format of a peer address: <peerID>@<host>:<port>
 // This function is shared between message validation and genesis validation to ensure consistency.
 func ValidatePeerAddress(peerAddress string) error {
 	if peerAddress == "" {
 		return se.ErrUnknownRequest.Wrap("peer address cannot be empty")
 	}
 
-	// Validate format: <peerId>@<host>:<port>
+	// Validate format: <peerID>@<host>:<port>
 	parts := strings.Split(peerAddress, "@")
 	if len(parts) != 2 {
-		return se.ErrUnknownRequest.Wrap("peer address must be in format <peerId>@<host>:<port>")
+		return se.ErrUnknownRequest.Wrap("peer address must be in format <peerID>@<host>:<port>")
 	}
-	peerId := parts[0]
+	peerID := parts[0]
 	hostPort := parts[1]
 
-	if peerId == "" {
-		return se.ErrUnknownRequest.Wrap("peerId cannot be empty in peer address")
+	if peerID == "" {
+		return se.ErrUnknownRequest.Wrap("peerID cannot be empty in peer address")
 	}
 
 	// host:port parsing
