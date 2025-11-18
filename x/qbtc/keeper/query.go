@@ -23,7 +23,7 @@ type queryServer struct {
 	k Keeper
 }
 
-// AllParams implements types.QueryServer.
+// AllParams returns all parameters in the qbtc module.
 func (qs queryServer) AllParams(ctx context.Context, req *types.QueryAllParamsRequest) (*types.QueryAllParamsResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	params := []*types.Param{}
@@ -46,7 +46,7 @@ func (qs queryServer) AllParams(ctx context.Context, req *types.QueryAllParamsRe
 	return &types.QueryAllParamsResponse{Params: params}, nil
 }
 
-// Params implements types.QueryServer.
+// Params returns the value of a specific parameter in the qbtc module.
 func (qs queryServer) Params(ctx context.Context, req *types.QueryParamsRequest) (*types.QueryParamsResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	if req.Key == "" {
@@ -54,7 +54,19 @@ func (qs queryServer) Params(ctx context.Context, req *types.QueryParamsRequest)
 	}
 	value, err := qs.k.ConstOverrides.Get(sdkCtx, req.Key)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, collections.ErrNotFound) {
+			constName, ok := constants.FromString(req.Key)
+			if !ok {
+				return nil, sdkerrors.ErrUnknownRequest.Wrapf("unknown parameter key: %s", req.Key)
+			}
+			defaultValue, exists := constants.DefaultValues[constName]
+			if !exists {
+				return nil, sdkerrors.ErrUnknownRequest.Wrapf("unknown parameter key: %s", req.Key)
+			}
+			value = defaultValue
+		} else {
+			return nil, err
+		}
 	}
 	return &types.QueryParamsResponse{Param: &types.Param{Key: req.Key, Value: value}}, nil
 }

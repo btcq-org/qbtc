@@ -4,10 +4,10 @@ package qbtc.qbtc.v1;
 import "amino/amino.proto";
 import "cosmos/msg/v1/msg.proto";
 import "cosmos_proto/cosmos.proto";
-import "gogoproto/gogo.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
-
+// MsgUpdateParam defines a message for updating a parameter in the qbtc module.
+// This message can only be executed by an authorized governance account.
 message MsgUpdateParam {
   option (cosmos.msg.v1.signer) = "authority";
   option (amino.name) = "qbtc/MsgUpdateParam";
