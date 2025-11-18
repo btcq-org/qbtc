@@ -1,0 +1,33 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+import "cosmos/base/query/v1beta1/pagination.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.marshaler_all) = true;
+
+// QueryNodePeerAddressRequest requests the peer address for a specific node.
+message QueryNodePeerAddressRequest { string address = 1; }
+
+// QueryAllNodePeerAddressesRequest requests all node peer address mappings.
+message QueryAllNodePeerAddressesRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryNodePeerAddressResponse contains the peer address for a node.
+message QueryNodePeerAddressResponse {
+  // address is the validator operator address of the node.
+  string address = 1;
+  // peer_address is the peer address of the node.
+  string peer_address = 2 [ (gogoproto.customname) = "PeerAddress" ];
+}
+
+// QueryAllNodePeerAddressesResponse contains all node peer address mappings.
+message QueryAllNodePeerAddressesResponse {
+  // node_peer_addresses is the list of all node peer address mappings.
+  repeated QueryNodePeerAddressResponse node_peer_addresses = 1
+      [ (gogoproto.customname) = "NodePeerAddresses" ];
+  // pagination is the pagination response.
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}

@@ -9,8 +9,8 @@ import (
 
 // InitGenesis initializes the module's state from a provided genesis state.
 func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) error {
-	for _, nodeIP := range genState.NodeIPs {
-		err := k.NodeIPs.Set(ctx, nodeIP.Validator, nodeIP.IP)
+	for _, nodePeerAddress := range genState.PeerAddresses {
+		err := k.NodePeerAddresses.Set(ctx, nodePeerAddress.Validator, nodePeerAddress.PeerAddress)
 		if err != nil {
 			return err
 		}
@@ -27,18 +27,18 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 // ExportGenesis returns the module's exported genesis.
 func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) {
 	genesis := types.DefaultGenesis()
-	ips := make([]types.GenesisNodeIP, 0)
-	err := k.NodeIPs.Walk(ctx, nil, func(key string, value string) (stop bool, err error) {
-		ips = append(ips, types.GenesisNodeIP{
-			Validator: key,
-			IP:        value,
+	ips := make([]types.GenesisPeerAddress, 0)
+	err := k.NodePeerAddresses.Walk(ctx, nil, func(key string, value string) (stop bool, err error) {
+		ips = append(ips, types.GenesisPeerAddress{
+			Validator:   key,
+			PeerAddress: value,
 		})
 		return false, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	genesis.NodeIPs = ips
+	genesis.PeerAddresses = ips
 	if err := k.Utxoes.Walk(ctx, nil, func(key string, value types.UTXO) (stop bool, err error) {
 		genesis.Utxos = append(genesis.Utxos, &value)
 		return false, nil

@@ -27,10 +27,10 @@ type Keeper struct {
 	authKeeper    types.AuthKeeper
 
 	// Collections
-	Schema         collections.Schema
-	Utxoes         collections.Map[string, types.UTXO]
-	NodeIPs        collections.Map[string, string]
-	ConstOverrides collections.Map[string, int64]
+	Schema            collections.Schema
+	Utxoes            collections.Map[string, types.UTXO]
+	NodePeerAddresses collections.Map[string, string]
+	ConstOverrides    collections.Map[string, int64]
 }
 
 func NewKeeper(
@@ -44,16 +44,16 @@ func NewKeeper(
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService:   storeService,
-		cdc:            cdc,
-		addressCodec:   addressCodec,
-		stakingKeeper:  stakingKeeper,
-		bankKeeper:     bankKeeper,
-		authority:      authority,
-		Utxoes:         collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodeIPs:        collections.NewMap(sb, types.NodeIPKeys, "node_ips", collections.StringKey, collections.StringValue),
-		ConstOverrides: collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		authKeeper:     authKeeper,
+		storeService:      storeService,
+		cdc:               cdc,
+		addressCodec:      addressCodec,
+		stakingKeeper:     stakingKeeper,
+		bankKeeper:        bankKeeper,
+		authority:         authority,
+		Utxoes:            collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
+		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		authKeeper:        authKeeper,
 	}
 	schema, err := sb.Build()
 	if err != nil {

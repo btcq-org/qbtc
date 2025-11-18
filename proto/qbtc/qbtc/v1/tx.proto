@@ -5,7 +5,7 @@ import "amino/amino.proto";
 import "cosmos/msg/v1/msg.proto";
 import "cosmos_proto/cosmos.proto";
 import "gogoproto/gogo.proto";
-import "qbtc/qbtc/v1/msg_set_ip_address.proto";
+import "qbtc/qbtc/v1/msg_set_node_peer_address.proto";
 import "qbtc/qbtc/v1/msg_report_block.proto";
 import "qbtc/qbtc/v1/msg_gov_claim_utxo.proto";
 
@@ -14,8 +14,9 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 // Msg defines the Msg service.
 service Msg {
   option (cosmos.msg.v1.service) = true;
-  // SetIPAddress allows authorized validators to update their IP address.
-  rpc SetIPAddress(MsgSetIPAddress) returns (MsgEmpty);
+  // SetNodePeerAddress allows authorized validators to update their node peer
+  // address.
+  rpc SetNodePeerAddress(MsgSetNodePeerAddress) returns (MsgEmpty);
   // SetMsgReportBlock is the message for reporting a Bitcoin block.
   rpc SetMsgReportBlock(MsgBtcBlock) returns (MsgEmpty);
   // MsgGovClaimUTXO is the message for claiming a UTXO by the governance
