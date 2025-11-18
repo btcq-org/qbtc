@@ -1,7 +1,7 @@
 package types
 
 import (
-	fmt "fmt"
+	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -22,8 +22,8 @@ func (gs GenesisState) Validate() error {
 		if err != nil {
 			return fmt.Errorf("invalid validator address: %s", err)
 		}
-		if nodePeerAddress.PeerAddress == "" {
-			return fmt.Errorf("peer address cannot be empty")
+		if err := ValidatePeerAddress(nodePeerAddress.PeerAddress); err != nil {
+			return fmt.Errorf("invalid peer address: %w", err)
 		}
 	}
 	return nil

@@ -16,7 +16,7 @@ message GenesisState {
   repeated GenesisPeerAddress peer_addresses = 2 [
     (gogoproto.nullable) = false,
     (gogoproto.jsontag) = "peer_addresses",
-    (gogoproto.customname) = "PeerAddresses "
+    (gogoproto.customname) = "PeerAddresses"
   ];
   repeated UTXO utxos = 3;
 }
