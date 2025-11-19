@@ -9,7 +9,7 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
-func (s *msgServer) SetIPAddress(ctx context.Context, msg *types.MsgSetIPAddress) (*types.MsgEmpty, error) {
+func (s *msgServer) SetNodePeerAddress(ctx context.Context, msg *types.MsgSetNodePeerAddress) (*types.MsgEmpty, error) {
 	// Validate the message
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
@@ -34,7 +34,7 @@ func (s *msgServer) SetIPAddress(ctx context.Context, msg *types.MsgSetIPAddress
 	}
 
 	// Set the IP address
-	err = s.k.NodeIPs.Set(ctx, validator.GetOperator(), msg.IPAddress)
+	err = s.k.NodePeerAddresses.Set(ctx, validator.GetOperator(), msg.PeerAddress)
 	if err != nil {
 		return nil, err
 	}

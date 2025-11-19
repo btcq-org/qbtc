@@ -21,8 +21,8 @@ var (
 	// UTXOKeys is the prefix for UTXO store
 	UTXOKeys = collections.NewPrefix("utxo")
 
-	// NodeIPKeys is the prefix for validators to store their bifrost IP
-	NodeIPKeys = collections.NewPrefix("node_ip")
+	// NodePeerAddressKeys is the prefix for validators to store their node peer address
+	NodePeerAddressKeys = collections.NewPrefix("node_peer_address")
 	// ConstOverrideKeys is the prefix for constant overrides
 	ConstOverrideKeys = collections.NewPrefix("const_override")
 )

@@ -14,16 +14,16 @@ message mimir {
 // GenesisState defines the btcq module's genesis state.
 message GenesisState {
   repeated mimir mimirs = 1 [ (gogoproto.nullable) = false ];
-  repeated GenesisNodeIP node_ips = 2 [
+  repeated GenesisPeerAddress peer_addresses = 2 [
     (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "node_ips",
-    (gogoproto.customname) = "NodeIPs"
+    (gogoproto.jsontag) = "peer_addresses",
+    (gogoproto.customname) = "PeerAddresses"
   ];
   repeated UTXO utxos = 3;
   repeated Param params = 4;
 }
 
-message GenesisNodeIP {
+message GenesisPeerAddress {
   string validator = 1;
-  string ip = 2 [ (gogoproto.customname) = "IP" ];
+  string peer_address = 2 [ (gogoproto.customname) = "PeerAddress" ];
 }
