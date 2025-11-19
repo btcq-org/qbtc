@@ -13,10 +13,20 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 service Query {
   // NodePeerAddress returns the peer address of the node.
   rpc NodePeerAddress(QueryNodePeerAddressRequest)
-      returns (QueryNodePeerAddressResponse);
+      returns (QueryNodePeerAddressResponse) {
+    option (google.api.http).get = "/qbtc/v1/node_peer_address/{address}";
+  }
   // AllNodePeerAddresses returns all the peer addresses of the nodes.
   rpc AllNodePeerAddresses(QueryAllNodePeerAddressesRequest)
-      returns (QueryAllNodePeerAddressesResponse);
-  rpc Params(QueryParamsRequest) returns (QueryParamsResponse);
-  rpc AllParams(QueryAllParamsRequest) returns (QueryAllParamsResponse);
+      returns (QueryAllNodePeerAddressesResponse) {
+    option (google.api.http).get = "/qbtc/v1/node_peer_addresses";
+  }
+  // Params returns the parameter for a specific key.
+  rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
+    option (google.api.http).get = "/qbtc/v1/params/{key}";
+  }
+  // AllParams returns all parameters in the qbtc module.
+  rpc AllParams(QueryAllParamsRequest) returns (QueryAllParamsResponse) {
+    option (google.api.http).get = "/qbtc/v1/params";
+  }
 }
