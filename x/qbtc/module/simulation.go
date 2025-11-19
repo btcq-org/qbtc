@@ -1,4 +1,4 @@
-package btcq
+package module
 
 import (
 	"github.com/cosmos/cosmos-sdk/types/module"

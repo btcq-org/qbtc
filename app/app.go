@@ -47,9 +47,9 @@ import (
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	"github.com/btcq-org/qbtc/docs"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
-	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
+	qbtcmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
-	btcqtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 const (
@@ -105,7 +105,7 @@ type App struct {
 
 	// simulation manager
 	sm         *module.SimulationManager
-	QbtcKeeper btcqmodulekeeper.Keeper
+	QbtcKeeper qbtcmodulekeeper.Keeper
 }
 
 func init() {
@@ -139,6 +139,7 @@ func New(
 	appOpts servertypes.AppOptions,
 	baseAppOptions ...func(*baseapp.BaseApp),
 ) *App {
+
 	var (
 		app        = &App{}
 		appBuilder *runtime.AppBuilder
@@ -188,7 +189,7 @@ func New(
 	if err != nil {
 		panic(err)
 	}
-	btcqtypes.DefineCustomGetSigners(txSigningOptions)
+	qbtctypes.DefineCustomGetSigners(txSigningOptions)
 	// add to default baseapp options
 	// enable optimistic execution
 	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())

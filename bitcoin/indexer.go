@@ -1,6 +1,7 @@
 package bitcoin
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -13,12 +14,15 @@ import (
 	"sync"
 	"time"
 
+	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"github.com/syndtr/goleveldb/leveldb"
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 func GetConfig() (*Config, error) {
@@ -232,6 +236,9 @@ func (i *Indexer) processVIn(ins []btcjson.Vin) {
 }
 func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 	for _, out := range outs {
+		if out.Value <= 0 {
+			continue
+		}
 		key := fmt.Sprintf("%s-%d", txid, out.N)
 		outBuff, err := json.Marshal(out)
 		if err != nil {
@@ -302,6 +309,7 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create export file: %w", err)
 	}
+	writer := bufio.NewWriter(f)
 	// close file only if we created one (not stdout)
 	defer func() {
 		if f != nil {
@@ -313,12 +321,44 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 
 	it := i.db.NewIterator(nil, nil)
 	defer it.Release()
+	idx := 0
 	for it.First(); it.Valid(); it.Next() {
 		k := it.Key()
 		v := it.Value()
-		line := fmt.Sprintf("%s-%s\n", string(k), string(v))
-		if _, err := f.WriteString(line); err != nil {
-			return fmt.Errorf("failed to write export: %w", err)
+		if len(v) == 0 {
+			continue
+		}
+		var vOut btcjson.Vout
+		if err := json.Unmarshal(v, &vOut); err != nil {
+			i.logger.Error().Err(err).Msg("failed to unmarshal vout during export")
+			continue
+		}
+		fields := strings.Split(string(k), "-")
+		pVout := qbtctypes.UTXO{
+			Txid:           fields[0],
+			Vout:           vOut.N,
+			Amount:         uint64(vOut.Value * 1e8), // convert to satoshis
+			EntitledAmount: uint64(vOut.Value * 1e8),
+			ScriptPubKey: &qbtctypes.ScriptPubKeyResult{
+				Hex:     vOut.ScriptPubKey.Hex,
+				Type:    vOut.ScriptPubKey.Type,
+				Address: vOut.ScriptPubKey.Address,
+			},
+		}
+		data, err := proto.Marshal(&pVout)
+		if err != nil {
+			i.logger.Error().Err(err).Msg("failed to marshal utxo during export")
+			continue
+		}
+		_, err = writer.Write(protowire.AppendFixed32(data, uint32(len(data))))
+		if err != nil {
+			i.logger.Error().Err(err).Msg("failed to write utxo during export")
+			continue
+		}
+		idx++
+		if idx%1000 == 0 {
+			writer.Flush()
+			i.logger.Info().Int("count", idx).Msg("exported utxos")
 		}
 	}
 	if err := it.Error(); err != nil {

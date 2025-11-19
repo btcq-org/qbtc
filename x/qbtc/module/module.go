@@ -1,9 +1,13 @@
-package btcq
+package module
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
 	"cosmossdk.io/core/appmodule"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -11,8 +15,10 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -35,6 +41,7 @@ type AppModule struct {
 	authKeeper     types.AuthKeeper
 	bankKeeper     types.BankKeeper
 	networkManager *keeper.NetworkManager
+	dataDir        string
 }
 
 func NewAppModule(
@@ -42,6 +49,7 @@ func NewAppModule(
 	k keeper.Keeper,
 	authKeeper types.AuthKeeper,
 	bankKeeper types.BankKeeper,
+	dataDir string,
 ) AppModule {
 	networkMgr := keeper.NewNetworkManager(k)
 	return AppModule{
@@ -50,7 +58,12 @@ func NewAppModule(
 		authKeeper:     authKeeper,
 		bankKeeper:     bankKeeper,
 		networkManager: networkMgr,
+		dataDir:        dataDir,
 	}
+}
+
+func (am AppModule) DataDir() string {
+	return am.dataDir
 }
 
 // IsAppModule implements the appmodule.AppModule interface.
@@ -111,6 +124,9 @@ func (am AppModule) InitGenesis(ctx sdk.Context, _ codec.JSONCodec, gs json.RawM
 	if err := am.keeper.InitGenesis(ctx, genState); err != nil {
 		panic(fmt.Errorf("failed to initialize %s genesis state: %w", types.ModuleName, err))
 	}
+	if err := am.readInitialUtxos(); err != nil {
+		panic(fmt.Errorf("failed to read initial UTXOs for %s: %w", types.ModuleName, err))
+	}
 }
 
 // ExportGenesis returns the module's exported genesis state as raw JSON bytes.
@@ -126,6 +142,47 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, _ codec.JSONCodec) json.RawMe
 	}
 
 	return bz
+}
+
+func (am AppModule) readInitialUtxos() error {
+	initialUtxoFile := filepath.Join(am.dataDir, "config", "genesis.bin")
+	f, err := os.Open(initialUtxoFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for {
+		bufReader := bufio.NewReader(f)
+		lengthBytes := make([]byte, 0, 4)
+		n, err := bufReader.Read(lengthBytes)
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+		size, n := protowire.ConsumeFixed32(lengthBytes)
+		if n < 0 {
+			return fmt.Errorf("failed to read utxo size")
+		}
+		utxoBytes := make([]byte, size)
+		n, err = bufReader.Read(utxoBytes)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+		var utxo types.UTXO
+		proto.Unmarshal(utxoBytes, &utxo)
+		err = am.keeper.Utxoes.Set(sdk.UnwrapSDKContext(context.Background()), utxo.GetKey(), utxo)
+		if err != nil {
+			return fmt.Errorf("failed to set initial UTXO %s: %w", utxo.Txid, err)
+		}
+	}
 }
 
 // ConsensusVersion is a sequence number for state-breaking change of the module.
