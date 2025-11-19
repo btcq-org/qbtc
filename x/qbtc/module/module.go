@@ -124,9 +124,9 @@ func (am AppModule) InitGenesis(ctx sdk.Context, _ codec.JSONCodec, gs json.RawM
 	if err := am.keeper.InitGenesis(ctx, genState); err != nil {
 		panic(fmt.Errorf("failed to initialize %s genesis state: %w", types.ModuleName, err))
 	}
-	if err := am.readInitialUtxos(); err != nil {
-		panic(fmt.Errorf("failed to read initial UTXOs for %s: %w", types.ModuleName, err))
-	}
+	// if err := am.readInitialUtxos(); err != nil {
+	// 	panic(fmt.Errorf("failed to read initial UTXOs for %s: %w", types.ModuleName, err))
+	// }
 }
 
 // ExportGenesis returns the module's exported genesis state as raw JSON bytes.
