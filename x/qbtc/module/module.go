@@ -124,9 +124,9 @@ func (am AppModule) InitGenesis(ctx sdk.Context, _ codec.JSONCodec, gs json.RawM
 	if err := am.keeper.InitGenesis(ctx, genState); err != nil {
 		panic(fmt.Errorf("failed to initialize %s genesis state: %w", types.ModuleName, err))
 	}
-	// if err := am.readInitialUtxos(); err != nil {
-	// 	panic(fmt.Errorf("failed to read initial UTXOs for %s: %w", types.ModuleName, err))
-	// }
+	if err := am.readInitialUtxos(ctx); err != nil {
+		panic(fmt.Errorf("failed to read initial UTXOs for %s: %w", types.ModuleName, err))
+	}
 }
 
 // ExportGenesis returns the module's exported genesis state as raw JSON bytes.
@@ -144,15 +144,15 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, _ codec.JSONCodec) json.RawMe
 	return bz
 }
 
-func (am AppModule) readInitialUtxos() error {
+func (am AppModule) readInitialUtxos(ctx sdk.Context) error {
 	initialUtxoFile := filepath.Join(am.dataDir, "config", "genesis.bin")
 	f, err := os.Open(initialUtxoFile)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	bufReader := bufio.NewReader(f)
 	for {
-		bufReader := bufio.NewReader(f)
 		lengthBytes := make([]byte, 0, 4)
 		n, err := bufReader.Read(lengthBytes)
 		if err != nil {
@@ -171,14 +171,20 @@ func (am AppModule) readInitialUtxos() error {
 		utxoBytes := make([]byte, size)
 		n, err = bufReader.Read(utxoBytes)
 		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
 			return err
 		}
 		if n == 0 {
 			return nil
 		}
 		var utxo types.UTXO
-		proto.Unmarshal(utxoBytes, &utxo)
-		err = am.keeper.Utxoes.Set(sdk.UnwrapSDKContext(context.Background()), utxo.GetKey(), utxo)
+		if err := proto.Unmarshal(utxoBytes, &utxo); err != nil {
+			ctx.Logger().Error("failed to unmarshal initial UTXO", "error", err)
+			continue
+		}
+		err = am.keeper.Utxoes.Set(ctx, utxo.GetKey(), utxo)
 		if err != nil {
 			return fmt.Errorf("failed to set initial UTXO %s: %w", utxo.Txid, err)
 		}
