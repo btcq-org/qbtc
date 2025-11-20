@@ -11,7 +11,7 @@ import (
 )
 
 type PrivKey struct {
-	Body []byte
+	Body []byte `json:"body"`
 }
 
 type Keystore interface {
