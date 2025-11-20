@@ -14,7 +14,7 @@ func Key(kstore keystore.Keystore) (crypto.PrivKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return crypto.UnmarshalPrivateKey([]byte(privKey))
+	return crypto.UnmarshalPrivateKey(privKey.Body)
 }
 
 // ID gets the peer id from private key

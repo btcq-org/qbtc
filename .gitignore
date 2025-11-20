@@ -16,3 +16,4 @@ debug_container.svg
 config.json
 config.yml
 utxo-indexer
+.bifrost/

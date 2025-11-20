@@ -40,14 +40,18 @@ type Network struct {
 
 // NewNetwork creates a new p2p network
 func NewNetwork(config *config.P2PConfig, qClient qtypes.QueryClient) *Network {
-	return &Network{
-		config:           config,
-		listenAddr:       maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", config.Port)),
-		listenAddrQUIC:   maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", config.Port)),
-		externalAddr:     maddr.StringCast(fmt.Sprintf("/ip4/%s/tcp/%d", config.ExternalIP, config.Port)),
-		externalAddrQUIC: maddr.StringCast(fmt.Sprintf("/ip4/%s/udp/%d/quic", config.ExternalIP, config.Port)),
-		qClient:          qClient,
+	n := &Network{
+		config:         config,
+		listenAddr:     maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", config.Port)),
+		listenAddrQUIC: maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", config.Port)),
+		qClient:        qClient,
 	}
+
+	if config.ExternalIP != "" {
+		n.externalAddr = maddr.StringCast(fmt.Sprintf("/ip4/%s/tcp/%d", config.ExternalIP, config.Port))
+		n.externalAddrQUIC = maddr.StringCast(fmt.Sprintf("/ip4/%s/udp/%d/quic", config.ExternalIP, config.Port))
+	}
+	return n
 }
 
 // addressFactory is a function that returns the external address if it is set, otherwise returns the input addresses

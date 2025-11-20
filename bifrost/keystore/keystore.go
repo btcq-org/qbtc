@@ -15,8 +15,9 @@ type PrivKey struct {
 }
 
 type Keystore interface {
-	Get(key string) (string, error)
-	Put(key string, value PrivKey) error
+	Get(keyName string) (PrivKey, error)
+	Put(keyName string, value PrivKey) error
+	Delete(keyName string) error
 	Keyring() keyring.Keyring
 }
 
@@ -48,4 +49,24 @@ func GenerateKey(kstore Keystore) (*PrivKey, error) {
 	privKey := &PrivKey{Body: bytes}
 
 	return privKey, nil
+}
+
+func GetOrCreateKey(kstore Keystore, keyName string) (*PrivKey, error) {
+	privKey, err := kstore.Get(keyName)
+
+	if err == ErrKeyNotFound {
+		newPrivKey, err := GenerateKey(kstore)
+		if err != nil {
+			return nil, err
+		}
+		err = kstore.Put(keyName, *newPrivKey)
+		if err != nil {
+			return nil, err
+		}
+		return newPrivKey, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &privKey, nil
 }

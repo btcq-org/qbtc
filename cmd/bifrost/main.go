@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/btcq-org/qbtc/bifrost/p2p"
 	btypes "github.com/btcq-org/qbtc/bifrost/types"
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/spf13/cast"
+	flag "github.com/spf13/pflag"
 	"google.golang.org/grpc"
 )
 
@@ -24,21 +27,34 @@ func grpcClient() *grpc.ClientConn {
 }
 
 func run(ctx context.Context) error {
+	listenAddr := flag.String("listen-addr", "0.0.0.0:30006", "Listen address of the node")
+	externalIP := flag.String("external-ip", "", "External IP of the node")
+	rootPath := flag.String("root-path", ".bifrost", "Root path of the keystore")
+	keyName := flag.String("key-name", "bifrost-p2p-key", "Name of the key to use for the p2p network")
+	flag.Parse()
 
+	// handle signals
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
 	defer cancel()
 
+	_, p, err := net.SplitHostPort(*listenAddr)
+	if err != nil {
+		return err
+	}
 	config := &btypes.P2PConfig{
-		Port:       30006,
-		ExternalIP: "127.0.0.1",
+		Port:       cast.ToInt(p),
+		ExternalIP: *externalIP,
 	}
 	//  client to retrieve node peer addresses
 	qClient := qtypes.NewQueryClient(grpcClient())
 
-	kstore := keystore.NewMemoryKeyStore()
-	privKey, err := keystore.GenerateKey(kstore)
+	kstore, err := keystore.NewFileKeyStore(*rootPath)
 	if err != nil {
-		panic(err)
+		return err
+	}
+	privKey, err := keystore.GetOrCreateKey(kstore, *keyName)
+	if err != nil {
+		return err
 	}
 
 	network := p2p.NewNetwork(config, qClient)

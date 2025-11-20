@@ -1,7 +1,6 @@
 package keystore
 
 import (
-	"encoding/base64"
 	"fmt"
 	"sync"
 
@@ -38,16 +37,16 @@ func (m *memoryKeyStore) Put(n string, k PrivKey) error {
 	return nil
 }
 
-func (m *memoryKeyStore) Get(n string) (string, error) {
+func (m *memoryKeyStore) Get(n string) (PrivKey, error) {
 	m.keysLk.Lock()
 	defer m.keysLk.Unlock()
 
 	k, ok := m.keys[n]
 	if !ok {
-		return "", fmt.Errorf("keystore: key '%s' not found", n)
+		return PrivKey{}, ErrKeyNotFound
 	}
 
-	return base64.StdEncoding.EncodeToString(k.Body), nil
+	return k, nil
 }
 
 func (m *memoryKeyStore) Delete(n string) error {
