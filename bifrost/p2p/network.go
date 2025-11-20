@@ -102,6 +102,9 @@ func (n *Network) GetHost() host.Host {
 
 // Stop stops the p2p network
 func (n *Network) Stop() error {
+	if n.h == nil {
+		return nil
+	}
 	return n.h.Close()
 }
 
