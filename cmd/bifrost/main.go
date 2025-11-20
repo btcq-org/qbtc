@@ -42,6 +42,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	defer qClient.Close()
 	kstore, err := keystore.NewFileKeyStore(*rootPath)
 	if err != nil {
 		return err

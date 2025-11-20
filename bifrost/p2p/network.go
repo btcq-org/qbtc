@@ -4,16 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
-	"strings"
 	"sync"
 
 	"github.com/btcq-org/qbtc/bifrost/keystore"
 	config "github.com/btcq-org/qbtc/bifrost/types"
-	"github.com/cosmos/cosmos-sdk/types/query"
 
-	"github.com/btcq-org/qbtc/x/qbtc/types"
-	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -35,16 +31,16 @@ type Network struct {
 	// p2p host
 	h host.Host
 
-	qClient qtypes.QueryClient
+	qBTCNode qclient.QBTCNode
 }
 
 // NewNetwork creates a new p2p network
-func NewNetwork(config *config.P2PConfig, qClient qtypes.QueryClient) *Network {
+func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) *Network {
 	n := &Network{
 		config:         config,
 		listenAddr:     maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", config.Port)),
 		listenAddrQUIC: maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", config.Port)),
-		qClient:        qClient,
+		qBTCNode:       qBTCNode,
 	}
 
 	if config.ExternalIP != "" {
@@ -142,78 +138,4 @@ func setupDHT(ctx context.Context, host host.Host, initialPeers []peer.AddrInfo)
 	}
 
 	return dht, nil
-}
-
-func getBootstrapPeers(ctx context.Context, qClient qtypes.QueryClient) ([]peer.AddrInfo, error) {
-	resp, err := qClient.AllNodePeerAddresses(ctx, &types.QueryAllNodePeerAddressesRequest{
-		Pagination: &query.PageRequest{
-			Limit: 100,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var addrInfos []peer.AddrInfo
-	for _, nodePeer := range resp.NodePeerAddresses {
-		// Parse peer address in format: <peerID>@<host>:<port>
-		parts := strings.Split(nodePeer.PeerAddress, "@")
-		if len(parts) != 2 {
-			slog.Warn("invalid peer address format", "address", nodePeer.PeerAddress)
-			continue
-		}
-
-		peerIDStr := parts[0]
-		hostPort := parts[1]
-
-		// Parse peer ID
-		peerID, err := peer.Decode(peerIDStr)
-		if err != nil {
-			slog.Warn("failed to decode peer ID", "peerID", peerIDStr, "err", err)
-			continue
-		}
-
-		// Parse host:port
-		host, port, err := net.SplitHostPort(hostPort)
-		if err != nil {
-			slog.Warn("failed to parse host:port", "hostPort", hostPort, "err", err)
-			continue
-		}
-
-		// Create multiaddr from host and port
-		// Try to determine if it's IPv4 or IPv6
-		// Create both TCP and QUIC addresses
-		var addrs []maddr.Multiaddr
-		if ip := net.ParseIP(host); ip != nil {
-			if ip.To4() != nil {
-				// IPv4 - create both TCP and QUIC addresses
-				addrs = []maddr.Multiaddr{
-					maddr.StringCast(fmt.Sprintf("/ip4/%s/tcp/%s", host, port)),
-					maddr.StringCast(fmt.Sprintf("/ip4/%s/udp/%s/quic", host, port)),
-				}
-			} else {
-				// IPv6 - create both TCP and QUIC addresses
-				addrs = []maddr.Multiaddr{
-					maddr.StringCast(fmt.Sprintf("/ip6/%s/tcp/%s", host, port)),
-					maddr.StringCast(fmt.Sprintf("/ip6/%s/udp/%s/quic", host, port)),
-				}
-			}
-		} else {
-			// Domain name - create both TCP and QUIC addresses
-			addrs = []maddr.Multiaddr{
-				maddr.StringCast(fmt.Sprintf("/dns/%s/tcp/%s", host, port)),
-				maddr.StringCast(fmt.Sprintf("/dns/%s/udp/%s/quic", host, port)),
-			}
-		}
-
-		// Create AddrInfo with both TCP and QUIC addresses
-		addrInfo := peer.AddrInfo{
-			ID:    peerID,
-			Addrs: addrs,
-		}
-
-		addrInfos = append(addrInfos, addrInfo)
-	}
-
-	return addrInfos, nil
 }

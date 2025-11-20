@@ -7,13 +7,25 @@ import (
 	"strings"
 
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	insecurecreds "google.golang.org/grpc/credentials/insecure"
 )
 
+type Client struct {
+	conn    *grpc.ClientConn
+	qClient qtypes.QueryClient
+}
+
+type QBTCNode interface {
+	GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error)
+}
+
+var _ QBTCNode = &Client{}
+
 // New creates a new query client for QBTC blockchain node at the given target address.
-func New(target string, insecure bool) (qtypes.QueryClient, error) {
+func New(target string, insecure bool) (*Client, error) {
 	var conn *grpc.ClientConn
 	var err error
 	if insecure {
@@ -22,7 +34,7 @@ func New(target string, insecure bool) (qtypes.QueryClient, error) {
 			return nil, err
 		}
 
-		return qtypes.NewQueryClient(conn), nil
+		return &Client{conn: conn, qClient: qtypes.NewQueryClient(conn)}, nil
 	}
 
 	conn, err = grpc.NewClient(
@@ -32,7 +44,7 @@ func New(target string, insecure bool) (qtypes.QueryClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return qtypes.NewQueryClient(conn), nil
+	return &Client{conn: conn, qClient: qtypes.NewQueryClient(conn)}, nil
 }
 
 func dialerFunc(_ context.Context, addr string) (net.Conn, error) {
@@ -54,4 +66,8 @@ func protocolAndAddress(listenAddr string) (string, string) {
 	}
 
 	return protocol, address
+}
+
+func (c *Client) Close() error {
+	return c.conn.Close()
 }
