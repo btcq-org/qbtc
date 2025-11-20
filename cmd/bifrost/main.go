@@ -11,20 +11,11 @@ import (
 
 	"github.com/btcq-org/qbtc/bifrost/keystore"
 	"github.com/btcq-org/qbtc/bifrost/p2p"
+	"github.com/btcq-org/qbtc/bifrost/qclient"
 	btypes "github.com/btcq-org/qbtc/bifrost/types"
-	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/spf13/cast"
 	flag "github.com/spf13/pflag"
-	"google.golang.org/grpc"
 )
-
-func grpcClient() *grpc.ClientConn {
-	conn, err := grpc.Dial("localhost:9090", grpc.WithInsecure())
-	if err != nil {
-		panic(err)
-	}
-	return conn
-}
 
 func run(ctx context.Context) error {
 	listenAddr := flag.String("listen-addr", "0.0.0.0:30006", "Listen address of the node")
@@ -46,7 +37,10 @@ func run(ctx context.Context) error {
 		ExternalIP: *externalIP,
 	}
 	//  client to retrieve node peer addresses
-	qClient := qtypes.NewQueryClient(grpcClient())
+	qClient, err := qclient.New(fmt.Sprintf("localhost:%d", 9090), true)
+	if err != nil {
+		return err
+	}
 
 	kstore, err := keystore.NewFileKeyStore(*rootPath)
 	if err != nil {
