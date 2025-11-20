@@ -40,7 +40,7 @@ func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) (*Network, 
 		return nil, ErrInvalidConfig
 	}
 	if qBTCNode == nil {
-		return nil, fmt.Errorf("qBTCNode cannot be nil")
+		return nil, ErrInvalidQBTCNodeClient
 	}
 	if config.Port < 1 || config.Port > 65535 {
 		return nil, fmt.Errorf("invalid port: %d", config.Port)
