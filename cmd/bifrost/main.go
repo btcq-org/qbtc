@@ -58,6 +58,12 @@ func run(ctx context.Context) error {
 		return err
 	}
 
+	defer func() {
+		if err := network.Stop(); err != nil {
+			slog.Error("failed to stop network", "err", err)
+		}
+	}()
+
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 

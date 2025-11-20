@@ -39,7 +39,9 @@ func New(target string, insecure bool) (*Client, error) {
 
 	conn, err = grpc.NewClient(
 		target,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			MinVersion: tls.VersionTLS13,
+		})),
 	)
 	if err != nil {
 		return nil, err

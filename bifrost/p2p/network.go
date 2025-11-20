@@ -101,7 +101,9 @@ func (n *Network) Stop() error {
 	if n.h == nil {
 		return nil
 	}
-	return n.h.Close()
+	err := n.h.Close()
+	n.h = nil
+	return err
 }
 
 // GetListenAddr returns the listen address
@@ -133,9 +135,6 @@ func setupDHT(ctx context.Context, host host.Host, initialPeers []peer.AddrInfo)
 		}()
 	}
 	wg.Wait()
-	if err != nil {
-		return nil, err
-	}
 
 	return dht, nil
 }
