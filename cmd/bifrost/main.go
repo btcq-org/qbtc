@@ -41,7 +41,7 @@ func run(ctx context.Context) error {
 		panic(err)
 	}
 
-	network := p2p.NewNetwork(config, &qClient)
+	network := p2p.NewNetwork(config, qClient)
 	err = network.Start(privKey)
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	host := network.GetHost()
-	slog.Info("starting bifrost p2p network", "id", host.ID(), "listen addr", network.GetListenAddr())
+	slog.Info("starting bifrost p2p network", "id", host.ID(), "listen_addr", network.GetListenAddr())
 
 	for {
 		select {
@@ -59,7 +59,7 @@ func run(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			host := network.GetHost()
-			slog.Info("bifrost p2p running...", "id", host.ID(), "listen addr", network.GetListenAddr())
+			slog.Info("bifrost p2p running...", "id", host.ID(), "listen_addr", network.GetListenAddr())
 		}
 	}
 
