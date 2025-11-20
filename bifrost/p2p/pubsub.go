@@ -5,12 +5,14 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
-func pubSub(ctx context.Context, host host.Host) (*pubsub.PubSub, error) {
+func pubSub(ctx context.Context, host host.Host, directPeers []peer.AddrInfo) (*pubsub.PubSub, error) {
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v11}, pubsub.GossipSubDefaultFeatures),
+		pubsub.WithDirectPeers(directPeers),
 	}
 	pubsub, err := pubsub.NewGossipSub(
 		ctx,

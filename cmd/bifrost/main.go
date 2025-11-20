@@ -42,7 +42,7 @@ func run(ctx context.Context) error {
 	}
 
 	network := p2p.NewNetwork(config, qClient)
-	err = network.Start(privKey)
+	err = network.Start(ctx, privKey)
 	if err != nil {
 		return err
 	}

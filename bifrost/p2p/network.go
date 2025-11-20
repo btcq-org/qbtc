@@ -60,7 +60,7 @@ func (n *Network) addressFactory(addrs []maddr.Multiaddr) []maddr.Multiaddr {
 }
 
 // Start starts the p2p network
-func (n *Network) Start(key *keystore.PrivKey) error {
+func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	privKey, err := crypto.UnmarshalPrivateKey(key.Body)
 	if err != nil {
 		return err
@@ -112,7 +112,6 @@ func setupDHT(ctx context.Context, host host.Host, initialPeers []peer.AddrInfo)
 	wg := sync.WaitGroup{}
 	wg.Add(len(initialPeers))
 	for _, p := range initialPeers {
-		p := p // capture loop variable
 		go func() {
 			defer wg.Done()
 
