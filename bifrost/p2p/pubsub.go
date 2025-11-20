@@ -8,8 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
-func gossipPubsub(ctx context.Context, host host.Host) (*pubsub.PubSub, error) {
-
+func pubSub(ctx context.Context, host host.Host) (*pubsub.PubSub, error) {
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v11}, pubsub.GossipSubDefaultFeatures),
 	}
