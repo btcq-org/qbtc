@@ -34,7 +34,7 @@ func run(ctx context.Context) error {
 	flag.Parse()
 
 	// handle signals
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
 	_, p, err := net.SplitHostPort(*listenAddr)

@@ -65,6 +65,12 @@ func (n *Network) addressFactory(addrs []maddr.Multiaddr) []maddr.Multiaddr {
 
 // Start starts the p2p network
 func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
+	if key == nil {
+		return ErrInvalidKey
+	}
+	if n.h != nil {
+		return ErrNetworkAlreadyStarted
+	}
 	privKey, err := crypto.UnmarshalPrivateKey(key.Body)
 	if err != nil {
 		return err
