@@ -67,7 +67,10 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	)
 	homeDir := "~/." + types.ModuleName
 	if in.AppOpts != nil {
-		homeDir = in.AppOpts.Get(flags.FlagHome).(string)
+		flagHomeDir, ok := in.AppOpts.Get(flags.FlagHome).(string)
+		if ok {
+			homeDir = flagHomeDir
+		}
 	}
 	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper, homeDir)
 	return ModuleOutputs{QbtcKeeper: k, Module: m}

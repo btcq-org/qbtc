@@ -153,8 +153,8 @@ func (am AppModule) readInitialUtxos(ctx sdk.Context) error {
 	defer f.Close()
 	bufReader := bufio.NewReader(f)
 	for {
-		lengthBytes := make([]byte, 0, 4)
-		n, err := bufReader.Read(lengthBytes)
+		lengthBytes := make([]byte, protowire.SizeFixed32())
+		n, err := io.ReadFull(bufReader, lengthBytes)
 		if err != nil {
 			if err == io.EOF {
 				return nil
@@ -169,7 +169,7 @@ func (am AppModule) readInitialUtxos(ctx sdk.Context) error {
 			return fmt.Errorf("failed to read utxo size")
 		}
 		utxoBytes := make([]byte, size)
-		n, err = bufReader.Read(utxoBytes)
+		n, err = io.ReadFull(bufReader, utxoBytes)
 		if err != nil {
 			if err == io.EOF {
 				return nil
