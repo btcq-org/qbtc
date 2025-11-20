@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"sync"
 
 	"github.com/btcq-org/qbtc/bifrost/keystore"
@@ -34,20 +35,47 @@ type Network struct {
 	qBTCNode qclient.QBTCNode
 }
 
-// NewNetwork creates a new p2p network
-func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) *Network {
+func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) (*Network, error) {
+	if config == nil {
+		return nil, ErrInvalidConfig
+	}
+	if qBTCNode == nil {
+		return nil, fmt.Errorf("qBTCNode cannot be nil")
+	}
+	if config.Port < 1 || config.Port > 65535 {
+		return nil, fmt.Errorf("invalid port: %d", config.Port)
+	}
+
+	listenAddr, err := maddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", config.Port))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create listen address: %w", err)
+	}
+	listenAddrQUIC, err := maddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", config.Port))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create QUIC listen address: %w", err)
+	}
+
 	n := &Network{
 		config:         config,
-		listenAddr:     maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", config.Port)),
-		listenAddrQUIC: maddr.StringCast(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", config.Port)),
+		listenAddr:     listenAddr,
+		listenAddrQUIC: listenAddrQUIC,
 		qBTCNode:       qBTCNode,
 	}
 
 	if config.ExternalIP != "" {
-		n.externalAddr = maddr.StringCast(fmt.Sprintf("/ip4/%s/tcp/%d", config.ExternalIP, config.Port))
-		n.externalAddrQUIC = maddr.StringCast(fmt.Sprintf("/ip4/%s/udp/%d/quic", config.ExternalIP, config.Port))
+		if net.ParseIP(config.ExternalIP) == nil {
+			return nil, fmt.Errorf("invalid external IP: %s", config.ExternalIP)
+		}
+		n.externalAddr, err = maddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", config.ExternalIP, config.Port))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create external address: %w", err)
+		}
+		n.externalAddrQUIC, err = maddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/udp/%d/quic", config.ExternalIP, config.Port))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create QUIC external address: %w", err)
+		}
 	}
-	return n
+	return n, nil
 }
 
 // addressFactory is a function that returns the external address if it is set, otherwise returns the input addresses
