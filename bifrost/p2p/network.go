@@ -139,8 +139,9 @@ func (n *Network) GetListenAddr() maddr.Multiaddr {
 	return n.listenAddr
 }
 
-func setupDHT(ctx context.Context, host host.Host, initialPeers []peer.AddrInfo) (*dht.IpfsDHT, error) {
-	dht, err := dht.New(ctx, host)
+// SetupDHT creates a new DHT instance for the p2p network
+func (n *Network) SetupDHT(ctx context.Context, initialPeers []peer.AddrInfo) (*dht.IpfsDHT, error) {
+	dht, err := dht.New(ctx, n.h)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +155,7 @@ func setupDHT(ctx context.Context, host host.Host, initialPeers []peer.AddrInfo)
 		go func() {
 			defer wg.Done()
 
-			err := host.Connect(ctx, p)
+			err := n.h.Connect(ctx, p)
 			if err != nil {
 				slog.Error("failed to connect to bootstrapper", "peer", p, "err", err)
 				return

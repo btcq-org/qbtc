@@ -9,7 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
-func pubSub(ctx context.Context, host host.Host, directPeers []peer.AddrInfo) (*pubsub.PubSub, error) {
+// PubSub creates a new pubsub instance for the p2p network
+func PubSub(ctx context.Context, host host.Host, directPeers []peer.AddrInfo) (*pubsub.PubSub, error) {
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v11}, pubsub.GossipSubDefaultFeatures),
 		pubsub.WithDirectPeers(directPeers),

@@ -35,6 +35,8 @@ func ensureDir(path string) error {
 }
 
 func (f *fileKeyStore) Get(keyName string) (PrivKey, error) {
+	f.keysLk.Lock()
+	defer f.keysLk.Unlock()
 	rootPath := filepath.Join(f.rootPath, keyName)
 
 	content, err := os.ReadFile(rootPath)
@@ -55,6 +57,8 @@ func (f *fileKeyStore) Get(keyName string) (PrivKey, error) {
 }
 
 func (f *fileKeyStore) Put(keyName string, value PrivKey) error {
+	f.keysLk.Lock()
+	defer f.keysLk.Unlock()
 	rootPath := filepath.Join(f.rootPath, keyName)
 
 	content, err := json.Marshal(value)
@@ -66,6 +70,8 @@ func (f *fileKeyStore) Put(keyName string, value PrivKey) error {
 }
 
 func (f *fileKeyStore) Delete(keyName string) error {
+	f.keysLk.Lock()
+	defer f.keysLk.Unlock()
 	rootPath := filepath.Join(f.rootPath, keyName)
 	return os.Remove(rootPath)
 }
