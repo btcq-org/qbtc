@@ -141,7 +141,10 @@ func (n *Network) GetListenAddr() maddr.Multiaddr {
 
 // SetupDHT creates a new DHT instance for the p2p network
 func (n *Network) SetupDHT(ctx context.Context, initialPeers []peer.AddrInfo) (*dht.IpfsDHT, error) {
-	dht, err := dht.New(ctx, n.h)
+	dht, err := dht.New(ctx, n.h,
+		dht.QueryFilter(dht.PublicQueryFilter),
+		dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
+	)
 	if err != nil {
 		return nil, err
 	}
