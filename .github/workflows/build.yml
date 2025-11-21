@@ -19,15 +19,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          cache-dependency-path: go.sum
       - name: Lint with golangci-lint
         run: make lint
       - name: check proto format
@@ -45,15 +37,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-125-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-125-
+          cache-dependency-path: go.sum
       - name: Build
         run: make build
 
@@ -69,14 +53,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          cache-dependency-path: go.sum
       - name: Test
         run: make test
