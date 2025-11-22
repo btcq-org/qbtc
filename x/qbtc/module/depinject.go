@@ -1,6 +1,9 @@
 package module
 
 import (
+	"os"
+	"path/filepath"
+
 	"cosmossdk.io/core/address"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/core/store"
@@ -65,7 +68,11 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.AuthKeeper,
 		authority.String(),
 	)
-	homeDir := "~/." + types.ModuleName
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = os.Getenv("HOME")
+	}
+	homeDir = filepath.Join(homeDir, "."+types.ModuleName)
 	if in.AppOpts != nil {
 		flagHomeDir, ok := in.AppOpts.Get(flags.FlagHome).(string)
 		if ok {
