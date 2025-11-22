@@ -148,7 +148,12 @@ func (AppModule) ConsensusVersion() uint64 { return 1 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 // The begin block implementation is optional.
-func (am AppModule) BeginBlock(_ context.Context) error {
+func (am AppModule) BeginBlock(ctx context.Context) error {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	utxoLoader := NewUtxoLoader(am.dataDir)
+	if err := utxoLoader.EnsureLoadUtxoFromChunkFile(sdkCtx, int(sdkCtx.BlockHeight()), am.keeper); err != nil {
+		sdkCtx.Logger().Error("fail to load utxo from chunk file", "error", err)
+	}
 	return nil
 }
 

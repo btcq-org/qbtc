@@ -7,7 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/btcq-org/qbtc/x/qbtc/keeper"
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/gogoproto/proto"
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
@@ -50,7 +53,7 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 	}
 	chunkIndex := 0
 	for {
-		err := ul.LoadUtxosFromChunkFile(ctx, bufReader, chunkIndex, outputDir)
+		err := ul.LoadUtxosToChunkFile(ctx, bufReader, chunkIndex, outputDir)
 		if err != nil {
 			ctx.Logger().Info("spliting utxo files", "total", chunkIndex)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -63,7 +66,7 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 	}
 }
 
-func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, srcFileReader io.Reader, chunkIndex int, outputDir string) error {
+func (ul *UtxoLoader) LoadUtxosToChunkFile(ctx sdk.Context, srcFileReader io.Reader, chunkIndex int, outputDir string) error {
 	chunkFile := filepath.Join(outputDir, fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
 	outF, err := os.Create(chunkFile)
 	if err != nil {
@@ -110,7 +113,7 @@ func (ul *UtxoLoader) readUtxo(reader io.Reader) ([]byte, error) {
 	if uint32(n) < size {
 		return nil, io.EOF
 	}
-	return append(lengthBytes, utxoBytes...), nil
+	return utxoBytes, nil
 }
 
 func (ul *UtxoLoader) writeUtxo(writer io.Writer, utxoData []byte) error {
@@ -121,4 +124,47 @@ func (ul *UtxoLoader) writeUtxo(writer io.Writer, utxoData []byte) error {
 	}
 	_, err = writer.Write(utxoData)
 	return err
+}
+func (ul *UtxoLoader) EnsureLoadUtxoFromChunkFile(ctx sdk.Context, chunkIndex int, k keeper.Keeper) error {
+	chunkFile := filepath.Join(ul.DataDir, "utxo_chunks", fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
+	_, err := os.Stat(chunkFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	ctx.Logger().Info("loading utxo from chunk file", "file", chunkFile)
+	if err := ul.LoadUtxosFromChunkFile(ctx, k, chunkFile); err != nil {
+		return err
+	}
+	return os.Remove(chunkFile)
+}
+
+func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k keeper.Keeper, chunkFile string) error {
+	f, err := os.Open(chunkFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bufReader := bufio.NewReader(f)
+	for {
+		utxoBytes, err := ul.readUtxo(bufReader)
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			return err
+		}
+		var utxo types.UTXO
+		if err := proto.Unmarshal(utxoBytes, &utxo); err != nil {
+			return err
+		}
+		err = k.Utxoes.Set(ctx, utxo.GetKey(), utxo)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
