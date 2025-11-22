@@ -1,6 +1,9 @@
-package btcq
+package module
 
 import (
+	"os"
+	"path/filepath"
+
 	"cosmossdk.io/core/address"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/core/store"
@@ -8,7 +11,9 @@ import (
 	"cosmossdk.io/depinject/appconfig"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
+	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 )
@@ -25,6 +30,8 @@ func init() {
 	)
 }
 
+type HomeDir string
+
 type ModuleInputs struct {
 	depinject.In
 
@@ -36,6 +43,7 @@ type ModuleInputs struct {
 	AuthKeeper    types.AuthKeeper
 	BankKeeper    types.BankKeeper
 	StakingKeeper types.StakingKeeper
+	AppOpts       servertypes.AppOptions `optional:"true"`
 }
 
 type ModuleOutputs struct {
@@ -60,7 +68,17 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.AuthKeeper,
 		authority.String(),
 	)
-	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper)
-
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = os.Getenv("HOME")
+	}
+	homeDir = filepath.Join(homeDir, "."+types.ModuleName)
+	if in.AppOpts != nil {
+		flagHomeDir, ok := in.AppOpts.Get(flags.FlagHome).(string)
+		if ok {
+			homeDir = flagHomeDir
+		}
+	}
+	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper, homeDir)
 	return ModuleOutputs{QbtcKeeper: k, Module: m}
 }

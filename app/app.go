@@ -35,7 +35,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
-	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
 	slashingkeeper "github.com/cosmos/cosmos-sdk/x/slashing/keeper"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	icacontrollerkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/keeper"
@@ -47,9 +46,9 @@ import (
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	"github.com/btcq-org/qbtc/docs"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
-	btcqmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
+	qbtcmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
-	btcqtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 const (
@@ -85,7 +84,6 @@ type App struct {
 	// the list of all modules is available in the app_config
 	AuthKeeper            authkeeper.AccountKeeper
 	BankKeeper            bankkeeper.Keeper
-	MintKeeper            mintkeeper.Keeper
 	UpgradeKeeper         *upgradekeeper.Keeper
 	AuthzKeeper           authzkeeper.Keeper
 	ConsensusParamsKeeper consensuskeeper.Keeper
@@ -105,7 +103,7 @@ type App struct {
 
 	// simulation manager
 	sm         *module.SimulationManager
-	QbtcKeeper btcqmodulekeeper.Keeper
+	QbtcKeeper qbtcmodulekeeper.Keeper
 }
 
 func init() {
@@ -139,6 +137,7 @@ func New(
 	appOpts servertypes.AppOptions,
 	baseAppOptions ...func(*baseapp.BaseApp),
 ) *App {
+
 	var (
 		app        = &App{}
 		appBuilder *runtime.AppBuilder
@@ -173,7 +172,6 @@ func New(
 		&app.interfaceRegistry,
 		&app.AuthKeeper,
 		&app.BankKeeper,
-		&app.MintKeeper,
 		&app.UpgradeKeeper,
 		&app.AuthzKeeper,
 		&app.ConsensusParamsKeeper,
@@ -188,7 +186,7 @@ func New(
 	if err != nil {
 		panic(err)
 	}
-	btcqtypes.DefineCustomGetSigners(txSigningOptions)
+	qbtctypes.DefineCustomGetSigners(txSigningOptions)
 	// add to default baseapp options
 	// enable optimistic execution
 	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())

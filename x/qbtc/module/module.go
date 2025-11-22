@@ -1,4 +1,4 @@
-package btcq
+package module
 
 import (
 	"context"
@@ -35,6 +35,7 @@ type AppModule struct {
 	authKeeper     types.AuthKeeper
 	bankKeeper     types.BankKeeper
 	networkManager *keeper.NetworkManager
+	dataDir        string
 }
 
 func NewAppModule(
@@ -42,6 +43,7 @@ func NewAppModule(
 	k keeper.Keeper,
 	authKeeper types.AuthKeeper,
 	bankKeeper types.BankKeeper,
+	dataDir string,
 ) AppModule {
 	networkMgr := keeper.NewNetworkManager(k)
 	return AppModule{
@@ -50,7 +52,12 @@ func NewAppModule(
 		authKeeper:     authKeeper,
 		bankKeeper:     bankKeeper,
 		networkManager: networkMgr,
+		dataDir:        dataDir,
 	}
+}
+
+func (am AppModule) DataDir() string {
+	return am.dataDir
 }
 
 // IsAppModule implements the appmodule.AppModule interface.
@@ -111,6 +118,12 @@ func (am AppModule) InitGenesis(ctx sdk.Context, _ codec.JSONCodec, gs json.RawM
 	if err := am.keeper.InitGenesis(ctx, genState); err != nil {
 		panic(fmt.Errorf("failed to initialize %s genesis state: %w", types.ModuleName, err))
 	}
+	utxoLoader := NewUtxoLoader(am.dataDir)
+	ctx.Logger().Info("splitting UTXO file for initial load")
+	err := utxoLoader.EnsureUtxoFileSplitted(ctx)
+	if err != nil {
+		panic(fmt.Errorf("failed to split UTXO file for %s: %w", types.ModuleName, err))
+	}
 }
 
 // ExportGenesis returns the module's exported genesis state as raw JSON bytes.
@@ -135,7 +148,12 @@ func (AppModule) ConsensusVersion() uint64 { return 1 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 // The begin block implementation is optional.
-func (am AppModule) BeginBlock(_ context.Context) error {
+func (am AppModule) BeginBlock(ctx context.Context) error {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	utxoLoader := NewUtxoLoader(am.dataDir)
+	if err := utxoLoader.EnsureLoadUtxoFromChunkFile(sdkCtx, int(sdkCtx.BlockHeight()), am.keeper); err != nil {
+		sdkCtx.Logger().Error("fail to load utxo from chunk file", "error", err)
+	}
 	return nil
 }
 

@@ -1,4 +1,4 @@
-package btcq
+package module
 
 import (
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
