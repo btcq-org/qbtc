@@ -350,7 +350,6 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 			i.logger.Error().Err(err).Msg("failed to marshal utxo during export")
 			continue
 		}
-
 		_, err = writer.Write(protowire.AppendFixed32(nil, uint32(len(data))))
 		if err != nil {
 			i.logger.Error().Err(err).Msg("failed to write fixed32 length during export")
@@ -363,6 +362,7 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 		}
 		idx++
 		if idx%1000 == 0 {
+			i.logger.Info().Int("length", len(data)).Msg("utxo length")
 			writer.Flush()
 			i.logger.Info().Int("count", idx).Msg("exported utxos")
 		}
