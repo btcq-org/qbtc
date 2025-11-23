@@ -27,6 +27,8 @@ build:
 	@echo "Build complete. Binary is located at ./build/$(APPNAME)d"
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version
+	@echo "build bifrost and tools"
+	@go build ./cmd/bifrost ./cmd/utxo-indexer
 ##############
 ###  Test  ###
 ##############

@@ -7,8 +7,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/btcq-org/qbtc/bifrost/config"
 	"github.com/btcq-org/qbtc/bifrost/keystore"
-	config "github.com/btcq-org/qbtc/bifrost/types"
 
 	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/libp2p/go-libp2p"

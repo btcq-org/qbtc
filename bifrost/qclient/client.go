@@ -8,6 +8,8 @@ import (
 
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	insecurecreds "google.golang.org/grpc/credentials/insecure"
@@ -16,6 +18,7 @@ import (
 type Client struct {
 	conn    *grpc.ClientConn
 	qClient qtypes.QueryClient
+	logger  zerolog.Logger
 }
 
 type QBTCNode interface {
@@ -29,12 +32,18 @@ func New(target string, insecure bool) (*Client, error) {
 	var conn *grpc.ClientConn
 	var err error
 	if insecure {
-		conn, err = grpc.NewClient(target, grpc.WithTransportCredentials(insecurecreds.NewCredentials()), grpc.WithContextDialer(dialerFunc))
+		conn, err = grpc.NewClient(target,
+			grpc.WithTransportCredentials(insecurecreds.NewCredentials()),
+			grpc.WithContextDialer(dialerFunc))
 		if err != nil {
 			return nil, err
 		}
 
-		return &Client{conn: conn, qClient: qtypes.NewQueryClient(conn)}, nil
+		return &Client{
+			conn:    conn,
+			qClient: qtypes.NewQueryClient(conn),
+			logger:  log.With().Str("module", "qclient").Logger(),
+		}, nil
 	}
 
 	conn, err = grpc.NewClient(

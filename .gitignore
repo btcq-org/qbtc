@@ -17,3 +17,5 @@ config.json
 config.yml
 utxo-indexer
 .bifrost/
+cmd/bifrost/bifrost_data/
+cmd/bifrost/bifrost
