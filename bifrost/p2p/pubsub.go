@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"fmt"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -12,7 +13,7 @@ import (
 // PubSub creates a new pubsub instance for the p2p network
 func PubSub(ctx context.Context, host host.Host, directPeers []peer.AddrInfo) (*pubsub.PubSub, error) {
 	options := []pubsub.Option{
-		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v11}, pubsub.GossipSubDefaultFeatures),
+		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
 		pubsub.WithDirectPeers(directPeers),
 	}
 	pubsub, err := pubsub.NewGossipSub(
@@ -21,7 +22,7 @@ func PubSub(ctx context.Context, host host.Host, directPeers []peer.AddrInfo) (*
 		options...,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start gossip pub sub,err: %w", err)
 	}
 	return pubsub, nil
 }
