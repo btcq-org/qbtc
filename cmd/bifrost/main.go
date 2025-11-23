@@ -46,8 +46,6 @@ func run(ctx context.Context, cfg *bifrostConfig.Config) error {
 		Port:       cast.ToInt(p),
 		ExternalIP: cfg.ExternalIP,
 	}
-	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	//  client to retrieve node peer addresses
 	qClient, err := qclient.New(fmt.Sprintf("localhost:%d", 9090), true)
 	if err != nil {
@@ -80,9 +78,9 @@ func run(ctx context.Context, cfg *bifrostConfig.Config) error {
 	}()
 
 	host := network.GetHost()
-	logger.Info().Msgf("starting bifrost p2p network, id: %s, listen_addr: %s", host.ID(), network.GetListenAddr())
+	log.Info().Msgf("starting bifrost p2p network, id: %s, listen_addr: %s", host.ID(), network.GetListenAddr())
 	<-ctx.Done()
-	logger.Info().Msg("shutting down bifrost p2p network")
+	log.Info().Msg("shutting down bifrost p2p network")
 	return nil
 }
 
@@ -111,6 +109,7 @@ func initLog(level string, pretty bool) {
 	l, err := zerolog.ParseLevel(level)
 	if err != nil {
 		log.Warn().Msgf("%s is not a valid log-level, falling back to 'info'", level)
+		l = zerolog.InfoLevel
 	}
 	var out io.Writer = os.Stdout
 	if pretty {
