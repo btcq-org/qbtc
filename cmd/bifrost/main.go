@@ -48,7 +48,6 @@ func run(ctx context.Context, cfg *bifrostConfig.Config) error {
 	}
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	_ = logger
 	//  client to retrieve node peer addresses
 	qClient, err := qclient.New(fmt.Sprintf("localhost:%d", 9090), true)
 	if err != nil {
@@ -83,6 +82,7 @@ func run(ctx context.Context, cfg *bifrostConfig.Config) error {
 	host := network.GetHost()
 	logger.Info().Msgf("starting bifrost p2p network, id: %s, listen_addr: %s", host.ID(), network.GetListenAddr())
 	<-ctx.Done()
+	logger.Info().Msg("shutting down bifrost p2p network")
 	return nil
 }
 

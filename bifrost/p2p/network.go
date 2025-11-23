@@ -3,13 +3,11 @@ package p2p
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 
 	"github.com/btcq-org/qbtc/bifrost/config"
 	"github.com/btcq-org/qbtc/bifrost/keystore"
-
 	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -19,6 +17,8 @@ import (
 	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	maddr "github.com/multiformats/go-multiaddr"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // Network is the p2p network
@@ -33,6 +33,8 @@ type Network struct {
 	h host.Host
 
 	qBTCNode qclient.QBTCNode
+	localDHT *dht.IpfsDHT
+	logger   zerolog.Logger
 }
 
 func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) (*Network, error) {
@@ -60,6 +62,8 @@ func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) (*Network, 
 		listenAddr:     listenAddr,
 		listenAddrQUIC: listenAddrQUIC,
 		qBTCNode:       qBTCNode,
+		localDHT:       nil,
+		logger:         log.With().Str("module", "p2p").Logger(),
 	}
 
 	if config.ExternalIP != "" {
@@ -115,7 +119,20 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 		return err
 	}
 	n.h = host
-
+	dht, err := dht.New(ctx, n.h,
+		dht.QueryFilter(dht.PublicQueryFilter),
+		dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to start DHT network,err: %w", err)
+	}
+	n.logger.Info().Msg("DHT network started")
+	err = dht.Bootstrap(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to bootstrap DHT network,err: %w", err)
+	}
+	n.logger.Info().Msg("DHT network bootstrapped")
+	n.localDHT = dht
 	return nil
 }
 
@@ -131,6 +148,8 @@ func (n *Network) Stop() error {
 	}
 	err := n.h.Close()
 	n.h = nil
+	n.localDHT.Close()
+	n.localDHT = nil
 	return err
 }
 
@@ -139,34 +158,21 @@ func (n *Network) GetListenAddr() maddr.Multiaddr {
 	return n.listenAddr
 }
 
-// SetupDHT creates a new DHT instance for the p2p network
-func (n *Network) SetupDHT(ctx context.Context, initialPeers []peer.AddrInfo) (*dht.IpfsDHT, error) {
-	dht, err := dht.New(ctx, n.h,
-		dht.QueryFilter(dht.PublicQueryFilter),
-		dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
-	)
-	if err != nil {
-		return nil, err
-	}
-	err = dht.Bootstrap(ctx)
-	if err != nil {
-		return nil, err
-	}
+// BootstrapInitialPeers connects to the given initial bootstrap peers
+func (n *Network) BootstrapInitialPeers(initialPeers []peer.AddrInfo) error {
 	wg := sync.WaitGroup{}
 	wg.Add(len(initialPeers))
 	for _, p := range initialPeers {
 		go func() {
 			defer wg.Done()
-
-			err := n.h.Connect(ctx, p)
+			err := n.h.Connect(context.Background(), p)
 			if err != nil {
-				slog.Error("failed to connect to bootstrapper", "peer", p, "err", err)
+				n.logger.Err(err).Msgf("failed to connect to bootstrapper %s", p.String())
 				return
 			}
-			slog.Info("successfully connected to bootstrapper", "peer", p.String())
+			n.logger.Info().Msgf("successfully connected to bootstrapper %s", p.String())
 		}()
 	}
 	wg.Wait()
-
-	return dht, nil
+	return nil
 }
