@@ -3,7 +3,6 @@ package qclient
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"strings"
 
@@ -28,7 +27,7 @@ func (c *Client) GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error)
 		// Parse peer address in format: <peerID>@<host>:<port>
 		parts := strings.Split(nodePeer.PeerAddress, "@")
 		if len(parts) != 2 {
-			slog.Warn("invalid peer address format", "address", nodePeer.PeerAddress)
+			c.logger.Warn().Msgf("invalid peer address format: %s", nodePeer.PeerAddress)
 			continue
 		}
 
@@ -38,14 +37,14 @@ func (c *Client) GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error)
 		// Parse peer ID
 		peerID, err := peer.Decode(peerIDStr)
 		if err != nil {
-			slog.Warn("failed to decode peer ID", "peerID", peerIDStr, "err", err)
+			c.logger.Warn().Msgf("failed to decode peer ID: %s, err: %v", peerIDStr, err)
 			continue
 		}
 
 		// Parse host:port
 		host, port, err := net.SplitHostPort(hostPort)
 		if err != nil {
-			slog.Warn("failed to parse host:port", "hostPort", hostPort, "err", err)
+			c.logger.Warn().Msgf("failed to parse host:port: %s, err: %v", hostPort, err)
 			continue
 		}
 
