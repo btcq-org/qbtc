@@ -27,9 +27,6 @@ type BtcClient struct {
 func NewBtcClient(cfg Config, db *leveldb.DB) (*BtcClient, error) {
 	client, err := newClient(cfg.Host, cfg.Port, cfg.RPCUser, cfg.Password)
 	if err != nil {
-		if dbCloseErr := db.Close(); dbCloseErr != nil {
-			log.Error().Err(dbCloseErr).Str("module", "bitcoin_indexer").Msg("failed to close leveldb after rpc client creation error")
-		}
 		return nil, fmt.Errorf("failed to create rpc client: %w", err)
 	}
 	return &BtcClient{
@@ -68,7 +65,7 @@ func (c *BtcClient) GetStartBlockHeight() (int64, error) {
 		if errors.Is(err, leveldb.ErrNotFound) {
 			return 0, nil
 		}
-		return 1, fmt.Errorf("failed to get start block height: %w", err)
+		return 0, fmt.Errorf("failed to get start block height: %w", err)
 	}
 	height, err := strconv.ParseInt(string(value), 10, 64)
 	if err != nil {
