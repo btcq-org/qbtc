@@ -2,14 +2,9 @@ package bitcoin
 
 import (
 	"bufio"
-	"context"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,43 +12,15 @@ import (
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/cosmos/gogoproto/proto"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 	"github.com/syndtr/goleveldb/leveldb"
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
-func GetConfig() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
-	viper.SetConfigType("json")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("error reading config file: %w", err)
-	}
-
-	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unable to decode into struct: %w", err)
-	}
-
-	return &cfg, nil
-}
-
-type Config struct {
-	Host        string `mapstructure:"host" json:"host"`
-	Port        int64  `mapstructure:"port" json:"port"`
-	RPCUser     string `mapstructure:"rpc_user" json:"rpc_user"`
-	Password    string `mapstructure:"password" json:"password"`
-	LocalDBPath string `mapstructure:"local_db_path" json:"local_db_path"`
-}
 type Indexer struct {
-	cfg    Config
+	client *BtcClient
 	db     *leveldb.DB
-	client *rpc.Client
 	logger zerolog.Logger
 	wg     *sync.WaitGroup
 	stop   chan struct{}
@@ -65,17 +32,13 @@ func NewIndexer(cfg Config) (*Indexer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create level db: %w", err)
 	}
-	client, err := newClient(cfg.Host, cfg.Port, cfg.RPCUser, cfg.Password)
+	btcClient, err := NewBtcClient(cfg, db)
 	if err != nil {
-		if dbCloseErr := db.Close(); dbCloseErr != nil {
-			log.Error().Err(dbCloseErr).Str("module", "bitcoin_indexer").Msg("failed to close leveldb after rpc client creation error")
-		}
-		return nil, fmt.Errorf("failed to create rpc client: %w", err)
+		return nil, fmt.Errorf("failed to create BTC client: %w", err)
 	}
 	indexer := &Indexer{
-		cfg:    cfg,
+		client: btcClient,
 		db:     db,
-		client: client,
 		logger: log.With().Str("module", "bitcoin_indexer").Logger(),
 		wg:     &sync.WaitGroup{},
 		stop:   make(chan struct{}),
@@ -83,57 +46,9 @@ func NewIndexer(cfg Config) (*Indexer, error) {
 	return indexer, nil
 }
 
-// newClient returns a client connection to a UTXO daemon.
-func newClient(host string, port int64, user, password string) (*rpc.Client, error) {
-	authFn := func(h http.Header) error {
-		auth := base64.StdEncoding.EncodeToString([]byte(user + ":" + password))
-		h.Set("Authorization", fmt.Sprintf("Basic %s", auth))
-		return nil
-	}
-
-	// default to http if no scheme is specified
-	if !strings.Contains(host, "://") {
-		host = "http://" + host
-	}
-	if port != 80 && port != 443 {
-		host = fmt.Sprintf("%s:%d", host, port)
-	}
-	c, err := rpc.DialOptions(context.Background(), host, rpc.WithHTTPAuth(authFn))
-	if err != nil {
-		return nil, err
-	}
-
-	return c, nil
-}
-
-func (i *Indexer) getStartBlockHeight() (int64, error) {
-	value, err := i.db.Get([]byte("start_block_height"), nil)
-	if err != nil {
-		if errors.Is(err, leveldb.ErrNotFound) {
-			return 0, nil
-		}
-		return 1, fmt.Errorf("failed to get start block height: %w", err)
-	}
-	height, err := strconv.ParseInt(string(value), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse start block height: %w", err)
-	}
-	return height, nil
-}
-
-// setStartBlockHeight saves an int64 to LevelDB under the key "start_block_height".
-// It stores the value as a decimal string (e.g. "12345").
-func (i *Indexer) setStartBlockHeight(height int64) error {
-	b := []byte(fmt.Sprintf("%d", height))
-	if err := i.db.Put([]byte("start_block_height"), b, nil); err != nil {
-		return fmt.Errorf("failed to set start block height: %w", err)
-	}
-	return nil
-}
-
 func (i *Indexer) Start() error {
 	// Minimal startup: read the stored start block height and log it.
-	height, err := i.getStartBlockHeight()
+	height, err := i.client.GetStartBlockHeight()
 	if err != nil {
 		return err
 	}
@@ -142,25 +57,21 @@ func (i *Indexer) Start() error {
 	go i.DownloadBlocks(height)
 	return nil
 }
+
 func (i *Indexer) Stop() {
 	close(i.stop)
 	i.wg.Wait()
-	if err := i.db.Close(); err != nil {
-		i.logger.Error().Err(err).Str("module", "bitcoin_indexer").Msg("failed to close leveldb")
-	} else {
-		i.logger.Info().Str("module", "bitcoin_indexer").Msg("leveldb closed")
-	}
-	i.client.Close()
-	i.logger.Info().Str("module", "bitcoin_indexer").Msg("indexer stopped")
-}
 
-func (i *Indexer) shouldBackoff(err error) bool {
-	var rpcError *btcjson.RPCError
-	ok := errors.As(err, &rpcError)
-	if strings.Contains(err.Error(), "Block not available") {
-		return true
+	if err := i.db.Close(); err != nil {
+		i.logger.Err(err).Msg("failed to close leveldb")
+	} else {
+		i.logger.Info().Msg("leveldb closed")
 	}
-	return ok && (rpcError.Code == btcjson.ErrRPCBlockNotFound || strings.Contains(rpcError.Message, "Block not available"))
+
+	if err := i.client.Close(); err != nil {
+		i.logger.Err(err).Msg("failed to close BTC client")
+	}
+	i.logger.Info().Str("module", "bitcoin_indexer").Msg("indexer stopped")
 }
 
 func (i *Indexer) DownloadBlocks(startHeight int64) {
@@ -172,7 +83,7 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 	i.logger.Info().Str("module", "bitcoin_indexer").Msgf("indexer starting from block height: %d", currentHeight)
 	defer func() {
 		// save the current height to db on exit
-		if err := i.setStartBlockHeight(currentHeight); err != nil {
+		if err := i.client.SetStartBlockHeight(currentHeight); err != nil {
 			i.logger.Error().Err(err).Str("module", "bitcoin_indexer").Msg("failed to save current block height on shutdown")
 		} else {
 			i.logger.Info().Int64("block_height", currentHeight).Str("module", "bitcoin_indexer").Msg("saved current block height on shutdown")
@@ -184,9 +95,9 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 			i.logger.Info().Str("module", "bitcoin_indexer").Msg("stopping block download")
 			return
 		default:
-			hash, err := i.GetBlockHash(currentHeight)
+			hash, err := i.client.GetBlockHash(currentHeight)
 			if err != nil {
-				if i.shouldBackoff(err) {
+				if i.client.shouldBackoff(err) {
 					// back off
 					time.Sleep(time.Second)
 					continue
@@ -195,9 +106,9 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 				continue
 			}
 			i.logger.Info().Str("module", "bitcoin_indexer").Msgf("block hash: %s", hash)
-			block, err := i.GetBlockVerboseTxs(hash)
+			block, err := i.client.GetBlockVerboseTxs(hash)
 			if err != nil {
-				if i.shouldBackoff(err) {
+				if i.client.shouldBackoff(err) {
 					// back off
 					time.Sleep(time.Second)
 					continue
@@ -211,12 +122,13 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 				i.processTransaction(tx)
 			}
 			currentHeight++
-			if err := i.setStartBlockHeight(currentHeight); err != nil {
+			if err := i.client.SetStartBlockHeight(currentHeight); err != nil {
 				i.logger.Error().Err(err).Str("module", "bitcoin_indexer").Msg("failed to save current block height on shutdown")
 			}
 		}
 	}
 }
+
 func (i *Indexer) processTransaction(tx btcjson.TxRawResult) {
 	// process vins
 	i.processVIn(tx.Vin)
@@ -249,54 +161,6 @@ func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 			i.logger.Err(err).Msgf("failed to put key,txid: %s", txid)
 		}
 	}
-}
-
-// GetBlockVerboseTxs returns information about the block with verbosity 2.
-func (i *Indexer) GetBlockVerboseTxs(hash string) (*btcjson.GetBlockVerboseTxResult, error) {
-	var block btcjson.GetBlockVerboseTxResult
-	err := i.client.Call(&block, "getblock", hash, 2)
-	return &block, extractBTCError(err)
-}
-
-// GetBlockHash returns the hash of the block in best-block-chain at the given height.
-func (i *Indexer) GetBlockHash(height int64) (string, error) {
-	var hash string
-	err := i.client.Call(&hash, "getblockhash", height)
-	return hash, extractBTCError(err)
-}
-
-////////////////////////////////////////////////////////////////////////////////////////
-// Helpers
-////////////////////////////////////////////////////////////////////////////////////////
-
-// Ethereum RPC returns an error with the response appended to the HTTP status like:
-// 404 Not Found: {"error":{"code":-32601,"message":"Method not found"},"id":1}
-//
-// This makes best effort to extract and return the error as a btcjson.RPCError.
-func extractBTCError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// split the error into the HTTP status and the JSON response
-	parts := strings.SplitN(err.Error(), ": ", 2)
-	if len(parts) != 2 {
-		return err
-	}
-
-	// parse the JSON response
-	var response struct {
-		Error struct {
-			Code    btcjson.RPCErrorCode `json:"code"`
-			Message string               `json:"message"`
-		} `json:"error"`
-	}
-	if jsonErr := json.Unmarshal([]byte(parts[1]), &response); jsonErr != nil {
-		return err
-	}
-
-	// return the error message
-	return btcjson.NewRPCError(response.Error.Code, response.Error.Message)
 }
 
 // ExportUTXO writes DB entries that mention "utxo" in the key to the named file (base64-encoded values).

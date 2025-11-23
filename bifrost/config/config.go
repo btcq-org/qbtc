@@ -3,14 +3,17 @@ package config
 import (
 	"fmt"
 
+	"github.com/btcq-org/qbtc/bitcoin"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	ListenAddr string `mapstructure:"listen_addr" json:"listen_addr"`
-	ExternalIP string `mapstructure:"external_ip" json:"external_ip"`
-	RootPath   string `mapstructure:"root_path" json:"root_path"`
-	KeyName    string `mapstructure:"key_name" json:"key_name"`
+	ListenAddr       string         `mapstructure:"listen_addr" json:"listen_addr"`
+	ExternalIP       string         `mapstructure:"external_ip" json:"external_ip"`
+	RootPath         string         `mapstructure:"root_path" json:"root_path"`
+	KeyName          string         `mapstructure:"key_name" json:"key_name"`
+	StartBlockHeight int64          `mapstructure:"start_block_height" json:"start_block_height"`
+	BitcoinConfig    bitcoin.Config `mapstructure:"bitcoin" json:"bitcoin"`
 }
 
 type P2PConfig struct {
@@ -20,10 +23,18 @@ type P2PConfig struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		ListenAddr: "0.0.0.0:30006",
-		ExternalIP: "",
-		RootPath:   ".bifrost",
-		KeyName:    "bifrost-p2p-key",
+		ListenAddr:       "0.0.0.0:30006",
+		ExternalIP:       "",
+		RootPath:         ".bifrost",
+		KeyName:          "bifrost-p2p-key",
+		StartBlockHeight: 0,
+		BitcoinConfig: bitcoin.Config{
+			Host:        "localhost",
+			Port:        8332,
+			RPCUser:     "user",
+			Password:    "password",
+			LocalDBPath: "./db",
+		},
 	}
 }
 

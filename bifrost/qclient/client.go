@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -16,9 +17,10 @@ import (
 )
 
 type Client struct {
-	conn    *grpc.ClientConn
-	qClient qtypes.QueryClient
-	logger  zerolog.Logger
+	conn          *grpc.ClientConn
+	qClient       qtypes.QueryClient
+	stakingClient stakingtypes.QueryClient
+	logger        zerolog.Logger
 }
 
 type QBTCNode interface {
@@ -40,9 +42,10 @@ func New(target string, insecure bool) (*Client, error) {
 		}
 
 		return &Client{
-			conn:    conn,
-			qClient: qtypes.NewQueryClient(conn),
-			logger:  log.With().Str("module", "qclient").Logger(),
+			conn:          conn,
+			qClient:       qtypes.NewQueryClient(conn),
+			stakingClient: stakingtypes.NewQueryClient(conn),
+			logger:        log.With().Str("module", "qclient").Logger(),
 		}, nil
 	}
 
@@ -55,7 +58,12 @@ func New(target string, insecure bool) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{conn: conn, qClient: qtypes.NewQueryClient(conn)}, nil
+	return &Client{
+		conn:          conn,
+		qClient:       qtypes.NewQueryClient(conn),
+		stakingClient: stakingtypes.NewQueryClient(conn),
+		logger:        log.With().Str("module", "qclient").Logger(),
+	}, nil
 }
 
 func dialerFunc(_ context.Context, addr string) (net.Conn, error) {
