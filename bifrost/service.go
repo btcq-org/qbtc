@@ -51,7 +51,6 @@ func NewService(cfg config.Config) (*Service, error) {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
 
-	defer qClient.Close()
 	kstore, err := keystore.NewFileKeyStore(cfg.RootPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file key store,err: %w", err)
