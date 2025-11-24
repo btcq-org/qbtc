@@ -143,9 +143,6 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 				s.logger.Error().Err(err).Msgf("failed to get btc block at height %d", blockHeight)
 				continue
 			}
-
-			// TODO: sign and publish the block gossip message
-			s.logger.Info().Int64("block_height", blockHeight).Msg("published block gossip")
 			if err := s.btcClient.SetStartBlockHeight(blockHeight); err != nil {
 				s.logger.Error().Err(err).Msgf("failed to set start block height %d", blockHeight)
 			}
