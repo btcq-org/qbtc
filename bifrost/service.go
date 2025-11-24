@@ -195,6 +195,12 @@ func (s *Service) getBtcBlock(height int64) error {
 
 // Stop stops the bifrost service
 func (s *Service) Stop() {
+	select {
+	case <-s.stopChan:
+	default:
+		close(s.stopChan)
+	}
+	s.wg.Wait()
 	if s.pubsub != nil {
 		if err := s.pubsub.Stop(); err != nil {
 			s.logger.Error().Err(err).Msg("failed to stop pubsub service")

@@ -29,7 +29,6 @@ type PubSubService struct {
 	stopchan chan struct{}
 	wg       *sync.WaitGroup
 	db       *leveldb.DB
-	chanMsg  chan types.MsgBtcBlock
 }
 
 // NewPubSubService creates a new PubSubService instance
@@ -61,13 +60,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		stopchan: make(chan struct{}),
 		wg:       &sync.WaitGroup{},
 		db:       db,
-		chanMsg:  make(chan types.MsgBtcBlock),
 	}, nil
-}
-
-// GetChanMsg returns the channel for MsgBtcBlock messages
-func (p *PubSubService) GetChanMsg() chan types.MsgBtcBlock {
-	return p.chanMsg
 }
 
 // GetPubSub returns the underlying PubSub instance
@@ -160,6 +153,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("block content mismatch for block %s at height %d", block.Hash, block.Height)
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
+	// TODO: when it reach consensus , then sign and submit it to ebifrost
 	return p.saveMsgBtcBlock(msgBlock)
 }
 
