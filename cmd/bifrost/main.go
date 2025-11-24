@@ -4,18 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 
+	"github.com/btcq-org/qbtc/bifrost"
 	bifrostConfig "github.com/btcq-org/qbtc/bifrost/config"
-	"github.com/btcq-org/qbtc/bifrost/keystore"
-	"github.com/btcq-org/qbtc/bifrost/p2p"
-	"github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/cast"
 	flag "github.com/spf13/pflag"
 )
 
@@ -33,57 +28,6 @@ func printVersion() {
 	fmt.Printf("%s v%s, rev %s\n", serverIdentity, version, revision)
 }
 
-func run(ctx context.Context, cfg *bifrostConfig.Config) error {
-	// handle signals
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
-	defer cancel()
-
-	_, p, err := net.SplitHostPort(cfg.ListenAddr)
-	if err != nil {
-		return err
-	}
-	config := &bifrostConfig.P2PConfig{
-		Port:       cast.ToInt(p),
-		ExternalIP: cfg.ExternalIP,
-	}
-	//  client to retrieve node peer addresses
-	qClient, err := qclient.New(fmt.Sprintf("localhost:%d", 9090), true)
-	if err != nil {
-		return fmt.Errorf("fail to created client to qbtc node,err: %w", err)
-	}
-
-	defer qClient.Close()
-	kstore, err := keystore.NewFileKeyStore(cfg.RootPath)
-	if err != nil {
-		return fmt.Errorf("failed to create file key store,err: %w", err)
-	}
-	privKey, err := keystore.GetOrCreateKey(kstore, cfg.KeyName)
-	if err != nil {
-		return fmt.Errorf("failed to get or create p2p key, err: %w", err)
-	}
-
-	network, err := p2p.NewNetwork(config, qClient)
-	if err != nil {
-		return fmt.Errorf("failed to create p2p network, err: %w", err)
-	}
-	err = network.Start(ctx, privKey)
-	if err != nil {
-		return fmt.Errorf("failed to start p2p network, err: %w", err)
-	}
-
-	defer func() {
-		if err := network.Stop(); err != nil {
-			slog.Error("failed to stop network", "err", err)
-		}
-	}()
-
-	host := network.GetHost()
-	log.Info().Msgf("starting bifrost p2p network, id: %s, listen_addr: %s", host.ID(), network.GetListenAddr())
-	<-ctx.Done()
-	log.Info().Msg("shutting down bifrost p2p network")
-	return nil
-}
-
 func main() {
 	showVersion := flag.Bool("version", false, "Shows version")
 	logLevel := flag.StringP("log-level", "l", "info", "Log Level")
@@ -98,11 +42,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	ctx := context.Background()
-	if err := run(ctx, cfg); err != nil {
-		panic(err)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+	service, err := bifrost.NewService(*cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create bifrost service")
 	}
+	if err := service.Start(ctx); err != nil {
+		log.Fatal().Err(err).Msg("failed to start bifrost service")
+	}
+
+	<-ctx.Done()
+	log.Info().Msg("shutting down bifrost service...")
+	service.Stop()
 }
 
 func initLog(level string, pretty bool) {

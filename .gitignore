@@ -19,3 +19,4 @@ utxo-indexer
 .bifrost/
 cmd/bifrost/bifrost_data/
 cmd/bifrost/bifrost
+cmd/bifrost/db

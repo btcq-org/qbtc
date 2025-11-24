@@ -1,0 +1,20 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+import "qbtc/qbtc/v1/msg_report_block.proto";
+
+// BlockGossip represents a gossiped Bitcoin block along with an attestation
+message BlockGossip {
+  // The height of the Bitcoin block being gossiped
+  uint64 height = 1;
+
+  // The hash of the Bitcoin block being gossiped
+  string hash = 2;
+
+  // Compressed bytes of the Bitcoin block
+  bytes block_content = 3;
+  // An attestation for the gossiped block
+  Attestation attestation = 4;
+}

@@ -97,7 +97,7 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 		default:
 			hash, err := i.client.GetBlockHash(currentHeight)
 			if err != nil {
-				if i.client.shouldBackoff(err) {
+				if i.client.ShouldBackoff(err) {
 					// back off
 					time.Sleep(time.Second)
 					continue
@@ -108,7 +108,7 @@ func (i *Indexer) DownloadBlocks(startHeight int64) {
 			i.logger.Info().Str("module", "bitcoin_indexer").Msgf("block hash: %s", hash)
 			block, err := i.client.GetBlockVerboseTxs(hash)
 			if err != nil {
-				if i.client.shouldBackoff(err) {
+				if i.client.ShouldBackoff(err) {
 					// back off
 					time.Sleep(time.Second)
 					continue
