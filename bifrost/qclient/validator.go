@@ -45,15 +45,6 @@ func (c *Client) ActiveValidators(ctx context.Context) ([]stakingtypes.Validator
 	return resp.Validators, nil
 }
 
-func (c *Client) TotalVotingPower(ctx context.Context, validators []stakingtypes.Validator) int64 {
-	totalVotingPower := int64(0)
-	powerReduction := sdk.DefaultPowerReduction
-	for _, validator := range validators {
-		totalVotingPower += validator.ConsensusPower(powerReduction)
-	}
-	return totalVotingPower
-}
-
 type ValidatorVotingPower struct {
 	Validator   stakingtypes.Validator
 	VotingPower int64
