@@ -33,12 +33,10 @@ type PubSubService struct {
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
-	defer cancel()
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
 		pubsub.WithDirectPeers(directPeers),
@@ -120,7 +118,7 @@ func (p *PubSubService) handleMessage(sub *pubsub.Subscription) {
 		return
 	}
 	// Process the message
-	p.logger.Info().Msgf("received message from %s: %s", msg.GetFrom(), string(msg.GetData()))
+	p.logger.Info().Msgf("received message from %s: %s,is_local: %v", msg.GetFrom(), msg.ID, msg.Local)
 
 	var block types.BlockGossip
 	if err := proto.Unmarshal(msg.GetData(), &block); err != nil {

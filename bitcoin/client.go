@@ -83,10 +83,10 @@ func (c *BtcClient) SetStartBlockHeight(height int64) error {
 	}
 	return nil
 }
-func (c *BtcClient) shouldBackoff(err error) bool {
+func (c *BtcClient) ShouldBackoff(err error) bool {
 	var rpcError *btcjson.RPCError
 	ok := errors.As(err, &rpcError)
-	if strings.Contains(err.Error(), "Block not available") {
+	if strings.Contains(err.Error(), "Block not available") || strings.Contains(err.Error(), "Block height out of range") {
 		return true
 	}
 	return ok && (rpcError.Code == btcjson.ErrRPCBlockNotFound || strings.Contains(rpcError.Message, "Block not available"))
