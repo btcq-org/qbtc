@@ -114,7 +114,9 @@ func (p *PubSubService) handleMessage(sub *pubsub.Subscription) {
 	defer cancel()
 	msg, err := sub.Next(ctx)
 	if err != nil {
-		p.logger.Error().Err(err).Msg("failed to get next message from subscription")
+		if !errors.Is(err, context.DeadlineExceeded) {
+			p.logger.Error().Err(err).Msg("failed to get next message from subscription")
+		}
 		return
 	}
 	// Process the message
@@ -156,9 +158,10 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if err := proto.Unmarshal(existingContent, &msgBlock); err != nil {
 		return fmt.Errorf("failed to unmarshal existing block gossip message: %w", err)
 	}
-	if bytes.Equal(msgBlock.BlockContent, block.BlockContent) {
-		msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
+	if !bytes.Equal(msgBlock.BlockContent, block.BlockContent) {
+		return fmt.Errorf("block content mismatch for block %s at height %d", block.Hash, block.Height)
 	}
+	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
 	return p.saveMsgBtcBlock(msgBlock)
 }
 
@@ -193,7 +196,11 @@ func (p *PubSubService) Publish(block types.BlockGossip) error {
 }
 
 func (p *PubSubService) Stop() error {
-	close(p.stopchan)
+	select {
+	case <-p.stopchan:
+	default:
+		close(p.stopchan)
+	}
 	p.wg.Wait()
 	if p.topic != nil {
 		if err := p.topic.Close(); err != nil {
