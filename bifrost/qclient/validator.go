@@ -31,7 +31,7 @@ func (c *Client) Validator(ctx context.Context, address string) (ValidatorVoting
 	return ValidatorVotingPower{
 		Validator:   resp.Validator,
 		VotingPower: votingPower,
-		Share:       math.LegacyNewDecFromInt(math.NewInt(votingPower)).Quo(math.LegacyNewDecFromInt(math.NewInt(totalVotingPower))),
+		Share:       math.LegacyNewDec(votingPower).Quo(math.LegacyNewDec(totalVotingPower)),
 	}, nil
 }
 
@@ -64,26 +64,21 @@ func (c *Client) ValidatorsVotingPower(ctx context.Context, validators []staking
 	}
 	totalVotingPower := sdk.TokensToConsensusPower(poolResp.Pool.BondedTokens, powerReduction)
 
-	// calculate individual validator voting powers and shares
-	validatorVotingPowers := make([]math.Int, len(validators))
-	for i, validator := range validators {
-		validatorVotingPowers[i] = math.NewInt(validator.ConsensusPower(powerReduction))
-	}
-
 	// calculate share per validator
 	totalDec := math.LegacyNewDecFromInt(math.NewInt(totalVotingPower))
 	votingPower := make([]ValidatorVotingPower, len(validators))
 	for i, validator := range validators {
+		valVotingPower := validator.ConsensusPower(powerReduction)
 		var share math.LegacyDec
 		if !totalDec.IsZero() {
-			valVPDec := math.LegacyNewDecFromInt(validatorVotingPowers[i])
+			valVPDec := math.LegacyNewDec(valVotingPower)
 			share = valVPDec.Quo(totalDec)
 		} else {
 			share = math.LegacyZeroDec()
 		}
 		votingPower[i] = ValidatorVotingPower{
 			Validator:   validator,
-			VotingPower: validatorVotingPowers[i].Int64(),
+			VotingPower: valVotingPower,
 			Share:       share,
 		}
 	}
