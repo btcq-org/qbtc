@@ -15,6 +15,6 @@ message BlockGossip {
 
   // Compressed bytes of the Bitcoin block
   bytes block_content = 3;
-    // An attestation for the gossiped block
+  // An attestation for the gossiped block
   Attestation attestation = 4;
 }

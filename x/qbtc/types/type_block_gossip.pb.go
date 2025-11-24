@@ -22,14 +22,16 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// BlockGossip represents a gossiped Bitcoin block along with an attestation
 type BlockGossip struct {
 	// The height of the Bitcoin block being gossiped
 	Height uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
 	// The hash of the Bitcoin block being gossiped
 	Hash string `protobuf:"bytes,2,opt,name=hash,proto3" json:"hash,omitempty"`
 	// Compressed bytes of the Bitcoin block
-	BlockContent []byte       `protobuf:"bytes,3,opt,name=block_content,json=blockContent,proto3" json:"block_content,omitempty"`
-	Attestation  *Attestation `protobuf:"bytes,4,opt,name=attestation,proto3" json:"attestation,omitempty"`
+	BlockContent []byte `protobuf:"bytes,3,opt,name=block_content,json=blockContent,proto3" json:"block_content,omitempty"`
+	// An attestation for the gossiped block
+	Attestation *Attestation `protobuf:"bytes,4,opt,name=attestation,proto3" json:"attestation,omitempty"`
 }
 
 func (m *BlockGossip) Reset()         { *m = BlockGossip{} }
