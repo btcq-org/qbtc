@@ -38,6 +38,7 @@ func DefaultConfig() *Config {
 	}
 }
 
+// GetConfig reads the config file and returns a Config struct
 func GetConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".")
