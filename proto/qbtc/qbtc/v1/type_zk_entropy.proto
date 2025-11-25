@@ -1,0 +1,48 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// ZKEntropySubmission represents a single validator's entropy contribution.
+message ZKEntropySubmission {
+  // The validator address that submitted this entropy
+  string validator = 1;
+  // The entropy bytes (32 bytes)
+  bytes entropy = 2;
+  // The block height when this was submitted
+  int64 submitted_at_block = 3;
+  // The commitment hash for verification
+  bytes commitment = 4;
+}
+
+// ZKEntropyState tracks the state of the distributed entropy collection.
+message ZKEntropyState {
+  // Whether entropy collection is currently active
+  bool collection_active = 1;
+  // The block height when collection started
+  int64 collection_start_block = 2;
+  // All entropy submissions received
+  repeated ZKEntropySubmission submissions = 3 [(gogoproto.nullable) = false];
+  // Whether the setup has been finalized
+  bool setup_finalized = 4;
+  // The combined entropy seed (only set after finalization)
+  bytes combined_seed = 5;
+  // The block height when setup was finalized
+  int64 finalized_at_block = 6;
+}
+
+// ZKSetupKeys contains the serialized keys from the trusted setup.
+// These are stored on-chain after the distributed setup is complete.
+message ZKSetupKeys {
+  // Serialized verifying key (used for on-chain verification)
+  bytes verifying_key = 1;
+  // Hash of the combined entropy seed (for audit purposes)
+  bytes seed_hash = 2;
+  // Block height when the keys were generated
+  int64 generated_at_block = 3;
+  // List of validators who contributed entropy
+  repeated string contributing_validators = 4;
+}
+

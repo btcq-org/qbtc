@@ -160,6 +160,17 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	return am.networkManager.ProcessNetworkReward(ctx)
+	// Process network rewards
+	if err := am.networkManager.ProcessNetworkReward(ctx); err != nil {
+		return err
+	}
 
+	// Check for ZK entropy finalization
+	if err := am.keeper.CheckZKEntropyFinalization(ctx); err != nil {
+		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		sdkCtx.Logger().Error("ZK entropy finalization check failed", "error", err)
+		// Don't return error - this shouldn't halt the chain
+	}
+
+	return nil
 }

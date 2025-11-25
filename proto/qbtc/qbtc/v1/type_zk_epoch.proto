@@ -1,0 +1,124 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// ZkEpoch represents a single epoch's ZK setup state.
+// Each epoch has its own proving/verifying key pair derived from an SRS
+// ceremony involving that epoch's validator set.
+message ZkEpoch {
+  // Unique identifier for this epoch
+  uint64 epoch_id = 1;
+  
+  // Hash of the verifying key for this epoch: H(vk_epoch_serialized)
+  // Used for light verification and integrity checks
+  bytes vk_hash = 2;
+  
+  // Whether this epoch is currently active for accepting new claims
+  bool active = 3;
+  
+  // Block height when this epoch was finalized
+  int64 finalized_at_block = 4;
+  
+  // List of validators who participated in the SRS ceremony
+  repeated string contributing_validators = 5;
+  
+  // The serialized verifying key for this epoch
+  bytes verifying_key = 6;
+  
+  // Hash of the SRS parameters used for this epoch
+  bytes srs_hash = 7;
+}
+
+// ZkEpochParams contains the global parameters for epoch management.
+message ZkEpochParams {
+  // The current active epoch ID for new claims
+  uint64 current_epoch_id = 1;
+  
+  // Chain ID used in context hash binding
+  string chain_id = 2;
+  
+  // Module name used in context hash binding
+  string module_name = 3;
+  
+  // Airdrop ID used in context hash binding
+  string airdrop_id = 4;
+  
+  // Minimum number of validators required for SRS ceremony
+  uint64 min_ceremony_validators = 5;
+  
+  // Number of blocks for SRS ceremony participation window
+  int64 ceremony_block_window = 6;
+}
+
+// SRSContribution represents a validator's contribution to the SRS ceremony.
+// This follows the Powers-of-Tau style updatable SRS protocol.
+message SRSContribution {
+  // Validator address making the contribution
+  string validator = 1;
+  
+  // The updated SRS elements after applying this validator's randomness
+  // Format depends on the specific ceremony protocol
+  bytes updated_srs = 2;
+  
+  // Proof that the update is well-formed (no backdoor injection)
+  // This is typically a DLOG proof or similar
+  bytes update_proof = 3;
+  
+  // Hash of the previous SRS state this update was applied to
+  bytes prev_srs_hash = 4;
+  
+  // Block height when submitted
+  int64 submitted_at_block = 5;
+  
+  // Sequence number in the ceremony (order of application)
+  uint64 sequence = 6;
+}
+
+// SRSCeremonyState tracks the state of an ongoing SRS ceremony for an epoch.
+message SRSCeremonyState {
+  // The epoch ID this ceremony is for
+  uint64 epoch_id = 1;
+  
+  // Current state of the ceremony
+  CeremonyStatus status = 2;
+  
+  // Block height when the ceremony started
+  int64 started_at_block = 3;
+  
+  // Deadline block for ceremony completion
+  int64 deadline_block = 4;
+  
+  // All contributions received so far
+  repeated SRSContribution contributions = 5 [(gogoproto.nullable) = false];
+  
+  // Current SRS state (after all contributions applied)
+  bytes current_srs = 6;
+  
+  // Hash of the current SRS state
+  bytes current_srs_hash = 7;
+  
+  // Next expected sequence number
+  uint64 next_sequence = 8;
+}
+
+// CeremonyStatus represents the state of an SRS ceremony.
+enum CeremonyStatus {
+  // Ceremony not started
+  CEREMONY_STATUS_UNSPECIFIED = 0;
+  
+  // Ceremony is open for contributions
+  CEREMONY_STATUS_OPEN = 1;
+  
+  // Ceremony is closed, finalizing
+  CEREMONY_STATUS_FINALIZING = 2;
+  
+  // Ceremony completed successfully
+  CEREMONY_STATUS_COMPLETED = 3;
+  
+  // Ceremony failed (not enough participants, timeout, etc.)
+  CEREMONY_STATUS_FAILED = 4;
+}
+

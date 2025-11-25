@@ -42,7 +42,7 @@ func (s *msgServer) ClaimAirdrop(ctx context.Context, msg *types.MsgClaimAirdrop
 	}
 
 	// Verify the ZK proof
-	if err := s.verifyAirdropProof(msg); err != nil {
+	if err := s.verifyAirdropProof(ctx, msg); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("proof verification failed: %v", err)
 	}
 
@@ -84,10 +84,12 @@ func (s *msgServer) ClaimAirdrop(ctx context.Context, msg *types.MsgClaimAirdrop
 }
 
 // verifyAirdropProof verifies the ZK proof for an airdrop claim
-func (s *msgServer) verifyAirdropProof(msg *types.MsgClaimAirdrop) error {
-	// Check if the default verifier is initialized
+func (s *msgServer) verifyAirdropProof(ctx context.Context, msg *types.MsgClaimAirdrop) error {
+	// Ensure the verifier is initialized from on-chain keys
 	if zk.DefaultVerifier == nil {
-		return fmt.Errorf("ZK verifier not initialized")
+		if err := s.k.EnsureZKVerifierInitialized(ctx); err != nil {
+			return fmt.Errorf("ZK verifier not initialized: %w", err)
+		}
 	}
 
 	// Convert the proof from proto format
@@ -105,6 +107,31 @@ func (s *msgServer) verifyAirdropProof(msg *types.MsgClaimAirdrop) error {
 
 	// Verify the proof
 	return zk.DefaultVerifier.VerifyProof(proof, addressHash, btcqAddressHash)
+}
+
+// EnsureZKVerifierInitialized loads the ZK verifying key from on-chain state
+// and initializes the default verifier if not already initialized.
+func (k Keeper) EnsureZKVerifierInitialized(ctx context.Context) error {
+	if zk.DefaultVerifier != nil {
+		return nil
+	}
+
+	// Try to load from on-chain state
+	setupKeys, err := k.ZKSetupKeys.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("ZK setup keys not found on-chain - distributed setup not yet complete")
+	}
+
+	if len(setupKeys.VerifyingKey) == 0 {
+		return fmt.Errorf("ZK verifying key is empty")
+	}
+
+	// Initialize the default verifier
+	if err := zk.InitDefaultVerifier(setupKeys.VerifyingKey); err != nil {
+		return fmt.Errorf("failed to initialize verifier: %w", err)
+	}
+
+	return nil
 }
 
 // releaseAirdrop sends the airdrop tokens to the claimer

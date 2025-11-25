@@ -3,15 +3,21 @@
 package main
 
 import (
+	"bufio"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func main() {
@@ -27,6 +33,7 @@ These proofs can be used to claim airdrops on the qbtc chain.`,
 		setupCmd(),
 		proveCmd(),
 		addressCmd(),
+		entropyCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -121,6 +128,7 @@ func proveCmd() *cobra.Command {
 		btcqAddress     string
 		setupDir        string
 		outputFile      string
+		useStdin        bool
 	)
 
 	cmd := &cobra.Command{
@@ -130,25 +138,45 @@ func proveCmd() *cobra.Command {
 The proof can be submitted to the qbtc chain to claim an airdrop.
 
 You can provide your Bitcoin private key in hex format or WIF format.
-The proof will be bound to your qbtc address to prevent replay attacks.`,
+The proof will be bound to your qbtc address to prevent replay attacks.
+
+SECURITY: For better security, use --stdin to enter your private key interactively.
+This prevents the key from appearing in shell history or process listings.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Parse the private key
 			var privateKey *big.Int
 			var err error
 
-			if privateKeyHex != "" {
+			if useStdin {
+				// Read private key securely from stdin
+				privateKey, err = readPrivateKeySecurely()
+				if err != nil {
+					return fmt.Errorf("failed to read private key: %w", err)
+				}
+			} else if privateKeyHex != "" {
+				fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
+				fmt.Fprintln(os.Stderr, "         Consider using --stdin for better security.")
 				privateKey, err = zk.PrivateKeyFromHex(privateKeyHex)
 				if err != nil {
 					return fmt.Errorf("invalid private key hex: %w", err)
 				}
 			} else if privateKeyWIF != "" {
+				fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
+				fmt.Fprintln(os.Stderr, "         Consider using --stdin for better security.")
 				privateKey, err = zk.PrivateKeyFromWIF(privateKeyWIF)
 				if err != nil {
 					return fmt.Errorf("invalid WIF: %w", err)
 				}
 			} else {
-				return fmt.Errorf("must provide either --private-key or --wif")
+				return fmt.Errorf("must provide either --stdin, --private-key, or --wif")
 			}
+
+			// Clear private key from memory when done
+			defer func() {
+				if privateKey != nil {
+					privateKey.SetInt64(0)
+				}
+			}()
 
 			if btcqAddress == "" {
 				return fmt.Errorf("--btcq-address is required")
@@ -225,13 +253,58 @@ The proof will be bound to your qbtc address to prevent replay attacks.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&privateKeyHex, "private-key", "", "Bitcoin private key in hex format")
-	cmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format")
+	cmd.Flags().StringVar(&privateKeyHex, "private-key", "", "Bitcoin private key in hex format (INSECURE - use --stdin instead)")
+	cmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format (INSECURE - use --stdin instead)")
+	cmd.Flags().BoolVar(&useStdin, "stdin", false, "Read private key securely from stdin (recommended)")
 	cmd.Flags().StringVar(&btcqAddress, "btcq-address", "", "Your qbtc chain address (required)")
 	cmd.Flags().StringVar(&setupDir, "setup-dir", "./zk-setup", "Directory containing setup files")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the proof (defaults to stdout)")
 
 	return cmd
+}
+
+// readPrivateKeySecurely reads a private key from stdin without echoing
+func readPrivateKeySecurely() (*big.Int, error) {
+	fmt.Print("Enter private key format (hex/wif): ")
+	reader := bufio.NewReader(os.Stdin)
+	format, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	format = strings.TrimSpace(strings.ToLower(format))
+
+	fmt.Print("Enter private key: ")
+	// Read password without echoing (if terminal)
+	var keyBytes []byte
+	if term.IsTerminal(int(syscall.Stdin)) {
+		keyBytes, err = term.ReadPassword(int(syscall.Stdin))
+		fmt.Println() // Print newline after password input
+	} else {
+		// Non-interactive mode, read from pipe
+		keyInput, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		keyBytes = []byte(strings.TrimSpace(keyInput))
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	keyStr := strings.TrimSpace(string(keyBytes))
+	// Clear the key bytes from memory
+	for i := range keyBytes {
+		keyBytes[i] = 0
+	}
+
+	switch format {
+	case "hex":
+		return zk.PrivateKeyFromHex(keyStr)
+	case "wif":
+		return zk.PrivateKeyFromWIF(keyStr)
+	default:
+		return nil, fmt.Errorf("unknown format: %s (use 'hex' or 'wif')", format)
+	}
 }
 
 // addressCmd creates the address utility command
@@ -312,4 +385,83 @@ type ProofOutput struct {
 	BTCAddressHash string `json:"btc_address_hash"`
 	BTCQAddress    string `json:"btcq_address"`
 	ProofData      string `json:"proof_data"`
+}
+
+// entropyCmd creates the entropy submission command for validators
+func entropyCmd() *cobra.Command {
+	var (
+		validatorAddr string
+		outputFile    string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "entropy",
+		Short: "Generate entropy for the distributed ZK trusted setup",
+		Long: `Generate cryptographically secure random entropy for the distributed
+ZK trusted setup ceremony. This command is for validators participating
+in the setup.
+
+The generated entropy and commitment should be submitted to the chain
+using the SubmitZKEntropy transaction.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if validatorAddr == "" {
+				return fmt.Errorf("--validator is required")
+			}
+
+			// Generate 32 bytes of cryptographically secure random entropy
+			entropy := make([]byte, 32)
+			if _, err := rand.Read(entropy); err != nil {
+				return fmt.Errorf("failed to generate entropy: %w", err)
+			}
+
+			// Compute commitment: SHA256(entropy || validator_address)
+			hasher := sha256.New()
+			hasher.Write(entropy)
+			hasher.Write([]byte(validatorAddr))
+			commitment := hasher.Sum(nil)
+
+			// Create output
+			output := EntropyOutput{
+				Validator:  validatorAddr,
+				Entropy:    hex.EncodeToString(entropy),
+				Commitment: hex.EncodeToString(commitment),
+			}
+
+			// Serialize to JSON
+			outputBytes, err := json.MarshalIndent(output, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to serialize output: %w", err)
+			}
+
+			// Write to file or stdout
+			if outputFile != "" {
+				// Use restrictive permissions for the entropy file
+				if err := os.WriteFile(outputFile, outputBytes, 0600); err != nil {
+					return fmt.Errorf("failed to write output: %w", err)
+				}
+				fmt.Printf("Entropy saved to: %s\n", outputFile)
+				fmt.Println("\nIMPORTANT: Keep this file secure! The entropy value should")
+				fmt.Println("be kept secret until you submit it to the chain.")
+			} else {
+				fmt.Println(string(outputBytes))
+			}
+
+			fmt.Println("\nEntropy generation complete!")
+			fmt.Println("Submit this to the chain using: qbtcd tx qbtc submit-zk-entropy ...")
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&validatorAddr, "validator", "", "Your validator address (required)")
+	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the entropy (defaults to stdout)")
+
+	return cmd
+}
+
+// EntropyOutput is the JSON output structure for generated entropy
+type EntropyOutput struct {
+	Validator  string `json:"validator"`
+	Entropy    string `json:"entropy"`
+	Commitment string `json:"commitment"`
 }

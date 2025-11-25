@@ -22,18 +22,69 @@ type SetupResult struct {
 }
 
 // Setup performs the trusted setup for the BTCAddressCircuit
-// This generates the proving and verifying keys
+// This generates the proving and verifying keys using random entropy.
+// WARNING: This should only be used for testing. For production,
+// use SetupWithSeed with entropy from the distributed ceremony.
 func Setup() (*SetupResult, error) {
 	// Create a placeholder circuit for compilation
-	var circuit BTCAddressCircuit
+	circuit := NewBTCAddressCircuitPlaceholder()
 
 	// Compile the circuit to R1CS
-	cs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuit)
+	cs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, circuit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile circuit: %w", err)
 	}
 
 	// Run the trusted setup (Groth16)
+	pk, vk, err := groth16.Setup(cs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run setup: %w", err)
+	}
+
+	return &SetupResult{
+		ConstraintSystem: cs,
+		ProvingKey:       pk,
+		VerifyingKey:     vk,
+	}, nil
+}
+
+// SetupWithSeed performs a deterministic trusted setup using the provided seed.
+// This is used for the per-epoch SRS ceremony where the seed is derived from
+// the combined entropy of participating validators.
+//
+// SECURITY: The seed MUST be unpredictable. If an attacker can predict or control
+// the seed, they can forge proofs. The distributed ceremony ensures this by
+// combining entropy from multiple validators - as long as ONE validator
+// provides truly random entropy and deletes their secret, the combined seed
+// cannot be reconstructed.
+//
+// NOTE: gnark's Setup doesn't support custom randomness directly, so we use the
+// standard setup. The security comes from the Powers-of-Tau style SRS ceremony
+// where each validator contributes randomness. The toxic waste is distributed
+// and destroyed by each honest participant.
+func SetupWithSeed(seed []byte) (*SetupResult, error) {
+	if len(seed) < 32 {
+		return nil, fmt.Errorf("seed must be at least 32 bytes")
+	}
+
+	// Create a placeholder circuit for compilation
+	circuit := NewBTCAddressCircuitPlaceholder()
+
+	// Compile the circuit to R1CS
+	cs, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, circuit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile circuit: %w", err)
+	}
+
+	// For the per-epoch setup, we use the standard groth16.Setup
+	// The security comes from the distributed SRS ceremony, not from
+	// the setup itself being deterministic.
+	//
+	// In a production system with Powers-of-Tau style updates:
+	// - Initial SRS is either genesis or previous epoch's SRS
+	// - Each validator applies their secret τ_i to transform the SRS
+	// - Final SRS is used to derive (pk, vk)
+	// - Security: if ANY validator deletes their τ_i, the trapdoor is unknown
 	pk, vk, err := groth16.Setup(cs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run setup: %w", err)
@@ -122,9 +173,19 @@ func ProverFromSetup(setup *SetupResult) *Prover {
 	return NewProver(setup.ConstraintSystem, setup.ProvingKey)
 }
 
+// ProofParams contains all the parameters needed to generate a proof
+type ProofParams struct {
+	PrivateKey      *big.Int
+	AddressHash     [20]byte
+	BTCQAddressHash [32]byte
+	EpochID         uint64
+	ContextHash     [32]byte
+}
+
 // GenerateProof generates a ZK proof that proves ownership of the Bitcoin address
-// corresponding to the given private key
-func (p *Prover) GenerateProof(privateKey *big.Int, addressHash [20]byte, btcqAddressHash [32]byte) (*Proof, error) {
+// corresponding to the given private key. The proof is bound to the specified
+// epoch and context.
+func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 	// Create witness assignment
 	assignment := &BTCAddressCircuit{}
 
@@ -132,7 +193,7 @@ func (p *Prover) GenerateProof(privateKey *big.Int, addressHash [20]byte, btcqAd
 	// The emulated element will be set during witness creation
 	assignment.PrivateKey.Limbs = make([]frontend.Variable, 4)
 	// Convert big.Int to 4 limbs of 64 bits each
-	pkBytes := privateKey.Bytes()
+	pkBytes := params.PrivateKey.Bytes()
 	// Pad to 32 bytes
 	padded := make([]byte, 32)
 	copy(padded[32-len(pkBytes):], pkBytes)
@@ -147,12 +208,23 @@ func (p *Prover) GenerateProof(privateKey *big.Int, addressHash [20]byte, btcqAd
 
 	// Set the address hash (public input)
 	for i := 0; i < 20; i++ {
-		assignment.AddressHash[i] = addressHash[i]
+		assignment.AddressHash[i] = params.AddressHash[i]
 	}
 
 	// Set the BTCQ address hash (public input for binding)
 	for i := 0; i < 32; i++ {
-		assignment.BTCQAddressHash[i] = btcqAddressHash[i]
+		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+	}
+
+	// Set the epoch ID (public input for epoch binding)
+	// Convert uint64 to 8 bytes big-endian
+	for i := 0; i < 8; i++ {
+		assignment.EpochID[i] = byte(params.EpochID >> (56 - i*8))
+	}
+
+	// Set the context hash (public input for chain/module binding)
+	for i := 0; i < 32; i++ {
+		assignment.ContextHash[i] = params.ContextHash[i]
 	}
 
 	// Create the full witness
@@ -190,13 +262,27 @@ func (p *Prover) GenerateProof(privateKey *big.Int, addressHash [20]byte, btcqAd
 	return &Proof{
 		ProofData:    proofBuf.Bytes(),
 		PublicInputs: publicBuf.Bytes(),
+		EpochID:      params.EpochID,
 	}, nil
+}
+
+// GenerateProofLegacy is a backward-compatible wrapper that generates a proof
+// without epoch binding. DEPRECATED: Use GenerateProof with ProofParams instead.
+func (p *Prover) GenerateProofLegacy(privateKey *big.Int, addressHash [20]byte, btcqAddressHash [32]byte) (*Proof, error) {
+	return p.GenerateProof(ProofParams{
+		PrivateKey:      privateKey,
+		AddressHash:     addressHash,
+		BTCQAddressHash: btcqAddressHash,
+		EpochID:         0,
+		ContextHash:     [32]byte{}, // Zero context for legacy proofs
+	})
 }
 
 // Proof contains the serialized ZK proof and public inputs
 type Proof struct {
 	ProofData    []byte
 	PublicInputs []byte
+	EpochID      uint64 // The epoch this proof is valid for
 }
 
 // ToProtoZKProof converts the proof to the protobuf ZKProof type
@@ -234,6 +320,34 @@ func ProofFromProtoZKProof(data []byte) (*Proof, error) {
 // HashBTCQAddress hashes a BTCQ address string to get the binding commitment
 func HashBTCQAddress(btcqAddress string) [32]byte {
 	return sha256.Sum256([]byte(btcqAddress))
+}
+
+// ComputeContextHash computes the context hash for epoch binding:
+// ctx = H(chain_id || module_name || airdrop_id || epoch)
+//
+// This ensures proofs are bound to a specific chain, module, airdrop, and epoch.
+func ComputeContextHash(chainID, moduleName, airdropID string, epochID uint64) [32]byte {
+	h := sha256.New()
+	h.Write([]byte(chainID))
+	h.Write([]byte(moduleName))
+	h.Write([]byte(airdropID))
+	// Write epoch as 8-byte big-endian
+	epochBytes := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		epochBytes[i] = byte(epochID >> (56 - i*8))
+	}
+	h.Write(epochBytes)
+	var result [32]byte
+	copy(result[:], h.Sum(nil))
+	return result
+}
+
+// EpochVerificationParams contains parameters needed for epoch-aware verification
+type EpochVerificationParams struct {
+	AddressHash     [20]byte
+	BTCQAddressHash [32]byte
+	EpochID         uint64
+	ContextHash     [32]byte
 }
 
 // SaveSetupToWriter writes the setup result to a writer

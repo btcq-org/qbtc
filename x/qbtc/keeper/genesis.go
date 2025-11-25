@@ -6,10 +6,14 @@ import (
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 // InitGenesis initializes the module's state from a provided genesis state.
 func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) error {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
 	for _, nodePeerAddress := range genState.PeerAddresses {
 		err := k.NodePeerAddresses.Set(ctx, nodePeerAddress.Validator, nodePeerAddress.PeerAddress)
 		if err != nil {
@@ -42,6 +46,37 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			err := k.ClaimedAirdrops.Set(ctx, addressHashHex, true)
 			if err != nil {
 				return fmt.Errorf("failed to set claimed status for %s: %w", addressHashHex, err)
+			}
+		}
+	}
+
+	// Initialize ZK entropy state if provided
+	if genState.ZKEntropyState != nil {
+		if err := k.ZKEntropyState.Set(ctx, *genState.ZKEntropyState); err != nil {
+			return fmt.Errorf("failed to set ZK entropy state: %w", err)
+		}
+
+		// Restore individual submissions
+		for _, sub := range genState.ZKEntropyState.Submissions {
+			if err := k.ZKEntropySubmissions.Set(ctx, sub.Validator, sub); err != nil {
+				return fmt.Errorf("failed to set ZK entropy submission for %s: %w", sub.Validator, err)
+			}
+		}
+	}
+
+	// Initialize ZK setup keys if provided
+	if genState.ZKSetupKeys != nil {
+		if err := k.ZKSetupKeys.Set(ctx, *genState.ZKSetupKeys); err != nil {
+			return fmt.Errorf("failed to set ZK setup keys: %w", err)
+		}
+
+		// Initialize the default verifier with the stored verifying key
+		if len(genState.ZKSetupKeys.VerifyingKey) > 0 {
+			if err := zk.InitDefaultVerifier(genState.ZKSetupKeys.VerifyingKey); err != nil {
+				sdkCtx.Logger().Error("failed to initialize ZK verifier from genesis", "error", err)
+				// Don't fail genesis - the key can be loaded later
+			} else {
+				sdkCtx.Logger().Info("ZK verifier initialized from genesis")
 			}
 		}
 	}
@@ -106,6 +141,18 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 		return nil, fmt.Errorf("failed to export airdrop entries: %w", err)
 	}
 	genesis.AirdropEntries = airdropEntries
+
+	// Export ZK entropy state
+	zkEntropyState, err := k.ZKEntropyState.Get(ctx)
+	if err == nil {
+		genesis.ZKEntropyState = &zkEntropyState
+	}
+
+	// Export ZK setup keys
+	zkSetupKeys, err := k.ZKSetupKeys.Get(ctx)
+	if err == nil {
+		genesis.ZKSetupKeys = &zkSetupKeys
+	}
 
 	return genesis, nil
 }

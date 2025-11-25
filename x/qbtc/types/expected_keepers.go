@@ -33,4 +33,8 @@ type StakingKeeper interface {
 	GetAllValidators(ctx context.Context) (validators []stakingtypes.Validator, err error)
 	GetLastTotalPower(ctx context.Context) (math.Int, error)
 	PowerReduction(ctx context.Context) math.Int
+	// Validator returns validator info by address
+	Validator(ctx context.Context, addr sdk.ValAddress) (stakingtypes.ValidatorI, error)
+	// IterateBondedValidatorsByPower iterates over validators by power
+	IterateBondedValidatorsByPower(ctx context.Context, fn func(index int64, validator stakingtypes.ValidatorI) (stop bool)) error
 }

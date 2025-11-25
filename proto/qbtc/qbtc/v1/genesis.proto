@@ -6,6 +6,7 @@ import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/type_utxo.proto";
 import "qbtc/qbtc/v1/query_params.proto";
 import "qbtc/qbtc/v1/type_airdrop.proto";
+import "qbtc/qbtc/v1/type_zk_entropy.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 message mimir {
@@ -27,6 +28,16 @@ message GenesisState {
     (gogoproto.nullable) = false,
     (gogoproto.jsontag) = "airdrop_entries",
     (gogoproto.customname) = "AirdropEntries"
+  ];
+  // ZK entropy state for distributed trusted setup
+  ZKEntropyState zk_entropy_state = 6 [
+    (gogoproto.jsontag) = "zk_entropy_state",
+    (gogoproto.customname) = "ZKEntropyState"
+  ];
+  // ZK setup keys (populated after distributed setup is complete)
+  ZKSetupKeys zk_setup_keys = 7 [
+    (gogoproto.jsontag) = "zk_setup_keys",
+    (gogoproto.customname) = "ZKSetupKeys"
   ];
 }
 

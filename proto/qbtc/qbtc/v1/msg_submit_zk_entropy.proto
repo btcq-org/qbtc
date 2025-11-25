@@ -1,0 +1,40 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// MsgSubmitZKEntropy allows validators to submit random entropy for the
+// distributed ZK trusted setup. Once the threshold number of validators
+// have submitted entropy, it can be combined to generate the proving
+// and verifying keys in a trust-minimized way.
+message MsgSubmitZKEntropy {
+  option (cosmos.msg.v1.signer) = "validator";
+  option (amino.name) = "qbtc/MsgSubmitZKEntropy";
+
+  // The validator address submitting entropy
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+
+  // Random entropy bytes (32 bytes of cryptographically secure randomness)
+  // Validators should generate this using a secure random source
+  bytes entropy = 2;
+
+  // Commitment hash of the entropy (SHA256(entropy || validator_address))
+  // This allows for a commit-reveal scheme if needed
+  bytes commitment = 3;
+}
+
+// MsgSubmitZKEntropyResponse is the response for entropy submission.
+message MsgSubmitZKEntropyResponse {
+  // The current count of entropy submissions
+  uint64 submission_count = 1;
+  // Whether the threshold has been reached
+  bool threshold_reached = 2;
+  // The block height when entropy collection started (0 if not started)
+  int64 collection_start_block = 3;
+}
+

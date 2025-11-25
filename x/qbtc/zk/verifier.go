@@ -28,8 +28,21 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 	return &Verifier{vk: vk}, nil
 }
 
-// VerifyProof verifies a ZK proof for a Bitcoin address claim
+// VerifyProof verifies a ZK proof for a Bitcoin address claim (legacy, without epoch binding)
+// DEPRECATED: Use VerifyProofWithEpoch for epoch-aware verification
 func (v *Verifier) VerifyProof(proof *Proof, addressHash [20]byte, btcqAddressHash [32]byte) error {
+	// For legacy proofs, use zero epoch and context
+	return v.VerifyProofWithEpoch(proof, EpochVerificationParams{
+		AddressHash:     addressHash,
+		BTCQAddressHash: btcqAddressHash,
+		EpochID:         0,
+		ContextHash:     [32]byte{},
+	})
+}
+
+// VerifyProofWithEpoch verifies a ZK proof with full epoch and context binding.
+// This is the preferred method for verifying proofs in the epoch-based system.
+func (v *Verifier) VerifyProofWithEpoch(proof *Proof, params EpochVerificationParams) error {
 	// Deserialize the proof
 	groth16Proof := groth16.NewProof(ecc.BN254)
 	_, err := groth16Proof.ReadFrom(bytes.NewReader(proof.ProofData))
@@ -40,10 +53,18 @@ func (v *Verifier) VerifyProof(proof *Proof, addressHash [20]byte, btcqAddressHa
 	// Create the public witness with the expected values
 	assignment := &BTCAddressCircuit{}
 	for i := 0; i < 20; i++ {
-		assignment.AddressHash[i] = addressHash[i]
+		assignment.AddressHash[i] = params.AddressHash[i]
 	}
 	for i := 0; i < 32; i++ {
-		assignment.BTCQAddressHash[i] = btcqAddressHash[i]
+		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+	}
+	// Set epoch ID (8 bytes big-endian)
+	for i := 0; i < 8; i++ {
+		assignment.EpochID[i] = byte(params.EpochID >> (56 - i*8))
+	}
+	// Set context hash
+	for i := 0; i < 32; i++ {
+		assignment.ContextHash[i] = params.ContextHash[i]
 	}
 
 	// Create witness from assignment (public only)
@@ -104,20 +125,64 @@ func (v *Verifier) VerifyProofWithDetails(proof *Proof, addressHash [20]byte, bt
 }
 
 // DefaultVerifier holds a pre-configured verifier with the embedded verification key
-// This is set during module initialization
+// DEPRECATED: For epoch-based verification, use EpochVerifiers instead
+// This is set during module initialization for backward compatibility
 var DefaultVerifier *Verifier
 
+// EpochVerifiers maps epoch IDs to their verifiers
+// This allows verification of proofs from any epoch
+var EpochVerifiers = make(map[uint64]*Verifier)
+
 // InitDefaultVerifier initializes the default verifier with the embedded key
+// DEPRECATED: Use RegisterEpochVerifier for epoch-based verification
 func InitDefaultVerifier(vkBytes []byte) error {
 	var err error
 	DefaultVerifier, err = NewVerifierFromBytes(vkBytes)
 	return err
 }
 
+// RegisterEpochVerifier registers a verifier for a specific epoch
+func RegisterEpochVerifier(epochID uint64, vkBytes []byte) error {
+	verifier, err := NewVerifierFromBytes(vkBytes)
+	if err != nil {
+		return err
+	}
+	EpochVerifiers[epochID] = verifier
+	return nil
+}
+
+// GetEpochVerifier returns the verifier for a specific epoch
+func GetEpochVerifier(epochID uint64) (*Verifier, error) {
+	verifier, ok := EpochVerifiers[epochID]
+	if !ok {
+		return nil, fmt.Errorf("no verifier registered for epoch %d", epochID)
+	}
+	return verifier, nil
+}
+
 // VerifyWithDefault verifies a proof using the default verifier
+// DEPRECATED: Use VerifyWithEpoch for epoch-based verification
 func VerifyWithDefault(proof *Proof, addressHash [20]byte, btcqAddressHash [32]byte) error {
 	if DefaultVerifier == nil {
 		return fmt.Errorf("default verifier not initialized")
 	}
 	return DefaultVerifier.VerifyProof(proof, addressHash, btcqAddressHash)
 }
+
+// VerifyWithEpoch verifies a proof using the appropriate epoch verifier
+// It enforces that the proof's epoch matches the expected current epoch
+func VerifyWithEpoch(proof *Proof, params EpochVerificationParams, expectedCurrentEpoch uint64) error {
+	// Enforce that the proof is for the current epoch
+	if params.EpochID != expectedCurrentEpoch {
+		return fmt.Errorf("epoch mismatch: proof is for epoch %d, expected %d", params.EpochID, expectedCurrentEpoch)
+	}
+
+	// Get the verifier for this epoch
+	verifier, err := GetEpochVerifier(params.EpochID)
+	if err != nil {
+		return err
+	}
+
+	return verifier.VerifyProofWithEpoch(proof, params)
+}
+

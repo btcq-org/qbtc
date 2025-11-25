@@ -37,6 +37,14 @@ type Keeper struct {
 	AirdropEntries collections.Map[string, uint64]
 	// ClaimedAirdrops tracks which address hashes have claimed (hex -> claimed bool)
 	ClaimedAirdrops collections.Map[string, bool]
+
+	// ZK Entropy collections for distributed trusted setup
+	// ZKEntropyState stores the current state of entropy collection
+	ZKEntropyState collections.Item[types.ZKEntropyState]
+	// ZKEntropySubmissions maps validator address to their entropy submission
+	ZKEntropySubmissions collections.Map[string, types.ZKEntropySubmission]
+	// ZKSetupKeys stores the finalized setup keys (verifying key)
+	ZKSetupKeys collections.Item[types.ZKSetupKeys]
 }
 
 func NewKeeper(
@@ -50,18 +58,21 @@ func NewKeeper(
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService:      storeService,
-		cdc:               cdc,
-		addressCodec:      addressCodec,
-		stakingKeeper:     stakingKeeper,
-		bankKeeper:        bankKeeper,
-		authority:         authority,
-		Utxoes:            collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
-		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		authKeeper:        authKeeper,
-		AirdropEntries:    collections.NewMap(sb, types.AirdropEntryKeys, "airdrop_entries", collections.StringKey, collections.Uint64Value),
-		ClaimedAirdrops:   collections.NewMap(sb, types.ClaimedAirdropKeys, "claimed_airdrops", collections.StringKey, collections.BoolValue),
+		storeService:         storeService,
+		cdc:                  cdc,
+		addressCodec:         addressCodec,
+		stakingKeeper:        stakingKeeper,
+		bankKeeper:           bankKeeper,
+		authority:            authority,
+		Utxoes:               collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodePeerAddresses:    collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
+		ConstOverrides:       collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		authKeeper:           authKeeper,
+		AirdropEntries:       collections.NewMap(sb, types.AirdropEntryKeys, "airdrop_entries", collections.StringKey, collections.Uint64Value),
+		ClaimedAirdrops:      collections.NewMap(sb, types.ClaimedAirdropKeys, "claimed_airdrops", collections.StringKey, collections.BoolValue),
+		ZKEntropyState:       collections.NewItem(sb, types.ZKEntropyStateKey, "zk_entropy_state", codec.CollValue[types.ZKEntropyState](cdc)),
+		ZKEntropySubmissions: collections.NewMap(sb, types.ZKEntropySubmissionsKey, "zk_entropy_submissions", collections.StringKey, codec.CollValue[types.ZKEntropySubmission](cdc)),
+		ZKSetupKeys:          collections.NewItem(sb, types.ZKSetupKeysKey, "zk_setup_keys", codec.CollValue[types.ZKSetupKeys](cdc)),
 	}
 	schema, err := sb.Build()
 	if err != nil {

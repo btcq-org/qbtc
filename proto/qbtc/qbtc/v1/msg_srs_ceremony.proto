@@ -1,0 +1,97 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// MsgInitiateSRSCeremony starts a new SRS ceremony for a new epoch.
+// Can only be called when conditions for epoch rotation are met.
+message MsgInitiateSRSCeremony {
+  option (cosmos.msg.v1.signer) = "initiator";
+  option (amino.name) = "qbtc/MsgInitiateSRSCeremony";
+
+  // Address initiating the ceremony (must be a bonded validator)
+  string initiator = 1;
+  
+  // The epoch ID for this ceremony (must be current_epoch + 1)
+  uint64 epoch_id = 2;
+  
+  // Initial SRS state (genesis SRS or previous epoch's final SRS)
+  bytes initial_srs = 3;
+}
+
+// MsgInitiateSRSCeremonyResponse is the response for ceremony initiation.
+message MsgInitiateSRSCeremonyResponse {
+  // The epoch ID of the initiated ceremony
+  uint64 epoch_id = 1;
+  
+  // Block deadline for ceremony completion
+  int64 deadline_block = 2;
+}
+
+// MsgContributeSRS allows a validator to contribute to the SRS ceremony.
+// Each validator can only contribute once per ceremony.
+message MsgContributeSRS {
+  option (cosmos.msg.v1.signer) = "validator";
+  option (amino.name) = "qbtc/MsgContributeSRS";
+
+  // Validator address making the contribution
+  string validator = 1;
+  
+  // The epoch ID of the ceremony being contributed to
+  uint64 epoch_id = 2;
+  
+  // The updated SRS elements after applying this validator's randomness
+  // This is the transformed SRS using the validator's secret τ
+  bytes updated_srs = 3;
+  
+  // Proof that the update is well-formed (DLOG proof)
+  // Proves knowledge of τ such that updated_srs = apply(prev_srs, τ)
+  // without revealing τ
+  bytes update_proof = 4;
+  
+  // Hash of the previous SRS state this update was applied to
+  // Must match the current ceremony state
+  bytes prev_srs_hash = 5;
+}
+
+// MsgContributeSRSResponse is the response for SRS contribution.
+message MsgContributeSRSResponse {
+  // The sequence number assigned to this contribution
+  uint64 sequence = 1;
+  
+  // Hash of the new SRS state after this contribution
+  bytes new_srs_hash = 2;
+  
+  // Total number of contributions so far
+  uint64 total_contributions = 3;
+}
+
+// MsgFinalizeSRSCeremony finalizes an SRS ceremony and activates the new epoch.
+// Can be called after minimum contributions are received.
+message MsgFinalizeSRSCeremony {
+  option (cosmos.msg.v1.signer) = "finalizer";
+  option (amino.name) = "qbtc/MsgFinalizeSRSCeremony";
+
+  // Address finalizing the ceremony (must be a bonded validator)
+  string finalizer = 1;
+  
+  // The epoch ID being finalized
+  uint64 epoch_id = 2;
+}
+
+// MsgFinalizeSRSCeremonyResponse is the response for ceremony finalization.
+message MsgFinalizeSRSCeremonyResponse {
+  // The finalized epoch ID (now current)
+  uint64 epoch_id = 1;
+  
+  // Hash of the verifying key for this epoch
+  bytes vk_hash = 2;
+  
+  // Number of validators who contributed
+  uint64 contributor_count = 3;
+}
+

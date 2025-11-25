@@ -10,6 +10,8 @@ import "qbtc/qbtc/v1/msg_report_block.proto";
 import "qbtc/qbtc/v1/msg_gov_claim_utxo.proto";
 import "qbtc/qbtc/v1/msg_update_param.proto";
 import "qbtc/qbtc/v1/msg_claim_airdrop.proto";
+import "qbtc/qbtc/v1/msg_submit_zk_entropy.proto";
+import "qbtc/qbtc/v1/msg_srs_ceremony.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
@@ -26,7 +28,25 @@ service Msg {
   rpc GovClaimUTXO(MsgGovClaimUTXO) returns (MsgEmpty);
   rpc UpdateParam(MsgUpdateParam) returns (MsgEmpty);
   // ClaimAirdrop allows users to claim their airdrop using a ZK proof of Bitcoin address ownership.
+  // Proofs are bound to a specific epoch and only current epoch proofs are accepted.
   rpc ClaimAirdrop(MsgClaimAirdrop) returns (MsgClaimAirdropResponse);
+  // SubmitZKEntropy allows validators to submit entropy for the distributed ZK trusted setup.
+  // DEPRECATED: Use the SRS ceremony messages instead for epoch-based key rotation.
+  rpc SubmitZKEntropy(MsgSubmitZKEntropy) returns (MsgSubmitZKEntropyResponse);
+  
+  // === SRS Ceremony Messages for Per-Epoch Key Rotation ===
+  
+  // InitiateSRSCeremony starts a new SRS ceremony for the next epoch.
+  // Only bonded validators can initiate a ceremony.
+  rpc InitiateSRSCeremony(MsgInitiateSRSCeremony) returns (MsgInitiateSRSCeremonyResponse);
+  
+  // ContributeSRS allows validators to contribute to an ongoing SRS ceremony.
+  // Each validator can contribute once per ceremony.
+  rpc ContributeSRS(MsgContributeSRS) returns (MsgContributeSRSResponse);
+  
+  // FinalizeSRSCeremony completes an SRS ceremony and activates the new epoch.
+  // Requires minimum number of validator contributions.
+  rpc FinalizeSRSCeremony(MsgFinalizeSRSCeremony) returns (MsgFinalizeSRSCeremonyResponse);
 }
 
 // MsgEmpty is the return type for all current Msg Server messages
