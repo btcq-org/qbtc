@@ -66,6 +66,11 @@ func New(target string, insecure bool) (*Client, error) {
 	}, nil
 }
 
+func (c *Client) WithStakingClient(stakingClient stakingtypes.QueryClient) *Client {
+	c.stakingClient = stakingClient
+	return c
+}
+
 func dialerFunc(_ context.Context, addr string) (net.Conn, error) {
 	return connect(addr)
 }
