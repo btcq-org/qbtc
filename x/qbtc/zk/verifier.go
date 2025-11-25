@@ -10,7 +10,8 @@ import (
 	"github.com/consensys/gnark/frontend"
 )
 
-// Verifier handles ZK proof verification using PLONK
+// Verifier handles ZK proof verification for signature-based proofs using PLONK.
+// This verifier is TSS/MPC compatible - it verifies proofs of ECDSA signature validity.
 type Verifier struct {
 	vk plonk.VerifyingKey
 }
@@ -29,10 +30,19 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 	return &Verifier{vk: vk}, nil
 }
 
-// VerifyProof verifies a PLONK proof for a Bitcoin address claim.
+// VerifyProof verifies a PLONK proof for a signature-based Bitcoin address claim.
+// It checks that:
+// 1. The proof is valid
+// 2. The message hash matches the expected value (computed from the claim parameters)
 func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 	if proof == nil {
 		return fmt.Errorf("proof cannot be nil")
+	}
+
+	// Verify the message hash matches expected
+	expectedMessage := ComputeClaimMessage(params.AddressHash, params.BTCQAddressHash, params.ChainID)
+	if expectedMessage != params.MessageHash {
+		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
 
 	// Deserialize the proof
@@ -43,14 +53,24 @@ func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 	}
 
 	// Create the public witness with the expected values
-	assignment := &BTCAddressCircuit{}
+	assignment := &BTCSignatureCircuit{}
+
+	// Set message hash
+	for i := 0; i < 32; i++ {
+		assignment.MessageHash[i] = params.MessageHash[i]
+	}
+
+	// Set address hash
 	for i := 0; i < 20; i++ {
 		assignment.AddressHash[i] = params.AddressHash[i]
 	}
+
+	// Set BTCQ address hash
 	for i := 0; i < 32; i++ {
 		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
 	}
-	// Set chain ID (8 bytes)
+
+	// Set chain ID
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]
 	}

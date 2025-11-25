@@ -154,6 +154,8 @@ type MsgClaimWithProofResponse struct {
 	TotalAmountClaimed uint64 `protobuf:"varint,1,opt,name=total_amount_claimed,json=totalAmountClaimed,proto3" json:"total_amount_claimed,omitempty"`
 	// The number of UTXOs successfully claimed
 	UtxosClaimed uint32 `protobuf:"varint,2,opt,name=utxos_claimed,json=utxosClaimed,proto3" json:"utxos_claimed,omitempty"`
+	// The number of UTXOs skipped (not matching the proven address)
+	UtxosSkipped uint32 `protobuf:"varint,3,opt,name=utxos_skipped,json=utxosSkipped,proto3" json:"utxos_skipped,omitempty"`
 }
 
 func (m *MsgClaimWithProofResponse) Reset()         { *m = MsgClaimWithProofResponse{} }
@@ -199,6 +201,13 @@ func (m *MsgClaimWithProofResponse) GetTotalAmountClaimed() uint64 {
 func (m *MsgClaimWithProofResponse) GetUtxosClaimed() uint32 {
 	if m != nil {
 		return m.UtxosClaimed
+	}
+	return 0
+}
+
+func (m *MsgClaimWithProofResponse) GetUtxosSkipped() uint32 {
+	if m != nil {
+		return m.UtxosSkipped
 	}
 	return 0
 }
@@ -351,6 +360,11 @@ func (m *MsgClaimWithProofResponse) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	_ = i
 	var l int
 	_ = l
+	if m.UtxosSkipped != 0 {
+		i = encodeVarintMsgClaimWithProof(dAtA, i, uint64(m.UtxosSkipped))
+		i--
+		dAtA[i] = 0x18
+	}
 	if m.UtxosClaimed != 0 {
 		i = encodeVarintMsgClaimWithProof(dAtA, i, uint64(m.UtxosClaimed))
 		i--
@@ -423,6 +437,9 @@ func (m *MsgClaimWithProofResponse) Size() (n int) {
 	}
 	if m.UtxosClaimed != 0 {
 		n += 1 + sovMsgClaimWithProof(uint64(m.UtxosClaimed))
+	}
+	if m.UtxosSkipped != 0 {
+		n += 1 + sovMsgClaimWithProof(uint64(m.UtxosSkipped))
 	}
 	return n
 }
@@ -746,6 +763,25 @@ func (m *MsgClaimWithProofResponse) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.UtxosClaimed |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UtxosSkipped", wireType)
+			}
+			m.UtxosSkipped = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgClaimWithProof
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.UtxosSkipped |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

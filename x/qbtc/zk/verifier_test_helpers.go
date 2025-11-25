@@ -16,4 +16,3 @@ func ClearVerifierForTesting() {
 	globalState.verifier = nil
 	globalState.initialized = false
 }
-

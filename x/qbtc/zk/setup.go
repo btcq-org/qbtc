@@ -20,6 +20,7 @@ import (
 	"github.com/consensys/gnark/constraint"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/scs"
+	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/test/unsafekzg"
 )
 
@@ -40,6 +41,24 @@ const (
 	// This is more than enough for our circuit.
 	DefaultPtauPower = 20
 )
+
+// Secp256k1Fp is the base field of secp256k1
+type Secp256k1Fp = emulated.Secp256k1Fp
+
+// Secp256k1Fr is the scalar field of secp256k1
+type Secp256k1Fr = emulated.Secp256k1Fr
+
+// CircuitParams contains the curve and proof system parameters
+type CircuitParams struct {
+	Curve ecc.ID
+}
+
+// DefaultCircuitParams returns default parameters for the circuit
+func DefaultCircuitParams() CircuitParams {
+	return CircuitParams{
+		Curve: ecc.BN254, // Use BN254 for PLONK
+	}
+}
 
 // SetupResult contains the compiled circuit and keys from PLONK setup
 type SetupResult struct {
@@ -96,21 +115,12 @@ func TestSetupOptions() SetupOptions {
 	}
 }
 
-// Setup performs the trusted setup for the BTCAddressCircuit using PLONK.
-//
-// DEPRECATED: Use SetupWithOptions for production. This function uses an unsafe
-// test SRS and should only be used for development/testing.
-func Setup() (*SetupResult, error) {
-	fmt.Println("WARNING: Using unsafe test SRS. DO NOT use in production!")
-	fmt.Println("For production, use SetupWithOptions with SetupModeDownload or SetupModeFile.")
-	return SetupWithOptions(TestSetupOptions())
-}
-
-// SetupWithOptions performs PLONK setup with the specified options.
+// SetupWithOptions performs PLONK setup for the BTCSignatureCircuit.
+// This circuit is compatible with TSS/MPC signers.
 // For production, use SetupModeDownload to use the Hermez/Polygon Powers of Tau.
 func SetupWithOptions(opts SetupOptions) (*SetupResult, error) {
 	// Create a placeholder circuit for compilation
-	circuit := NewBTCAddressCircuitPlaceholder()
+	circuit := NewBTCSignatureCircuitPlaceholder()
 
 	// Compile the circuit to SCS (Sparse Constraint System for PLONK)
 	cs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, circuit)
@@ -160,34 +170,6 @@ func SetupWithOptions(opts SetupOptions) (*SetupResult, error) {
 	}
 
 	// Run the PLONK setup
-	pk, vk, err := plonk.Setup(cs, &srs, &srsLagrange)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run PLONK setup: %w", err)
-	}
-
-	return &SetupResult{
-		ConstraintSystem: cs,
-		ProvingKey:       pk,
-		VerifyingKey:     vk,
-	}, nil
-}
-
-// SetupWithSRS performs PLONK setup using a pre-existing SRS.
-// This is the recommended approach for production, using an SRS from
-// a trusted ceremony like Hermez/Polygon Perpetual Powers of Tau.
-//
-// The SRS must be large enough to support the circuit's constraint count.
-func SetupWithSRS(srs, srsLagrange kzg.SRS) (*SetupResult, error) {
-	// Create a placeholder circuit for compilation
-	circuit := NewBTCAddressCircuitPlaceholder()
-
-	// Compile the circuit to SCS
-	cs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, circuit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile circuit: %w", err)
-	}
-
-	// Run the PLONK setup with the provided SRS
 	pk, vk, err := plonk.Setup(cs, &srs, &srsLagrange)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run PLONK setup: %w", err)
@@ -599,7 +581,8 @@ func DeserializeConstraintSystem(data []byte) (constraint.ConstraintSystem, erro
 	return cs, nil
 }
 
-// Prover handles proof generation using PLONK
+// Prover handles proof generation for signature-based claims using PLONK.
+// This prover is TSS/MPC compatible - it generates proofs of ECDSA signature validity.
 type Prover struct {
 	cs constraint.ConstraintSystem
 	pk plonk.ProvingKey
@@ -615,55 +598,44 @@ func ProverFromSetup(setup *SetupResult) *Prover {
 	return NewProver(setup.ConstraintSystem, setup.ProvingKey)
 }
 
-// ProofParams contains all the parameters needed to generate a proof
+// ProofParams contains all parameters needed to generate a signature-based proof
 type ProofParams struct {
-	PrivateKey      *big.Int // BTC private key (secret)
-	AddressHash     [20]byte // Hash160(pubkey)
-	BTCQAddressHash [32]byte // H(claimer_address) - binds to recipient
-	ChainID         [8]byte  // First 8 bytes of H(chain_id) - prevents cross-chain replay
+	// Signature components (both are scalars in ECDSA)
+	SignatureR *big.Int // r scalar (x-coordinate of k·G reduced mod n)
+	SignatureS *big.Int // s scalar
+
+	// Public key (uncompressed coordinates)
+	PublicKeyX *big.Int
+	PublicKeyY *big.Int
+
+	// Public inputs
+	MessageHash     [32]byte // The signed message hash
+	AddressHash     [20]byte // Hash160 of the public key
+	BTCQAddressHash [32]byte // H(claimer_address)
+	ChainID         [8]byte  // First 8 bytes of H(chain_id)
 }
 
-// zeroBytes securely zeros a byte slice to prevent private key leakage.
-func zeroBytes(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
-}
-
-// GenerateProof generates a PLONK proof that proves ownership of the Bitcoin address
-// corresponding to the given private key.
-//
-// SECURITY: This function zeroes all private key material from memory after use.
+// GenerateProof generates a PLONK proof that proves ownership of a Bitcoin address
+// using an ECDSA signature. The signature and public key are private inputs.
 func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 	// Create witness assignment
-	assignment := &BTCAddressCircuit{}
+	assignment := &BTCSignatureCircuit{}
 
-	// Set the private key (as emulated field element)
-	assignment.PrivateKey.Limbs = make([]frontend.Variable, 4)
-	// Convert big.Int to 4 limbs of 64 bits each
-	pkBytes := params.PrivateKey.Bytes()
-	// Pad to 32 bytes
-	padded := make([]byte, 32)
-	copy(padded[32-len(pkBytes):], pkBytes)
+	// Set signature R scalar (the 'r' value in ECDSA, x-coord of k·G mod n)
+	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
 
-	// SECURITY: Defer zeroing of sensitive key material
-	defer func() {
-		zeroBytes(pkBytes)
-		zeroBytes(padded)
-		// Zero the limbs (which are *big.Int stored as frontend.Variable)
-		for i := 0; i < 4; i++ {
-			if limb, ok := assignment.PrivateKey.Limbs[i].(*big.Int); ok {
-				limb.SetInt64(0)
-			}
-		}
-	}()
+	// Set signature S scalar
+	assignment.SignatureS.Limbs = bigIntToLimbs(params.SignatureS)
 
-	// Convert to limbs (little-endian limb order, big-endian within limb)
-	for i := 0; i < 4; i++ {
-		limb := new(big.Int)
-		limbBytes := padded[24-i*8 : 32-i*8]
-		limb.SetBytes(limbBytes)
-		assignment.PrivateKey.Limbs[i] = limb
+	// Set public key X
+	assignment.PublicKeyX.Limbs = bigIntToLimbs(params.PublicKeyX)
+
+	// Set public key Y
+	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
+
+	// Set the message hash (public input)
+	for i := 0; i < 32; i++ {
+		assignment.MessageHash[i] = params.MessageHash[i]
 	}
 
 	// Set the address hash (public input)
@@ -671,12 +643,12 @@ func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 		assignment.AddressHash[i] = params.AddressHash[i]
 	}
 
-	// Set the BTCQ address hash (public input for binding)
+	// Set the BTCQ address hash (public input)
 	for i := 0; i < 32; i++ {
 		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
 	}
 
-	// Set the chain ID (public input for cross-chain replay prevention)
+	// Set the chain ID (public input)
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]
 	}
@@ -717,6 +689,33 @@ func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 		ProofData:    proofBuf.Bytes(),
 		PublicInputs: publicBuf.Bytes(),
 	}, nil
+}
+
+// bigIntToLimbs converts a big.Int to 4 limbs of 64 bits each for emulated field elements
+func bigIntToLimbs(n *big.Int) []frontend.Variable {
+	limbs := make([]frontend.Variable, 4)
+
+	if n == nil {
+		for i := 0; i < 4; i++ {
+			limbs[i] = big.NewInt(0)
+		}
+		return limbs
+	}
+
+	// Pad to 32 bytes
+	nBytes := n.Bytes()
+	padded := make([]byte, 32)
+	copy(padded[32-len(nBytes):], nBytes)
+
+	// Convert to limbs (little-endian limb order, big-endian within limb)
+	for i := 0; i < 4; i++ {
+		limb := new(big.Int)
+		limbBytes := padded[24-i*8 : 32-i*8]
+		limb.SetBytes(limbBytes)
+		limbs[i] = limb
+	}
+
+	return limbs
 }
 
 // Proof contains the serialized PLONK proof and public inputs
@@ -777,6 +776,7 @@ func HashBTCQAddress(btcqAddress string) [32]byte {
 
 // VerificationParams contains parameters needed for proof verification
 type VerificationParams struct {
+	MessageHash     [32]byte // The message that was signed
 	AddressHash     [20]byte // Hash160 of BTC pubkey
 	BTCQAddressHash [32]byte // H(claimer_address)
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)

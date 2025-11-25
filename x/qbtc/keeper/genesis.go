@@ -39,7 +39,7 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set ZK verifying key: %w", err)
 		}
 
-		// Register the global verifier
+		// Register the global verifier (for BTCSignatureCircuit - TSS compatible)
 		if err := zk.RegisterVerifier(genState.ZkVerifyingKey); err != nil {
 			sdkCtx.Logger().Error("failed to register ZK verifier from genesis", "error", err)
 			return fmt.Errorf("failed to register ZK verifier: %w", err)

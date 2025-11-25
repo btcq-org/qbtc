@@ -207,6 +207,57 @@ func ValidateAddressHash(hash []byte) error {
 	return nil
 }
 
+// Hash160ToP2PKHAddress converts a Hash160 to a P2PKH Bitcoin address (mainnet)
+func Hash160ToP2PKHAddress(hash [20]byte) string {
+	// P2PKH mainnet version byte is 0x00
+	versionedPayload := make([]byte, 21)
+	versionedPayload[0] = 0x00
+	copy(versionedPayload[1:], hash[:])
+
+	// Compute checksum (first 4 bytes of double SHA256)
+	checksum := doubleSHA256(versionedPayload)[:4]
+
+	// Concatenate payload + checksum
+	fullPayload := append(versionedPayload, checksum...)
+
+	// Base58 encode
+	return base58Encode(fullPayload)
+}
+
+// base58Encode encodes bytes to base58
+func base58Encode(input []byte) string {
+	alphabet := "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+	// Count leading zeros
+	leadingZeros := 0
+	for _, b := range input {
+		if b == 0 {
+			leadingZeros++
+		} else {
+			break
+		}
+	}
+
+	// Convert to big integer
+	num := new(big.Int).SetBytes(input)
+	base := big.NewInt(58)
+	zero := big.NewInt(0)
+	mod := new(big.Int)
+
+	var result []byte
+	for num.Cmp(zero) > 0 {
+		num.DivMod(num, base, mod)
+		result = append([]byte{alphabet[mod.Int64()]}, result...)
+	}
+
+	// Add leading '1's for leading zero bytes
+	for i := 0; i < leadingZeros; i++ {
+		result = append([]byte{'1'}, result...)
+	}
+
+	return string(result)
+}
+
 // BitcoinAddressToHash160 extracts the Hash160 from various Bitcoin address formats
 // Supports: P2PKH (1...), P2WPKH (bc1q...), P2SH-P2WPKH (3...)
 func BitcoinAddressToHash160(address string) ([20]byte, error) {

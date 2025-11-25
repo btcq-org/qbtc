@@ -1,33 +1,36 @@
 // Package main provides a CLI tool for generating ZK proofs
-// to claim airdrops on the qbtc chain.
+// to claim airdrops on the qbtc chain using TSS-compatible signatures.
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
-	"syscall"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "zkprover",
-		Short: "ZK Proof Generator for qbtc airdrop claims",
+		Short: "ZK Proof Generator for qbtc airdrop claims (TSS compatible)",
 		Long: `zkprover is a CLI tool for generating zero-knowledge proofs
-that prove ownership of a Bitcoin address without revealing the private key.
+that prove ownership of a Bitcoin address using ECDSA signatures.
 These proofs can be used to claim airdrops on the qbtc chain.
 
-This tool uses PLONK proof system with a universal SRS for efficient
-and secure proof generation.`,
+This tool is TSS/MPC compatible - it only requires a signature, not
+direct access to the private key. The proof hides both the signature
+and public key from on-chain observers.
+
+Uses PLONK proof system with Hermez Powers of Tau ceremony SRS.`,
 	}
 
 	rootCmd.AddCommand(
@@ -52,7 +55,7 @@ func setupCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Generate the PLONK trusted setup (proving and verifying keys)",
+		Short: "Generate PLONK trusted setup (proving and verifying keys)",
 		Long: `Generate the trusted setup for the ZK circuit using PLONK.
 This creates the proving key (for generating proofs) and verifying key (for verification).
 The verifying key should be embedded in the chain's genesis for on-chain verification.
@@ -156,87 +159,99 @@ Use --test flag only for development/testing with an unsafe test SRS.`,
 	return cmd
 }
 
-// proveCmd creates the prove command
+// proveCmd creates the prove command for TSS-compatible proof generation
 func proveCmd() *cobra.Command {
 	var (
-		privateKeyHex string
-		privateKeyWIF string
-		btcqAddress   string
-		chainID       string
-		setupDir      string
-		outputFile    string
-		useStdin      bool
+		tssURL         string
+		btcqAddress    string
+		chainID        string
+		addressHashHex string
+		setupDir       string
+		outputFile     string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "prove",
-		Short: "Generate a ZK proof for an airdrop claim",
-		Long: `Generate a zero-knowledge proof that proves ownership of a Bitcoin address.
-The proof can be submitted to the qbtc chain to claim an airdrop.
+		Short: "Generate a ZK proof using TSS signer (no private key required)",
+		Long: `Generate a zero-knowledge proof using a TSS (Threshold Signature Scheme) signer.
+This command is compatible with MPC/TSS systems that cannot reveal private keys.
 
-You can provide your Bitcoin private key in hex format or WIF format.
-The proof will be bound to your qbtc address and chain ID to prevent replay attacks.
+The command will:
+1. Compute the claim message hash
+2. Request a signature from the TSS signer API
+3. Generate a ZK proof that the signature is valid for the claimed address
 
-SECURITY: For better security, use --stdin to enter your private key interactively.
-This prevents the key from appearing in shell history or process listings.`,
+The proof proves ownership without revealing the signature or public key.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Parse the private key
-			var privateKey *big.Int
-			var err error
-
-			if useStdin {
-				// Read private key securely from stdin
-				privateKey, err = readPrivateKeySecurely()
-				if err != nil {
-					return fmt.Errorf("failed to read private key: %w", err)
-				}
-		} else if privateKeyHex != "" {
-			// SECURITY NOTE: Command-line arguments remain in memory and cannot be cleared.
-			// Go strings are immutable, so privateKeyHex will persist in memory until GC.
-			// Additionally, the key may be visible in shell history and process listings.
-			// For security-sensitive operations, always use --stdin instead.
-			fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
-			fmt.Fprintln(os.Stderr, "         The key will remain in memory and may appear in shell history.")
-			fmt.Fprintln(os.Stderr, "         Use --stdin for better security.")
-			privateKey, err = zk.PrivateKeyFromHex(privateKeyHex)
-			if err != nil {
-				return fmt.Errorf("invalid private key hex: %w", err)
+			if tssURL == "" {
+				return fmt.Errorf("--tss-url is required")
 			}
-		} else if privateKeyWIF != "" {
-			// SECURITY NOTE: Same as above - WIF string cannot be cleared from memory.
-			fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
-			fmt.Fprintln(os.Stderr, "         The key will remain in memory and may appear in shell history.")
-			fmt.Fprintln(os.Stderr, "         Use --stdin for better security.")
-			privateKey, err = zk.PrivateKeyFromWIF(privateKeyWIF)
-			if err != nil {
-				return fmt.Errorf("invalid WIF: %w", err)
-			}
-		} else {
-			return fmt.Errorf("must provide either --stdin, --private-key, or --wif")
-		}
-
-		// Clear the big.Int private key from memory when done.
-		// Note: The original string arguments (privateKeyHex/privateKeyWIF) cannot be
-		// cleared because Go strings are immutable. This is why --stdin is recommended.
-		defer func() {
-			if privateKey != nil {
-				privateKey.SetInt64(0)
-			}
-		}()
-
 			if btcqAddress == "" {
 				return fmt.Errorf("--btcq-address is required")
 			}
 			if chainID == "" {
 				return fmt.Errorf("--chain-id is required")
 			}
-
-			// Compute the Bitcoin address hash
-			addressHash, err := zk.PrivateKeyToAddressHash(privateKey)
-			if err != nil {
-				return fmt.Errorf("failed to compute address hash: %w", err)
+			if addressHashHex == "" {
+				return fmt.Errorf("--address-hash is required (Hash160 of your Bitcoin address)")
 			}
-			fmt.Printf("Bitcoin address hash (Hash160): %s\n", hex.EncodeToString(addressHash[:]))
+
+			// Parse address hash
+			addressHash, err := zk.AddressHashFromHex(addressHashHex)
+			if err != nil {
+				return fmt.Errorf("invalid address hash: %w", err)
+			}
+
+			// Compute btcq address hash for binding
+			btcqAddressHash := zk.HashBTCQAddress(btcqAddress)
+
+			// Compute chain ID hash
+			chainIDHash := zk.ComputeChainIDHash(chainID)
+
+			// Compute the claim message that TSS needs to sign
+			messageHash := zk.ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+			fmt.Printf("Message to sign: %s\n", hex.EncodeToString(messageHash[:]))
+
+			// Request signature from TSS
+			fmt.Printf("Requesting signature from TSS at %s...\n", tssURL)
+			signResp, err := requestTSSSignature(tssURL, messageHash)
+			if err != nil {
+				return fmt.Errorf("failed to get TSS signature: %w", err)
+			}
+			fmt.Println("Received signature from TSS")
+
+			// Parse the signature components
+			rBytes, err := hex.DecodeString(signResp.Signature.R)
+			if err != nil {
+				return fmt.Errorf("invalid signature R: %w", err)
+			}
+			sBytes, err := hex.DecodeString(signResp.Signature.S)
+			if err != nil {
+				return fmt.Errorf("invalid signature S: %w", err)
+			}
+			pubKeyBytes, err := hex.DecodeString(signResp.PublicKey)
+			if err != nil {
+				return fmt.Errorf("invalid public key: %w", err)
+			}
+
+			// Parse public key to get X, Y coordinates
+			pubKey, err := btcec.ParsePubKey(pubKeyBytes)
+			if err != nil {
+				return fmt.Errorf("failed to parse public key: %w", err)
+			}
+
+			// Verify the public key matches the claimed address hash
+			computedHash := zk.Hash160(pubKey.SerializeCompressed())
+			if !bytes.Equal(computedHash, addressHash[:]) {
+				return fmt.Errorf("public key from TSS does not match claimed address hash")
+			}
+			fmt.Println("Public key verified against address hash")
+
+			// Convert to big.Int for the prover
+			sigR := new(big.Int).SetBytes(padTo32Bytes(rBytes))
+			sigS := new(big.Int).SetBytes(padTo32Bytes(sBytes))
+			pubKeyX := pubKey.X()
+			pubKeyY := pubKey.Y()
 
 			// Load the setup files
 			csPath := filepath.Join(setupDir, "circuit.cs")
@@ -262,17 +277,14 @@ This prevents the key from appearing in shell history or process listings.`,
 			// Create prover
 			prover := zk.NewProver(cs, pk)
 
-			// Compute btcq address hash for binding
-			btcqAddressHash := zk.HashBTCQAddress(btcqAddress)
-
-			// Compute chain ID hash for cross-chain replay prevention
-			chainIDHash := zk.ComputeChainIDHash(chainID)
-
 			// Generate the proof
 			fmt.Println("Generating PLONK proof...")
-			fmt.Printf("Chain ID: %s\n", chainID)
 			proof, err := prover.GenerateProof(zk.ProofParams{
-				PrivateKey:      privateKey,
+				SignatureR:      sigR,
+				SignatureS:      sigS,
+				PublicKeyX:      pubKeyX,
+				PublicKeyY:      pubKeyY,
+				MessageHash:     messageHash,
 				AddressHash:     addressHash,
 				BTCQAddressHash: btcqAddressHash,
 				ChainID:         chainIDHash,
@@ -286,6 +298,7 @@ This prevents the key from appearing in shell history or process listings.`,
 				BTCAddressHash: hex.EncodeToString(addressHash[:]),
 				BTCQAddress:    btcqAddress,
 				ChainID:        chainID,
+				MessageHash:    hex.EncodeToString(messageHash[:]),
 				ProofData:      hex.EncodeToString(proof.ToProtoZKProof()),
 			}
 
@@ -312,114 +325,24 @@ This prevents the key from appearing in shell history or process listings.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&privateKeyHex, "private-key", "", "Bitcoin private key in hex format (INSECURE - key persists in memory, use --stdin)")
-	cmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format (INSECURE - key persists in memory, use --stdin)")
-	cmd.Flags().BoolVar(&useStdin, "stdin", false, "Read private key securely from stdin (recommended)")
+	cmd.Flags().StringVar(&tssURL, "tss-url", "", "URL of the TSS signer API (required, e.g., http://localhost:8080)")
 	cmd.Flags().StringVar(&btcqAddress, "btcq-address", "", "Your qbtc chain address (required)")
 	cmd.Flags().StringVar(&chainID, "chain-id", "", "Chain ID for the proof (required, e.g., 'qbtc-1')")
+	cmd.Flags().StringVar(&addressHashHex, "address-hash", "", "Hash160 of your Bitcoin address in hex (required)")
 	cmd.Flags().StringVar(&setupDir, "setup-dir", "./zk-setup", "Directory containing setup files")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the proof (defaults to stdout)")
 
 	return cmd
 }
 
-// readPrivateKeySecurely reads a private key from stdin without echoing
-func readPrivateKeySecurely() (*big.Int, error) {
-	fmt.Print("Enter private key format (hex/wif): ")
-	reader := bufio.NewReader(os.Stdin)
-	format, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-	format = strings.TrimSpace(strings.ToLower(format))
-
-	fmt.Print("Enter private key: ")
-	// Read password without echoing (if terminal)
-	var keyBytes []byte
-	var readErr error
-	if term.IsTerminal(int(syscall.Stdin)) {
-		keyBytes, readErr = term.ReadPassword(int(syscall.Stdin))
-		fmt.Println() // Print newline after password input
-	} else {
-		// Non-interactive mode, read from pipe
-		keyInput, pipeErr := reader.ReadString('\n')
-		if pipeErr != nil {
-			return nil, pipeErr
-		}
-		keyBytes = []byte(strings.TrimSpace(keyInput))
-	}
-	if readErr != nil {
-		return nil, readErr
-	}
-
-	keyStr := strings.TrimSpace(string(keyBytes))
-	// Clear the key bytes from memory
-	for i := range keyBytes {
-		keyBytes[i] = 0
-	}
-
-	switch format {
-	case "hex":
-		return zk.PrivateKeyFromHex(keyStr)
-	case "wif":
-		return zk.PrivateKeyFromWIF(keyStr)
-	default:
-		return nil, fmt.Errorf("unknown format: %s (use 'hex' or 'wif')", format)
-	}
-}
-
 // addressCmd creates the address utility command
 func addressCmd() *cobra.Command {
-	var (
-		privateKeyHex string
-		privateKeyWIF string
-		btcAddress    string
-	)
+	var btcAddress string
 
 	cmd := &cobra.Command{
 		Use:   "address",
-		Short: "Utility commands for Bitcoin address operations",
-		Long:  "Compute Bitcoin address hash from private key or extract from address",
-	}
-
-	// Sub-command to get address hash from private key
-	fromKeyCmd := &cobra.Command{
-		Use:   "from-key",
-		Short: "Compute address hash from private key",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var privateKey *big.Int
-			var err error
-
-			if privateKeyHex != "" {
-				privateKey, err = zk.PrivateKeyFromHex(privateKeyHex)
-				if err != nil {
-					return fmt.Errorf("invalid private key hex: %w", err)
-				}
-			} else if privateKeyWIF != "" {
-				privateKey, err = zk.PrivateKeyFromWIF(privateKeyWIF)
-				if err != nil {
-					return fmt.Errorf("invalid WIF: %w", err)
-				}
-			} else {
-				return fmt.Errorf("must provide either --private-key or --wif")
-			}
-
-			addressHash, err := zk.PrivateKeyToAddressHash(privateKey)
-			if err != nil {
-				return fmt.Errorf("failed to compute address hash: %w", err)
-			}
-
-			fmt.Printf("Address Hash (Hash160): %s\n", hex.EncodeToString(addressHash[:]))
-			return nil
-		},
-	}
-	fromKeyCmd.Flags().StringVar(&privateKeyHex, "private-key", "", "Bitcoin private key in hex format")
-	fromKeyCmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format")
-
-	// Sub-command to extract address hash from Bitcoin address
-	fromAddressCmd := &cobra.Command{
-		Use:   "from-address",
 		Short: "Extract address hash from Bitcoin address (P2PKH/P2WPKH only)",
+		Long:  "Extract the Hash160 address hash from a Bitcoin address for use with --address-hash",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if btcAddress == "" {
 				return fmt.Errorf("--address is required")
@@ -434,10 +357,8 @@ func addressCmd() *cobra.Command {
 			return nil
 		},
 	}
-	fromAddressCmd.Flags().StringVar(&btcAddress, "address", "", "Bitcoin address")
 
-	cmd.AddCommand(fromKeyCmd, fromAddressCmd)
-
+	cmd.Flags().StringVar(&btcAddress, "address", "", "Bitcoin address (P2PKH or P2WPKH)")
 	return cmd
 }
 
@@ -446,5 +367,71 @@ type ProofOutput struct {
 	BTCAddressHash string `json:"btc_address_hash"`
 	BTCQAddress    string `json:"btcq_address"`
 	ChainID        string `json:"chain_id"`
+	MessageHash    string `json:"message_hash"`
 	ProofData      string `json:"proof_data"`
+}
+
+// TSSSignRequest is the request body for the TSS /sign endpoint
+type TSSSignRequest struct {
+	MessageHash string `json:"message_hash"`
+}
+
+// TSSSignatureData contains the ECDSA signature components from TSS
+type TSSSignatureData struct {
+	R string `json:"r"`
+	S string `json:"s"`
+	V int    `json:"v"`
+}
+
+// TSSSignResponse is the response from the TSS /sign endpoint
+type TSSSignResponse struct {
+	Signature TSSSignatureData `json:"signature"`
+	PublicKey string           `json:"public_key"`
+}
+
+// requestTSSSignature requests a signature from the TSS emulator
+func requestTSSSignature(tssURL string, messageHash [32]byte) (*TSSSignResponse, error) {
+	// Prepare request
+	reqBody := TSSSignRequest{
+		MessageHash: hex.EncodeToString(messageHash[:]),
+	}
+	reqBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Make HTTP request
+	resp, err := http.Post(tssURL+"/sign", "application/json", bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("TSS returned error: %s", string(respBody))
+	}
+
+	// Parse response
+	var signResp TSSSignResponse
+	if err := json.Unmarshal(respBody, &signResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &signResp, nil
+}
+
+// padTo32Bytes pads a byte slice to 32 bytes (left-padded with zeros)
+func padTo32Bytes(b []byte) []byte {
+	if len(b) >= 32 {
+		return b
+	}
+	padded := make([]byte, 32)
+	copy(padded[32-len(b):], b)
+	return padded
 }
