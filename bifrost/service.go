@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -15,6 +17,9 @@ import (
 	"github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/bitcoin"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/cometbft/cometbft/crypto"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/cometbft/cometbft/privval"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
@@ -24,16 +29,17 @@ import (
 // Service represents the bifrost service
 // it wire up all the components together
 type Service struct {
-	cfg       config.Config
-	logger    zerolog.Logger
-	btcClient *bitcoin.BtcClient
-	pubsub    *p2p.PubSubService
-	network   *p2p.Network
-	privKey   *keystore.PrivKey
-	db        *leveldb.DB
-	stopChan  chan struct{}
-	wg        *sync.WaitGroup
-	qclient   qclient.QBTCNode
+	cfg                 config.Config
+	logger              zerolog.Logger
+	btcClient           *bitcoin.BtcClient
+	pubsub              *p2p.PubSubService
+	network             *p2p.Network
+	privKey             *keystore.PrivKey
+	db                  *leveldb.DB
+	stopChan            chan struct{}
+	wg                  *sync.WaitGroup
+	qclient             qclient.QBTCNode
+	validatorPrivateKey crypto.PrivKey
 }
 
 func NewService(cfg config.Config) (*Service, error) {
@@ -72,17 +78,51 @@ func NewService(cfg config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create btc client: %w", err)
 	}
+	validatorPrivateKey, err := getValidatorKey(cfg.QBTCHome)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get validator private key: %w", err)
+	}
+	log.Info().Str("validator_address", validatorPrivateKey.PubKey().Address().String()).Msg("loaded validator private key")
 	return &Service{
-		cfg:       cfg,
-		network:   network,
-		privKey:   privKey,
-		db:        db,
-		btcClient: btcClient,
-		logger:    log.With().Str("module", "bifrost_service").Logger(),
-		stopChan:  make(chan struct{}),
-		wg:        &sync.WaitGroup{},
-		qclient:   qClient,
+		cfg:                 cfg,
+		network:             network,
+		privKey:             privKey,
+		db:                  db,
+		btcClient:           btcClient,
+		logger:              log.With().Str("module", "bifrost_service").Logger(),
+		stopChan:            make(chan struct{}),
+		wg:                  &sync.WaitGroup{},
+		qclient:             qClient,
+		validatorPrivateKey: validatorPrivateKey,
 	}, nil
+}
+
+func getValidatorKey(qbtcHome string) (crypto.PrivKey, error) {
+	homeFolder := qbtcHome
+	if homeFolder == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("fail to get validator key,err: %w", err)
+		}
+		homeFolder = filepath.Join(homeDir, ".qbtc")
+	}
+	validatorKeyPath := filepath.Join(homeFolder, "config", "priv_validator_key.json")
+	_, err := os.Stat(validatorKeyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("validator key file does not exist at path: %s", validatorKeyPath)
+		}
+	}
+	fileContent, err := os.ReadFile(validatorKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read validator key file: %w", err)
+	}
+	pvKey := privval.FilePVKey{}
+	err = cmtjson.Unmarshal(fileContent, &pvKey)
+	if err != nil {
+		return nil, fmt.Errorf("error reading PrivValidator key from %v: %w", validatorKeyPath, err)
+	}
+	return pvKey.PrivKey, nil
 }
 
 // Start starts the bifrost service
