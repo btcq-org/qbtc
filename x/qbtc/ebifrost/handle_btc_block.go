@@ -1,10 +1,12 @@
 package ebifrost
 
 import (
+	context "context"
+
 	"github.com/btcq-org/qbtc/x/qbtc/types"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-func (eb *EnshrinedBifrost) HandleBTCBlock(ctx sdk.Context, block *types.MsgBtcBlock) error {
-	return nil
+// SendBTCBlock  handles sending a BTC block to the EnshrinedBifrost.
+func (eb *EnshrinedBifrost) SendBTCBlock(ctx context.Context, block *types.MsgBtcBlock) (*SendBTCBlockResponse, error) {
+	return &SendBTCBlockResponse{}, nil
 }
