@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/gogo/protobuf/proto"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -22,18 +23,18 @@ import (
 const topic = "bifrost-bitcoin-block-gossip-sub"
 const DefaultTimeout = 10 * time.Second // in seconds
 type PubSubService struct {
-	pubsub             *pubsub.PubSub
-	host               host.Host
-	topic              *pubsub.Topic
-	logger             zerolog.Logger
-	stopchan           chan struct{}
-	wg                 *sync.WaitGroup
-	db                 *leveldb.DB
-	attestationService AttestationService
+	pubsub   *pubsub.PubSub
+	host     host.Host
+	topic    *pubsub.Topic
+	logger   zerolog.Logger
+	stopchan chan struct{}
+	wg       *sync.WaitGroup
+	db       *leveldb.DB
+	qbtcNode qclient.QBTCNode
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, attestationService AttestationService) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
@@ -61,6 +62,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		stopchan: make(chan struct{}),
 		wg:       &sync.WaitGroup{},
 		db:       db,
+		qbtcNode: qbtcNode,
 	}, nil
 }
 
@@ -132,6 +134,15 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if p.db == nil {
 		return fmt.Errorf("leveldb instance is nil")
 	}
+
+	if p.qbtcNode == nil {
+		return fmt.Errorf("qbtc node instance is nil")
+	}
+
+	if p.qbtcNode.VerifyAttestation(block) != nil {
+		return fmt.Errorf("failed to verify attestation")
+	}
+
 	key := block.GetKey()
 	existingContent, err := p.db.Get([]byte(key), nil)
 	if err != nil {
