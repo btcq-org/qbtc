@@ -112,6 +112,7 @@ func getValidatorKey(qbtcHome string) (crypto.PrivKey, error) {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("validator key file does not exist at path: %s", validatorKeyPath)
 		}
+		return nil, fmt.Errorf("error checking validator key file: %w", err)
 	}
 	fileContent, err := os.ReadFile(validatorKeyPath)
 	if err != nil {
