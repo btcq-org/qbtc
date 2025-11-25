@@ -301,7 +301,7 @@ func TestMultipleContracts(t *testing.T) {
 	require.Equal(t, uint64(2), codeID2)
 
 	// Instantiate multiple instances of the first code
-	// Use different accounts as verifier/beneficiary
+	// Use the same verifier/beneficiary for all instances
 	for i := 0; i < 3; i++ {
 		verifier := setup.Accounts[1]
 		beneficiary := setup.Accounts[2]
