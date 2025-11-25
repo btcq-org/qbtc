@@ -7,7 +7,8 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/ebifrost";
 
 // LocalhostBifrost exposes the enshrined bifrost control plane over gRPC.
 service LocalhostBifrost {
-  // SendBTCBlock sends a block to the btcq node once it has been validated with enough attestations.
+  // SendBTCBlock sends a block to the btcq node once it has been validated with
+  // enough attestations.
   rpc SendBTCBlock(.qbtc.qbtc.v1.MsgBtcBlock) returns (SendBTCBlockResponse);
   // SubscribeToEvents streams event notifications that match the requested
   // types.
