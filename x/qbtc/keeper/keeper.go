@@ -31,6 +31,12 @@ type Keeper struct {
 	Utxoes            collections.Map[string, types.UTXO]
 	NodePeerAddresses collections.Map[string, string]
 	ConstOverrides    collections.Map[string, int64]
+
+	// Airdrop collections
+	// AirdropEntries maps btc address hash (hex) to airdrop amount
+	AirdropEntries collections.Map[string, uint64]
+	// ClaimedAirdrops tracks which address hashes have claimed (hex -> claimed bool)
+	ClaimedAirdrops collections.Map[string, bool]
 }
 
 func NewKeeper(
@@ -54,6 +60,8 @@ func NewKeeper(
 		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
 		authKeeper:        authKeeper,
+		AirdropEntries:    collections.NewMap(sb, types.AirdropEntryKeys, "airdrop_entries", collections.StringKey, collections.Uint64Value),
+		ClaimedAirdrops:   collections.NewMap(sb, types.ClaimedAirdropKeys, "claimed_airdrops", collections.StringKey, collections.BoolValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {

@@ -26,5 +26,20 @@ func (gs GenesisState) Validate() error {
 			return fmt.Errorf("invalid peer address: %w", err)
 		}
 	}
+
+	// Validate airdrop entries
+	seenHashes := make(map[string]bool)
+	for i, entry := range gs.AirdropEntries {
+		if len(entry.AddressHash) != Hash160Length {
+			return fmt.Errorf("airdrop entry %d: invalid address hash length, expected %d bytes, got %d",
+				i, Hash160Length, len(entry.AddressHash))
+		}
+		hashKey := string(entry.AddressHash)
+		if seenHashes[hashKey] {
+			return fmt.Errorf("airdrop entry %d: duplicate address hash", i)
+		}
+		seenHashes[hashKey] = true
+	}
+
 	return nil
 }

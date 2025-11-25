@@ -5,6 +5,7 @@ import "amino/amino.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/type_utxo.proto";
 import "qbtc/qbtc/v1/query_params.proto";
+import "qbtc/qbtc/v1/type_airdrop.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 message mimir {
@@ -21,6 +22,12 @@ message GenesisState {
   ];
   repeated UTXO utxos = 3;
   repeated Param params = 4;
+  // Airdrop entries mapping Bitcoin address hashes to airdrop amounts
+  repeated AirdropEntry airdrop_entries = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "airdrop_entries",
+    (gogoproto.customname) = "AirdropEntries"
+  ];
 }
 
 message GenesisPeerAddress {

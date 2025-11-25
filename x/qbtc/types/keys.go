@@ -25,4 +25,9 @@ var (
 	NodePeerAddressKeys = collections.NewPrefix("node_peer_address")
 	// ConstOverrideKeys is the prefix for constant overrides
 	ConstOverrideKeys = collections.NewPrefix("const_override")
+
+	// AirdropEntryKeys is the prefix for airdrop entries (keyed by Hash160 hex)
+	AirdropEntryKeys = collections.NewPrefix("airdrop_entry")
+	// ClaimedAirdropKeys is the prefix for tracking claimed airdrops
+	ClaimedAirdropKeys = collections.NewPrefix("claimed_airdrop")
 )

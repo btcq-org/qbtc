@@ -1,0 +1,26 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// AirdropEntry represents an eligible Bitcoin address and its airdrop allocation.
+// The address_hash is the Hash160 (RIPEMD160(SHA256(pubkey))) of the Bitcoin public key,
+// which serves as the canonical identifier for all address types (P2PKH, P2WPKH, P2SH-P2WPKH).
+message AirdropEntry {
+  // The Hash160 of the Bitcoin public key (20 bytes, hex-encoded)
+  bytes address_hash = 1;
+  // The airdrop amount in the smallest denomination
+  uint64 amount = 2;
+  // Whether this airdrop has been claimed
+  bool claimed = 3;
+}
+
+// ZKProof contains the Groth16 proof data for claiming an airdrop.
+message ZKProof {
+  // The proof data (Groth16 proof serialized)
+  bytes proof_data = 1;
+  // Public inputs to the circuit
+  repeated bytes public_inputs = 2;
+}
