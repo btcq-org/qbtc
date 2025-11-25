@@ -140,9 +140,9 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	}
 
 	// max 1 second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-	defer cancel()
-	if p.qbtcNode.VerifyAttestation(ctx, block) != nil {
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer verifyCancel()
+	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
 		return fmt.Errorf("failed to verify attestation")
 	}
 
@@ -173,8 +173,10 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if err != nil {
 		return err
 	}
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer checkCancel()
 	// consensus reached
-	if err := p.qbtcNode.CheckAttestationsSuperMajority(ctx, &msgBlock); err == nil {
+	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, &msgBlock); err == nil {
 		//TODO: Send block to network
 		p.logger.Info().Msg("sending block to network")
 	}
