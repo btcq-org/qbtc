@@ -53,12 +53,10 @@ func (c *Client) VerifyAttestation(ctx context.Context, block types.BlockGossip)
 	return nil
 }
 
-func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attestations []*types.Attestation) error {
-	if len(attestations) == 0 {
+func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.MsgBtcBlock) error {
+	if msg == nil {
 		return fmt.Errorf("no attestations provided")
 	}
-
-	ctx := context.Background()
 
 	// Get all active validators
 	activeValidators, err := c.ActiveValidators(ctx)
@@ -84,11 +82,11 @@ func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attesta
 	}
 
 	// Track processed validators to avoid duplicates
-	processedValidators := make(map[string]bool, len(attestations))
+	processedValidators := make(map[string]bool, len(msg.Attestations))
 	validPower := math.ZeroInt()
 
 	// Iterate through attestations and verify each one
-	for _, attestation := range attestations {
+	for _, attestation := range msg.Attestations {
 		if attestation == nil {
 			c.logger.Warn().Msg("skipping nil attestation")
 			continue
@@ -132,7 +130,7 @@ func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attesta
 		}
 
 		// Verify signature against block content
-		if publicKey.VerifySignature(block.BlockContent, attestation.Signature) {
+		if publicKey.VerifySignature(msg.BlockContent, attestation.Signature) {
 			validatorPower := math.NewInt(validator.ConsensusPower(sdk.DefaultPowerReduction))
 			validPower = validPower.Add(validatorPower)
 
@@ -162,8 +160,8 @@ func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attesta
 		Str("valid_power", validPower.String()).
 		Str("required_power", requiredPower.String()).
 		Str("total_power", totalVotingPower.String()).
-		Uint64("height", block.Height).
-		Str("hash", block.Hash).
+		Uint64("height", msg.Height).
+		Str("hash", msg.Hash).
 		Msg("supermajority attestation verified")
 
 	return nil

@@ -168,6 +168,11 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("block content mismatch for block %s at height %d", block.Hash, block.Height)
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
+
+	if err := p.qbtcNode.CheckAttestationsSuperMajority(ctx, &msgBlock); err != nil {
+		return fmt.Errorf("failed to check attestations super majority: %w", err)
+	}
+
 	// TODO: when it reach consensus , then sign and submit it to ebifrost
 	return p.saveMsgBtcBlock(msgBlock)
 }
@@ -215,8 +220,4 @@ func (p *PubSubService) Stop() error {
 		}
 	}
 	return nil
-}
-
-type AttestationService interface {
-	VerifyAttestation(block types.BlockGossip) error
 }
