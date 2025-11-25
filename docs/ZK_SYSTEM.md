@@ -1,7 +1,7 @@
 # ZK Proof System Documentation
 
 ## Overview
-The qbtc ZK proof system enables users to claim UTXOs by proving ownership of a Bitcoin address without revealing their private or public key. It uses the PLONK proof system to generate zero-knowledge proofs that are verified on-chain.
+The qbtc ZK proof system enables users to claim UTXOs by proving ownership of a Bitcoin address without revealing their private or public key. It uses the PLONK proof system with KZG commitments to generate zero-knowledge proofs that are verified on-chain.
 
 ## Claim Pathways
 
@@ -39,10 +39,11 @@ All claim pathways call `ClaimUTXO(ctx, txid, vout, recipient)`:
 ## System Specifications
 - **Proof System**: PLONK (with KZG commitments)
 - **Curve**: BN254 (also known as BN128)
-- **Constraint System**: R1CS / Sparse Constraint System (SCS)
+- **Constraint System**: SCS (Sparse Constraint System for PLONK)
+- **Library**: [gnark](https://github.com/ConsenSys/gnark)
 - **Trusted Setup**: Requires a structured reference string (SRS).
   - **Production**: Uses the **Hermez/Polygon Powers of Tau** ceremony (Power 20, ~1M constraints).
-  - **Development**: Can use insecure test SRS.
+  - **Development**: Can use insecure test SRS (via `--test` flag).
 
 ## Circuit Logic (`BTCAddressCircuit`)
 The circuit proves knowledge of a Bitcoin private key that corresponds to a public Bitcoin address (Hash160).
@@ -57,7 +58,7 @@ The circuit proves knowledge of a Bitcoin private key that corresponds to a publ
 
 ### Constraints & Verification
 1.  **Key Derivation**: Computes `PublicKey = PrivateKey * G` using emulated secp256k1 arithmetic.
-2.  **Compression**: Compresses the public key (33 bytes).
+2.  **Compression**: Compresses the public key (33 bytes with 0x02/0x03 prefix).
 3.  **Hashing**: Computes `Hash160 = RIPEMD160(SHA256(CompressedPublicKey))`.
 4.  **Assertion**: Enforces `ComputedHash160 == AddressHash`.
 5.  **Binding**: The proof is cryptographically bound to the `BTCQAddressHash` and `ChainID` via PLONK's public input mechanism.
@@ -94,36 +95,139 @@ This is efficient for users with multiple UTXOs from the same wallet.
    - `utxos`: List of `{txid, vout}` pairs to claim.
    - `proof`: The ZK proof data.
 
-2. Validation:
+2. Validation (`ValidateBasic`):
+   - `claimer` is a valid bech32 address.
+   - At least 1 UTXO, at most 50 UTXOs.
+   - Each UTXO has a valid 64-character hex txid.
+   - No duplicate UTXOs in the batch.
+   - Proof size: min 100 bytes, max 50KB.
+
+3. Handler Validation:
    - All UTXOs must exist and have `EntitledAmount > 0`.
    - All UTXOs must belong to the **same Bitcoin address**.
    - The ZK proof must be valid for that address.
 
-3. Execution (atomic):
-   - If proof is valid, all UTXOs are claimed atomically.
+4. Execution (atomic):
+   - If proof is valid, all UTXOs are claimed atomically using cache context.
    - Total amount is minted to the `claimer` address.
    - Each UTXO's `EntitledAmount` is set to 0.
 
-4. If any UTXO fails validation, the entire batch is rejected.
+5. If any UTXO fails validation, the entire batch is rejected.
 
 ## Security Assumptions & Features
-1.  **Trusted Setup**: Relies on the security of the Hermez Powers of Tau ceremony. As long as one participant was honest, the setup is secure.
-2.  **Front-Running Protection**: The proof includes the recipient's qbtc address (`BTCQAddressHash`) as a public input. Only the designated recipient can use the proof.
-3.  **Replay Protection**:
-    -   **Cross-Chain**: The `ChainID` public input prevents proofs from being replayed on other chains (e.g., testnet vs mainnet).
-    -   **On-Chain**: `ClaimUTXO` sets `EntitledAmount = 0` after claiming, preventing double-spending.
-4.  **UTXO Binding**: The user specifies which UTXO (`txid:vout`) they are claiming. The proof is verified against the address locked in that specific UTXO.
+
+### 1. Trusted Setup
+Relies on the security of the Hermez Powers of Tau ceremony. As long as one participant was honest, the setup is secure. The SRS is downloaded from `https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_XX.ptau`.
+
+### 2. Front-Running Protection
+The proof includes the recipient's qbtc address (`BTCQAddressHash`) as a public input. Only the designated recipient can use the proof. If an attacker intercepts the proof, they cannot redirect funds to their own address.
+
+### 3. Replay Protection
+- **Cross-Chain**: The `ChainID` public input (first 8 bytes of SHA256(chain_id)) prevents proofs from being replayed on other chains (e.g., testnet vs mainnet).
+- **On-Chain**: `ClaimUTXO` sets `EntitledAmount = 0` after claiming, preventing double-spending.
+
+### 4. UTXO Binding
+The user specifies which UTXO (`txid:vout`) they are claiming. The proof is verified against the address locked in that specific UTXO, not just any address.
+
+### 5. Verifier Immutability
+The global verifier can only be initialized once at node startup. Subsequent calls to `RegisterVerifier` return `ErrVerifierAlreadyInitialized`, preventing malicious VK replacement attacks.
+
+### 6. Memory Security
+The `zkprover` CLI securely clears private key material from memory after use:
+- `big.Int` values are zeroed via `SetInt64(0)`.
+- Byte slices are explicitly zeroed.
+- Interactive stdin mode (`--stdin`) prevents keys from appearing in shell history.
 
 ## Requirements
--   **Prover**:
-    -   Requires `zkprover` CLI tool.
-    -   Access to `proving.key` and `circuit.cs`.
-    -   Sufficient RAM to hold the SRS and circuit witness (~4-8GB).
--   **Verifier (On-Chain)**:
-    -   `verifying.key` must be embedded in the chain genesis.
-    -   Lightweight verification (constant time/size with KZG).
+
+### Prover (User)
+- `zkprover` CLI tool
+- Access to `proving.key` and `circuit.cs` files (generated via `zkprover setup`)
+- Sufficient RAM to hold the SRS and circuit witness (~4-8GB)
+
+### Verifier (On-Chain)
+- `verifying.key` must be embedded in chain genesis as `zk_verifying_key` (hex-encoded)
+- Lightweight verification (constant time/size with KZG)
+- Verifying key is registered once at node startup from genesis
 
 ## Usage
-1.  **Setup**: Run `zkprover setup` to download SRS and generate keys.
-2.  **Prove**: Run `zkprover prove` with private key, txid, vout, and destination details.
-3.  **Verify**: Submit `MsgClaimWithProof` to the chain; the node verifies it against the embedded verifying key and the UTXO's address.
+
+### 1. Setup (One-Time)
+
+Generate the proving and verifying keys:
+
+```bash
+# Production setup (uses Hermez ceremony SRS)
+zkprover setup --output ./zk-setup
+
+# Development/testing only (UNSAFE - do not use in production!)
+zkprover setup --output ./zk-setup --test
+```
+
+Output files:
+- `circuit.cs` - Compiled constraint system
+- `proving.key` - Used for proof generation
+- `verifying.key` - Binary format for embedding
+- `verifying.key.hex` - Hex format for genesis.json
+
+### 2. Generate Proof
+
+```bash
+# Recommended: Interactive mode (secure)
+zkprover prove --stdin \
+  --btcq-address qbtc1... \
+  --chain-id qbtc-1 \
+  --setup-dir ./zk-setup \
+  --output proof.json
+
+# Alternative: Direct key input (less secure)
+zkprover prove \
+  --private-key <hex> \
+  --btcq-address qbtc1... \
+  --chain-id qbtc-1 \
+  --setup-dir ./zk-setup
+```
+
+Output format:
+```json
+{
+  "btc_address_hash": "abc123...",
+  "btcq_address": "qbtc1...",
+  "chain_id": "qbtc-1",
+  "proof_data": "..."
+}
+```
+
+### 3. Address Utilities
+
+```bash
+# Get address hash from private key
+zkprover address from-key --private-key <hex>
+zkprover address from-key --wif <wif>
+
+# Extract address hash from Bitcoin address (P2PKH/P2WPKH)
+zkprover address from-address --address bc1q...
+```
+
+### 4. Submit Claim
+
+Submit `MsgClaimWithProof` to the chain with:
+- `claimer`: Your qbtc address
+- `utxos`: Array of `{txid, vout}` pairs
+- `proof`: The proof data from step 2
+
+The node verifies the proof against the embedded verifying key and the UTXO's address, then mints tokens to the claimer.
+
+## Proof Format
+
+The proof is serialized as:
+```
+[4 bytes: proof length (big-endian)] [proof data] [public inputs]
+```
+
+- Proof data: PLONK proof (~1KB)
+- Public inputs: Serialized witness values for verification
+
+Size limits:
+- Minimum: 100 bytes
+- Maximum: 50KB (message level), 1MB (internal parsing)

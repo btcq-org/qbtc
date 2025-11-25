@@ -32,9 +32,6 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 		}
 	}
 
-	// AirdropEntries are deprecated/removed in favor of using the UTXO set directly.
-	// Genesis loading for AirdropEntries is skipped.
-
 	// Initialize ZK verifying key from genesis
 	if len(genState.ZkVerifyingKey) > 0 {
 		// Store the VK in state
@@ -89,10 +86,6 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 		return nil, fmt.Errorf("failed to export params: %w", err)
 	}
 	genesis.Params = params
-
-	// Airdrop entries are no longer exported as they are removed/deprecated.
-	// If legacy entries existed, they would be converted to UTXOs or ignored.
-	genesis.AirdropEntries = []types.AirdropEntry{}
 
 	// Export ZK verifying key
 	zkVK, err := k.ZkVerifyingKey.Get(ctx)

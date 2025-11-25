@@ -26,10 +26,6 @@ var (
 	// ConstOverrideKeys is the prefix for constant overrides
 	ConstOverrideKeys = collections.NewPrefix("const_override")
 
-	// AirdropEntryKeys is the prefix for airdrop entries (keyed by Hash160 hex)
-	// Deprecated: Use UTXO set instead
-	AirdropEntryKeys = collections.NewPrefix("airdrop_entry")
-
 	// ZkVerifyingKeyKey stores the PLONK verifying key for ZK proof verification
 	ZkVerifyingKeyKey = collections.NewPrefix("zk_verifying_key")
 )

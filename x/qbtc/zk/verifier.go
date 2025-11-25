@@ -31,6 +31,10 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 
 // VerifyProof verifies a PLONK proof for a Bitcoin address claim.
 func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
+	if proof == nil {
+		return fmt.Errorf("proof cannot be nil")
+	}
+
 	// Deserialize the proof
 	plonkProof := plonk.NewProof(ecc.BN254)
 	_, err := plonkProof.ReadFrom(bytes.NewReader(proof.ProofData))

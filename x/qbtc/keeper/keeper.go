@@ -32,11 +32,6 @@ type Keeper struct {
 	NodePeerAddresses collections.Map[string, string]
 	ConstOverrides    collections.Map[string, int64]
 
-	// Airdrop collections
-	// AirdropEntries maps btc address hash (hex) to airdrop amount
-	// DEPRECATED: Claims now use the UTXO set directly.
-	// AirdropEntries collections.Map[string, uint64]
-
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
@@ -63,7 +58,6 @@ func NewKeeper(
 		Utxoes:            collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
 		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		// AirdropEntries:    collections.NewMap(sb, types.AirdropEntryKeys, "airdrop_entries", collections.StringKey, collections.Uint64Value),
 		ZkVerifyingKey:    collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
 	}
 	schema, err := sb.Build()

@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/hex"
+	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	se "github.com/cosmos/cosmos-sdk/types/errors"
@@ -70,7 +71,7 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 		}
 
 		// Check for duplicates
-		key := utxo.Txid + ":" + string(rune(utxo.Vout))
+		key := fmt.Sprintf("%s:%d", utxo.Txid, utxo.Vout)
 		if seen[key] {
 			return se.ErrInvalidRequest.Wrapf("utxo[%d]: duplicate UTXO reference (txid=%s, vout=%d)", i, utxo.Txid, utxo.Vout)
 		}

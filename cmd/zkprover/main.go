@@ -190,30 +190,39 @@ This prevents the key from appearing in shell history or process listings.`,
 				if err != nil {
 					return fmt.Errorf("failed to read private key: %w", err)
 				}
-			} else if privateKeyHex != "" {
-				fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
-				fmt.Fprintln(os.Stderr, "         Consider using --stdin for better security.")
-				privateKey, err = zk.PrivateKeyFromHex(privateKeyHex)
-				if err != nil {
-					return fmt.Errorf("invalid private key hex: %w", err)
-				}
-			} else if privateKeyWIF != "" {
-				fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
-				fmt.Fprintln(os.Stderr, "         Consider using --stdin for better security.")
-				privateKey, err = zk.PrivateKeyFromWIF(privateKeyWIF)
-				if err != nil {
-					return fmt.Errorf("invalid WIF: %w", err)
-				}
-			} else {
-				return fmt.Errorf("must provide either --stdin, --private-key, or --wif")
+		} else if privateKeyHex != "" {
+			// SECURITY NOTE: Command-line arguments remain in memory and cannot be cleared.
+			// Go strings are immutable, so privateKeyHex will persist in memory until GC.
+			// Additionally, the key may be visible in shell history and process listings.
+			// For security-sensitive operations, always use --stdin instead.
+			fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
+			fmt.Fprintln(os.Stderr, "         The key will remain in memory and may appear in shell history.")
+			fmt.Fprintln(os.Stderr, "         Use --stdin for better security.")
+			privateKey, err = zk.PrivateKeyFromHex(privateKeyHex)
+			if err != nil {
+				return fmt.Errorf("invalid private key hex: %w", err)
 			}
+		} else if privateKeyWIF != "" {
+			// SECURITY NOTE: Same as above - WIF string cannot be cleared from memory.
+			fmt.Fprintln(os.Stderr, "WARNING: Passing private key via command line is insecure.")
+			fmt.Fprintln(os.Stderr, "         The key will remain in memory and may appear in shell history.")
+			fmt.Fprintln(os.Stderr, "         Use --stdin for better security.")
+			privateKey, err = zk.PrivateKeyFromWIF(privateKeyWIF)
+			if err != nil {
+				return fmt.Errorf("invalid WIF: %w", err)
+			}
+		} else {
+			return fmt.Errorf("must provide either --stdin, --private-key, or --wif")
+		}
 
-			// Clear private key from memory when done
-			defer func() {
-				if privateKey != nil {
-					privateKey.SetInt64(0)
-				}
-			}()
+		// Clear the big.Int private key from memory when done.
+		// Note: The original string arguments (privateKeyHex/privateKeyWIF) cannot be
+		// cleared because Go strings are immutable. This is why --stdin is recommended.
+		defer func() {
+			if privateKey != nil {
+				privateKey.SetInt64(0)
+			}
+		}()
 
 			if btcqAddress == "" {
 				return fmt.Errorf("--btcq-address is required")
@@ -303,8 +312,8 @@ This prevents the key from appearing in shell history or process listings.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&privateKeyHex, "private-key", "", "Bitcoin private key in hex format (INSECURE - use --stdin instead)")
-	cmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format (INSECURE - use --stdin instead)")
+	cmd.Flags().StringVar(&privateKeyHex, "private-key", "", "Bitcoin private key in hex format (INSECURE - key persists in memory, use --stdin)")
+	cmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format (INSECURE - key persists in memory, use --stdin)")
 	cmd.Flags().BoolVar(&useStdin, "stdin", false, "Read private key securely from stdin (recommended)")
 	cmd.Flags().StringVar(&btcqAddress, "btcq-address", "", "Your qbtc chain address (required)")
 	cmd.Flags().StringVar(&chainID, "chain-id", "", "Chain ID for the proof (required, e.g., 'qbtc-1')")
@@ -327,19 +336,20 @@ func readPrivateKeySecurely() (*big.Int, error) {
 	fmt.Print("Enter private key: ")
 	// Read password without echoing (if terminal)
 	var keyBytes []byte
+	var readErr error
 	if term.IsTerminal(int(syscall.Stdin)) {
-		keyBytes, err = term.ReadPassword(int(syscall.Stdin))
+		keyBytes, readErr = term.ReadPassword(int(syscall.Stdin))
 		fmt.Println() // Print newline after password input
 	} else {
 		// Non-interactive mode, read from pipe
-		keyInput, err := reader.ReadString('\n')
-		if err != nil {
-			return nil, err
+		keyInput, pipeErr := reader.ReadString('\n')
+		if pipeErr != nil {
+			return nil, pipeErr
 		}
 		keyBytes = []byte(strings.TrimSpace(keyInput))
 	}
-	if err != nil {
-		return nil, err
+	if readErr != nil {
+		return nil, readErr
 	}
 
 	keyStr := strings.TrimSpace(string(keyBytes))

@@ -187,8 +187,13 @@ func NewBTCAddressCircuitPlaceholder() *BTCAddressCircuit {
 func (c *BTCAddressCircuit) GetAddressHashBytes() [20]byte {
 	var result [20]byte
 	for i := 0; i < 20; i++ {
-		if v, ok := c.AddressHash[i].(int); ok {
+		switch v := c.AddressHash[i].(type) {
+		case int:
 			result[i] = byte(v)
+		case uint64:
+			result[i] = byte(v)
+		case byte:
+			result[i] = v
 		}
 	}
 	return result

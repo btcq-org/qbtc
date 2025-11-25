@@ -217,7 +217,7 @@ func BitcoinAddressToHash160(address string) ([20]byte, error) {
 	case len(address) > 0 && address[0] == '1':
 		// P2PKH address - decode base58check and extract hash160
 		decoded := base58Decode(address)
-		if decoded == nil || len(decoded) < 25 {
+		if len(decoded) < 25 {
 			return result, fmt.Errorf("invalid P2PKH address")
 		}
 		// Skip version byte, take next 20 bytes

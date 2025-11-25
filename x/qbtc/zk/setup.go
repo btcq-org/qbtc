@@ -2,6 +2,7 @@ package zk
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254"
@@ -74,7 +76,11 @@ type SetupOptions struct {
 // DefaultSetupOptions returns default setup options for production.
 // It will download and cache the Hermez Powers of Tau SRS.
 func DefaultSetupOptions() SetupOptions {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to current directory with clear indication
+		homeDir = "."
+	}
 	return SetupOptions{
 		Mode:      SetupModeDownload,
 		CacheDir:  filepath.Join(homeDir, ".qbtc", "zk-cache"),
@@ -248,7 +254,13 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (kz
 	fmt.Printf("Downloading Hermez Powers of Tau (2^%d)...\n", power)
 	ptauURL := fmt.Sprintf(HermezPtauURL, power)
 
-	resp, err := http.Get(ptauURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ptauURL, nil)
+	if err != nil {
+		return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("failed to download PTAU: %w", err)
 	}
@@ -258,8 +270,9 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (kz
 		return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("failed to download PTAU: HTTP %d", resp.StatusCode)
 	}
 
-	// Read the PTAU file
-	ptauData, err := io.ReadAll(resp.Body)
+	// Read the PTAU file with size limit (PTAU files can be large but should be bounded)
+	const maxPtauSize = 2 * 1024 * 1024 * 1024 // 2GB max
+	ptauData, err := io.ReadAll(io.LimitReader(resp.Body, maxPtauSize))
 	if err != nil {
 		return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("failed to read PTAU data: %w", err)
 	}
@@ -349,6 +362,11 @@ func ConvertPtauToGnarkSRS(ptauData []byte, size int) (kzg.SRS, error) {
 
 		if uint64(offset)+sectionLen > uint64(len(ptauData)) {
 			return kzg.SRS{}, fmt.Errorf("section exceeds file length")
+		}
+
+		// Guard against integer overflow on 32-bit systems
+		if sectionLen > uint64(^uint(0)>>1) {
+			return kzg.SRS{}, fmt.Errorf("section length %d exceeds maximum int size", sectionLen)
 		}
 
 		sectionData := ptauData[offset : offset+int(sectionLen)]

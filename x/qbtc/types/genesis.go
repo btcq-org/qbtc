@@ -10,8 +10,10 @@ import (
 )
 
 // MinVerifyingKeySize is the minimum valid verifying key size.
-// A valid PLONK verifying key for BN254 should be at least a few hundred bytes.
-const MinVerifyingKeySize = 100
+// A valid PLONK verifying key for BN254 is typically tens of kilobytes.
+// Empirically, even a minimal circuit (1 constraint) produces a VK of ~34KB.
+// We set a conservative lower bound to catch obviously truncated/invalid keys.
+const MinVerifyingKeySize = 1024
 
 // MaxVerifyingKeySize is the maximum allowed verifying key size (1MB).
 // This prevents DoS via oversized VK in genesis.
@@ -36,20 +38,6 @@ func (gs GenesisState) Validate() error {
 		if err := ValidatePeerAddress(nodePeerAddress.PeerAddress); err != nil {
 			return fmt.Errorf("invalid peer address: %w", err)
 		}
-	}
-
-	// Validate airdrop entries
-	seenHashes := make(map[string]bool)
-	for i, entry := range gs.AirdropEntries {
-		if len(entry.AddressHash) != Hash160Length {
-			return fmt.Errorf("airdrop entry %d: invalid address hash length, expected %d bytes, got %d",
-				i, Hash160Length, len(entry.AddressHash))
-		}
-		hashKey := string(entry.AddressHash)
-		if seenHashes[hashKey] {
-			return fmt.Errorf("airdrop entry %d: duplicate address hash", i)
-		}
-		seenHashes[hashKey] = true
 	}
 
 	// Validate ZK verifying key if present
