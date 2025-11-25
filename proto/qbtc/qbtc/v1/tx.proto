@@ -25,7 +25,8 @@ service Msg {
   // module.
   rpc GovClaimUTXO(MsgGovClaimUTXO) returns (MsgEmpty);
   rpc UpdateParam(MsgUpdateParam) returns (MsgEmpty);
-  // ClaimWithProof allows users to claim their airdrop using a ZK proof of Bitcoin address ownership.
+  // ClaimWithProof allows users to claim their airdrop using a ZK proof of
+  // Bitcoin address ownership.
   rpc ClaimWithProof(MsgClaimWithProof) returns (MsgClaimWithProofResponse);
 }
 

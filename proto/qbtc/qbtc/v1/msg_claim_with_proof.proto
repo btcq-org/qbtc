@@ -16,10 +16,11 @@ message UTXORef {
   uint32 vout = 2;
 }
 
-// MsgClaimWithProof is the message for claiming one or more UTXOs using a ZK proof.
-// The user proves ownership of a Bitcoin address without revealing their private key.
-// All UTXOs must belong to the same Bitcoin address (the one proven in the ZK proof).
-// Maximum 50 UTXOs can be claimed in a single batch to prevent DoS.
+// MsgClaimWithProof is the message for claiming one or more UTXOs using a ZK
+// proof. The user proves ownership of a Bitcoin address without revealing
+// their private key. All UTXOs must belong to the same Bitcoin address (the
+// one proven in the ZK proof). Maximum 50 UTXOs can be claimed in a single
+// batch to prevent DoS.
 message MsgClaimWithProof {
   option (cosmos.msg.v1.signer) = "claimer";
   option (amino.name) = "qbtc/MsgClaimWithProof";
@@ -29,10 +30,11 @@ message MsgClaimWithProof {
 
   // The UTXOs to claim. All must belong to the same Bitcoin address.
   // Maximum 50 UTXOs per batch.
-  repeated UTXORef utxos = 2 [(gogoproto.nullable) = false];
+  repeated UTXORef utxos = 2 [ (gogoproto.nullable) = false ];
 
-  // The ZK proof proving ownership of the Bitcoin address that controls these UTXOs
-  ZKProof proof = 3 [(gogoproto.nullable) = false];
+  // The ZK proof proving ownership of the Bitcoin address that controls
+  // these UTXOs
+  ZKProof proof = 3 [ (gogoproto.nullable) = false ];
 }
 
 // MsgClaimWithProofResponse is the response for a successful batch claim.
@@ -42,4 +44,3 @@ message MsgClaimWithProofResponse {
   // The number of UTXOs successfully claimed
   uint32 utxos_claimed = 2;
 }
-
