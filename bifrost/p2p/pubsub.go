@@ -169,12 +169,16 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
 
-	if err := p.qbtcNode.CheckAttestationsSuperMajority(ctx, &msgBlock); err != nil {
-		return fmt.Errorf("failed to check attestations super majority: %w", err)
+	err = p.saveMsgBtcBlock(msgBlock)
+	if err != nil {
+		return err
 	}
-
-	// TODO: when it reach consensus , then sign and submit it to ebifrost
-	return p.saveMsgBtcBlock(msgBlock)
+	// consensus reached
+	if err := p.qbtcNode.CheckAttestationsSuperMajority(ctx, &msgBlock); err == nil {
+		//TODO: Send block to network
+		p.logger.Info().Msg("sending block to network")
+	}
+	return nil
 }
 
 func (p *PubSubService) saveMsgBtcBlock(msgBlock types.MsgBtcBlock) error {
