@@ -216,14 +216,18 @@ func (s *Service) getBtcBlock(height int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to compress block content at height %d: %w", height, err)
 	}
-
+	sig, err := s.validatorPrivateKey.Sign(compressedContent)
+	if err != nil {
+		return fmt.Errorf("failed to sign block content at height %d: %w", height, err)
+	}
+	s.logger.Info().Msgf("signature length for block at height %d: %d", height, len(sig))
 	blockGassip := types.BlockGossip{
 		Hash:         block.Hash,
 		Height:       uint64(block.Height),
 		BlockContent: compressedContent,
 		Attestation: &types.Attestation{
-			Address:   "",       // TODO: fill in the attestor address
-			Signature: []byte{}, // TODO: fill in the attestation signature
+			Address:   s.validatorPrivateKey.PubKey().Address().String(),
+			Signature: sig,
 		},
 	}
 	return s.pubsub.Publish(blockGassip)
