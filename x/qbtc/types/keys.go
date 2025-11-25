@@ -27,14 +27,9 @@ var (
 	ConstOverrideKeys = collections.NewPrefix("const_override")
 
 	// AirdropEntryKeys is the prefix for airdrop entries (keyed by Hash160 hex)
+	// Deprecated: Use UTXO set instead
 	AirdropEntryKeys = collections.NewPrefix("airdrop_entry")
-	// ClaimedAirdropKeys is the prefix for tracking claimed airdrops
-	ClaimedAirdropKeys = collections.NewPrefix("claimed_airdrop")
 
-	// ZKEntropyStateKey is the key for the ZK entropy collection state
-	ZKEntropyStateKey = collections.NewPrefix("zk_entropy_state")
-	// ZKEntropySubmissionsKey is the prefix for individual validator entropy submissions
-	ZKEntropySubmissionsKey = collections.NewPrefix("zk_entropy_submissions")
-	// ZKSetupKeysKey is the key for the finalized ZK setup keys
-	ZKSetupKeysKey = collections.NewPrefix("zk_setup_keys")
+	// ZkVerifyingKeyKey stores the PLONK verifying key for ZK proof verification
+	ZkVerifyingKeyKey = collections.NewPrefix("zk_verifying_key")
 )

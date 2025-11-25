@@ -10,6 +10,13 @@ import (
 	"golang.org/x/crypto/ripemd160"
 )
 
+// secp256k1Order is the order of the secp256k1 curve (n).
+// Private keys must be in the range [1, n-1].
+var secp256k1Order = func() *big.Int {
+	n, _ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
+	return n
+}()
+
 // Hash160 computes RIPEMD160(SHA256(data))
 func Hash160(data []byte) []byte {
 	sha := sha256.Sum256(data)
@@ -18,12 +25,43 @@ func Hash160(data []byte) []byte {
 	return ripemd.Sum(nil)
 }
 
-// PrivateKeyToAddressHash computes the Bitcoin address hash (Hash160) from a private key
+// ValidatePrivateKey checks if a private key is in the valid range for secp256k1.
+// Valid range is [1, n-1] where n is the curve order.
+func ValidatePrivateKey(privateKey *big.Int) error {
+	if privateKey == nil {
+		return fmt.Errorf("private key is nil")
+	}
+	if privateKey.Sign() <= 0 {
+		return fmt.Errorf("private key must be positive")
+	}
+	if privateKey.Cmp(secp256k1Order) >= 0 {
+		return fmt.Errorf("private key must be less than curve order")
+	}
+	return nil
+}
+
+// PrivateKeyToAddressHash computes the Bitcoin address hash (Hash160) from a private key.
+// Returns an error if the private key is not in the valid range [1, n-1].
 func PrivateKeyToAddressHash(privateKey *big.Int) ([20]byte, error) {
 	var result [20]byte
 
+	// Validate private key range
+	if err := ValidatePrivateKey(privateKey); err != nil {
+		return result, fmt.Errorf("invalid private key: %w", err)
+	}
+
 	// Create the private key on secp256k1
-	privKey, _ := btcec.PrivKeyFromBytes(privateKey.Bytes())
+	// Pad to 32 bytes to ensure correct handling
+	pkBytes := make([]byte, 32)
+	privateKey.FillBytes(pkBytes)
+	privKey, _ := btcec.PrivKeyFromBytes(pkBytes)
+
+	// Verify the key wasn't modified (sanity check)
+	reconstructed := new(big.Int).SetBytes(privKey.Serialize())
+	if reconstructed.Cmp(privateKey) != 0 {
+		return result, fmt.Errorf("private key was modified during parsing (got %s, expected %s)",
+			reconstructed.Text(16), privateKey.Text(16))
+	}
 
 	// Get the compressed public key (33 bytes)
 	compressedPubKey := privKey.PubKey().SerializeCompressed()
@@ -208,9 +246,12 @@ func BitcoinAddressToHash160(address string) ([20]byte, error) {
 	return result, nil
 }
 
-// bech32Decode decodes a bech32 address (simplified implementation)
+// bech32Decode decodes a bech32 address with proper checksum validation.
 func bech32Decode(address string) (string, []byte, error) {
-	// Find the separator
+	// Convert to lowercase for processing
+	address = toLowerASCII(address)
+
+	// Find the separator (last occurrence of '1')
 	sepIdx := -1
 	for i := len(address) - 1; i >= 0; i-- {
 		if address[i] == '1' {
@@ -220,6 +261,12 @@ func bech32Decode(address string) (string, []byte, error) {
 	}
 	if sepIdx == -1 {
 		return "", nil, fmt.Errorf("no separator found")
+	}
+	if sepIdx < 1 {
+		return "", nil, fmt.Errorf("HRP too short")
+	}
+	if len(address)-sepIdx-1 < 6 {
+		return "", nil, fmt.Errorf("data part too short")
 	}
 
 	hrp := address[:sepIdx]
@@ -231,15 +278,20 @@ func bech32Decode(address string) (string, []byte, error) {
 	for _, c := range dataPart {
 		idx := -1
 		for i, ch := range charset {
-			if ch == c {
+			if ch == rune(c) {
 				idx = i
 				break
 			}
 		}
 		if idx == -1 {
-			return "", nil, fmt.Errorf("invalid character in data part")
+			return "", nil, fmt.Errorf("invalid character in data part: %c", c)
 		}
 		data = append(data, byte(idx))
+	}
+
+	// Verify checksum
+	if !bech32VerifyChecksum(hrp, data) {
+		return "", nil, fmt.Errorf("invalid bech32 checksum")
 	}
 
 	// Skip version byte and convert from 5-bit to 8-bit
@@ -247,14 +299,59 @@ func bech32Decode(address string) (string, []byte, error) {
 		return "", nil, fmt.Errorf("data too short")
 	}
 
-	// First byte is version, skip it
-	// Last 6 bytes are checksum, skip them
+	// First byte is version, last 6 bytes are checksum
 	data5bit := data[1 : len(data)-6]
 
 	// Convert 5-bit to 8-bit
 	result := convert5to8(data5bit)
 
 	return hrp, result, nil
+}
+
+// toLowerASCII converts ASCII uppercase to lowercase
+func toLowerASCII(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 32
+		}
+	}
+	return string(b)
+}
+
+// bech32Polymod computes the bech32 checksum polynomial
+func bech32Polymod(values []byte) uint32 {
+	gen := []uint32{0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3}
+	chk := uint32(1)
+	for _, v := range values {
+		top := chk >> 25
+		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
+		for i := 0; i < 5; i++ {
+			if (top>>i)&1 == 1 {
+				chk ^= gen[i]
+			}
+		}
+	}
+	return chk
+}
+
+// bech32HRPExpand expands the HRP for checksum computation
+func bech32HRPExpand(hrp string) []byte {
+	result := make([]byte, len(hrp)*2+1)
+	for i, c := range hrp {
+		result[i] = byte(c >> 5)
+	}
+	result[len(hrp)] = 0
+	for i, c := range hrp {
+		result[len(hrp)+1+i] = byte(c & 31)
+	}
+	return result
+}
+
+// bech32VerifyChecksum verifies the bech32 checksum
+func bech32VerifyChecksum(hrp string, data []byte) bool {
+	values := append(bech32HRPExpand(hrp), data...)
+	return bech32Polymod(values) == 1
 }
 
 // convert5to8 converts 5-bit encoding to 8-bit bytes

@@ -89,9 +89,9 @@ func (m *AirdropEntry) GetClaimed() bool {
 	return false
 }
 
-// ZKProof contains the Groth16 proof data for claiming an airdrop.
+// ZKProof contains the PLONK proof data for claiming an airdrop.
 type ZKProof struct {
-	// The proof data (Groth16 proof serialized)
+	// The proof data (PLONK proof serialized)
 	ProofData []byte `protobuf:"bytes,1,opt,name=proof_data,json=proofData,proto3" json:"proof_data,omitempty"`
 	// Public inputs to the circuit
 	PublicInputs [][]byte `protobuf:"bytes,2,rep,name=public_inputs,json=publicInputs,proto3" json:"public_inputs,omitempty"`

@@ -34,17 +34,12 @@ type Keeper struct {
 
 	// Airdrop collections
 	// AirdropEntries maps btc address hash (hex) to airdrop amount
-	AirdropEntries collections.Map[string, uint64]
-	// ClaimedAirdrops tracks which address hashes have claimed (hex -> claimed bool)
-	ClaimedAirdrops collections.Map[string, bool]
+	// DEPRECATED: Claims now use the UTXO set directly.
+	// AirdropEntries collections.Map[string, uint64]
 
-	// ZK Entropy collections for distributed trusted setup
-	// ZKEntropyState stores the current state of entropy collection
-	ZKEntropyState collections.Item[types.ZKEntropyState]
-	// ZKEntropySubmissions maps validator address to their entropy submission
-	ZKEntropySubmissions collections.Map[string, types.ZKEntropySubmission]
-	// ZKSetupKeys stores the finalized setup keys (verifying key)
-	ZKSetupKeys collections.Item[types.ZKSetupKeys]
+	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
+	// The VK is stored in genesis and registered with the zk package at InitGenesis
+	ZkVerifyingKey collections.Item[[]byte]
 }
 
 func NewKeeper(
@@ -58,21 +53,18 @@ func NewKeeper(
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService:         storeService,
-		cdc:                  cdc,
-		addressCodec:         addressCodec,
-		stakingKeeper:        stakingKeeper,
-		bankKeeper:           bankKeeper,
-		authority:            authority,
-		Utxoes:               collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodePeerAddresses:    collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
-		ConstOverrides:       collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		authKeeper:           authKeeper,
-		AirdropEntries:       collections.NewMap(sb, types.AirdropEntryKeys, "airdrop_entries", collections.StringKey, collections.Uint64Value),
-		ClaimedAirdrops:      collections.NewMap(sb, types.ClaimedAirdropKeys, "claimed_airdrops", collections.StringKey, collections.BoolValue),
-		ZKEntropyState:       collections.NewItem(sb, types.ZKEntropyStateKey, "zk_entropy_state", codec.CollValue[types.ZKEntropyState](cdc)),
-		ZKEntropySubmissions: collections.NewMap(sb, types.ZKEntropySubmissionsKey, "zk_entropy_submissions", collections.StringKey, codec.CollValue[types.ZKEntropySubmission](cdc)),
-		ZKSetupKeys:          collections.NewItem(sb, types.ZKSetupKeysKey, "zk_setup_keys", codec.CollValue[types.ZKSetupKeys](cdc)),
+		storeService:      storeService,
+		cdc:               cdc,
+		addressCodec:      addressCodec,
+		stakingKeeper:     stakingKeeper,
+		bankKeeper:        bankKeeper,
+		authority:         authority,
+		authKeeper:        authKeeper,
+		Utxoes:            collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
+		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		// AirdropEntries:    collections.NewMap(sb, types.AirdropEntryKeys, "airdrop_entries", collections.StringKey, collections.Uint64Value),
+		ZkVerifyingKey:    collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {
@@ -91,6 +83,7 @@ func (k Keeper) GetBalanceOfModule(ctx context.Context, moduleName string, denom
 	moduleAddr := k.authKeeper.GetModuleAddress(moduleName)
 	return k.bankKeeper.GetBalance(ctx, moduleAddr, denom)
 }
+
 func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int64 {
 	keyName := constName.String()
 	// if the key is in constOverrides , which means nodes use mimir to override the const value

@@ -4,8 +4,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -26,14 +24,16 @@ func main() {
 		Short: "ZK Proof Generator for qbtc airdrop claims",
 		Long: `zkprover is a CLI tool for generating zero-knowledge proofs
 that prove ownership of a Bitcoin address without revealing the private key.
-These proofs can be used to claim airdrops on the qbtc chain.`,
+These proofs can be used to claim airdrops on the qbtc chain.
+
+This tool uses PLONK proof system with a universal SRS for efficient
+and secure proof generation.`,
 	}
 
 	rootCmd.AddCommand(
 		setupCmd(),
 		proveCmd(),
 		addressCmd(),
-		entropyCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -44,20 +44,49 @@ These proofs can be used to claim airdrops on the qbtc chain.`,
 
 // setupCmd creates the trusted setup command
 func setupCmd() *cobra.Command {
-	var outputDir string
+	var (
+		outputDir string
+		testMode  bool
+		cacheDir  string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Generate the trusted setup (proving and verifying keys)",
-		Long: `Generate the trusted setup for the ZK circuit.
+		Short: "Generate the PLONK trusted setup (proving and verifying keys)",
+		Long: `Generate the trusted setup for the ZK circuit using PLONK.
 This creates the proving key (for generating proofs) and verifying key (for verification).
-The verifying key should be embedded in the chain for on-chain verification.`,
+The verifying key should be embedded in the chain's genesis for on-chain verification.
+
+By default, this command downloads and uses the Hermez/Polygon Powers of Tau
+ceremony SRS, which is a production-ready trusted setup. The SRS is cached
+locally for future use.
+
+Use --test flag only for development/testing with an unsafe test SRS.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Generating trusted setup...")
+			fmt.Println("Generating PLONK trusted setup...")
 			fmt.Println("This may take a few minutes...")
 
+			var opts zk.SetupOptions
+			if testMode {
+				fmt.Println("")
+				fmt.Println("⚠️  WARNING: Using UNSAFE test SRS!")
+				fmt.Println("⚠️  DO NOT use these keys in production!")
+				fmt.Println("⚠️  Anyone can forge proofs with test SRS keys.")
+				fmt.Println("")
+				opts = zk.TestSetupOptions()
+			} else {
+				fmt.Println("")
+				fmt.Println("✓ Using Hermez/Polygon Powers of Tau ceremony SRS")
+				fmt.Println("✓ This is a production-ready trusted setup")
+				fmt.Println("")
+				opts = zk.DefaultSetupOptions()
+				if cacheDir != "" {
+					opts.CacheDir = cacheDir
+				}
+			}
+
 			// Run the setup
-			setup, err := zk.Setup()
+			setup, err := zk.SetupWithOptions(opts)
 			if err != nil {
 				return fmt.Errorf("setup failed: %w", err)
 			}
@@ -100,7 +129,7 @@ The verifying key should be embedded in the chain for on-chain verification.`,
 			}
 			fmt.Printf("Verifying key saved to: %s\n", vkPath)
 
-			// Also save verifying key as hex for embedding
+			// Also save verifying key as hex for embedding in genesis
 			vkHexPath := filepath.Join(outputDir, "verifying.key.hex")
 			if err := os.WriteFile(vkHexPath, []byte(hex.EncodeToString(vkBytes)), 0644); err != nil {
 				return fmt.Errorf("failed to write verifying key hex: %w", err)
@@ -109,13 +138,20 @@ The verifying key should be embedded in the chain for on-chain verification.`,
 
 			fmt.Println("\nSetup complete!")
 			fmt.Println("Use the proving.key and circuit.cs files to generate proofs.")
-			fmt.Println("Embed the verifying.key in the chain for on-chain verification.")
+			fmt.Println("Add the verifying.key.hex content to genesis.json as zk_verifying_key.")
+
+			if testMode {
+				fmt.Println("")
+				fmt.Println("⚠️  REMINDER: These are TEST keys - do not use in production!")
+			}
 
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "./zk-setup", "Output directory for keys")
+	cmd.Flags().BoolVar(&testMode, "test", false, "Use unsafe test SRS (development only, DO NOT use in production)")
+	cmd.Flags().StringVar(&cacheDir, "cache-dir", "", "Directory to cache downloaded SRS files (default: ~/.qbtc/zk-cache)")
 
 	return cmd
 }
@@ -123,12 +159,13 @@ The verifying key should be embedded in the chain for on-chain verification.`,
 // proveCmd creates the prove command
 func proveCmd() *cobra.Command {
 	var (
-		privateKeyHex   string
-		privateKeyWIF   string
-		btcqAddress     string
-		setupDir        string
-		outputFile      string
-		useStdin        bool
+		privateKeyHex string
+		privateKeyWIF string
+		btcqAddress   string
+		chainID       string
+		setupDir      string
+		outputFile    string
+		useStdin      bool
 	)
 
 	cmd := &cobra.Command{
@@ -138,7 +175,7 @@ func proveCmd() *cobra.Command {
 The proof can be submitted to the qbtc chain to claim an airdrop.
 
 You can provide your Bitcoin private key in hex format or WIF format.
-The proof will be bound to your qbtc address to prevent replay attacks.
+The proof will be bound to your qbtc address and chain ID to prevent replay attacks.
 
 SECURITY: For better security, use --stdin to enter your private key interactively.
 This prevents the key from appearing in shell history or process listings.`,
@@ -181,6 +218,9 @@ This prevents the key from appearing in shell history or process listings.`,
 			if btcqAddress == "" {
 				return fmt.Errorf("--btcq-address is required")
 			}
+			if chainID == "" {
+				return fmt.Errorf("--chain-id is required")
+			}
 
 			// Compute the Bitcoin address hash
 			addressHash, err := zk.PrivateKeyToAddressHash(privateKey)
@@ -216,18 +256,28 @@ This prevents the key from appearing in shell history or process listings.`,
 			// Compute btcq address hash for binding
 			btcqAddressHash := zk.HashBTCQAddress(btcqAddress)
 
+			// Compute chain ID hash for cross-chain replay prevention
+			chainIDHash := zk.ComputeChainIDHash(chainID)
+
 			// Generate the proof
-			fmt.Println("Generating proof...")
-			proof, err := prover.GenerateProof(privateKey, addressHash, btcqAddressHash)
+			fmt.Println("Generating PLONK proof...")
+			fmt.Printf("Chain ID: %s\n", chainID)
+			proof, err := prover.GenerateProof(zk.ProofParams{
+				PrivateKey:      privateKey,
+				AddressHash:     addressHash,
+				BTCQAddressHash: btcqAddressHash,
+				ChainID:         chainIDHash,
+			})
 			if err != nil {
 				return fmt.Errorf("failed to generate proof: %w", err)
 			}
 
 			// Create the output
 			output := ProofOutput{
-				BTCAddressHash:  hex.EncodeToString(addressHash[:]),
-				BTCQAddress:     btcqAddress,
-				ProofData:       hex.EncodeToString(proof.ToProtoZKProof()),
+				BTCAddressHash: hex.EncodeToString(addressHash[:]),
+				BTCQAddress:    btcqAddress,
+				ChainID:        chainID,
+				ProofData:      hex.EncodeToString(proof.ToProtoZKProof()),
 			}
 
 			// Serialize to JSON
@@ -257,6 +307,7 @@ This prevents the key from appearing in shell history or process listings.`,
 	cmd.Flags().StringVar(&privateKeyWIF, "wif", "", "Bitcoin private key in WIF format (INSECURE - use --stdin instead)")
 	cmd.Flags().BoolVar(&useStdin, "stdin", false, "Read private key securely from stdin (recommended)")
 	cmd.Flags().StringVar(&btcqAddress, "btcq-address", "", "Your qbtc chain address (required)")
+	cmd.Flags().StringVar(&chainID, "chain-id", "", "Chain ID for the proof (required, e.g., 'qbtc-1')")
 	cmd.Flags().StringVar(&setupDir, "setup-dir", "./zk-setup", "Directory containing setup files")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the proof (defaults to stdout)")
 
@@ -384,84 +435,6 @@ func addressCmd() *cobra.Command {
 type ProofOutput struct {
 	BTCAddressHash string `json:"btc_address_hash"`
 	BTCQAddress    string `json:"btcq_address"`
+	ChainID        string `json:"chain_id"`
 	ProofData      string `json:"proof_data"`
-}
-
-// entropyCmd creates the entropy submission command for validators
-func entropyCmd() *cobra.Command {
-	var (
-		validatorAddr string
-		outputFile    string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "entropy",
-		Short: "Generate entropy for the distributed ZK trusted setup",
-		Long: `Generate cryptographically secure random entropy for the distributed
-ZK trusted setup ceremony. This command is for validators participating
-in the setup.
-
-The generated entropy and commitment should be submitted to the chain
-using the SubmitZKEntropy transaction.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if validatorAddr == "" {
-				return fmt.Errorf("--validator is required")
-			}
-
-			// Generate 32 bytes of cryptographically secure random entropy
-			entropy := make([]byte, 32)
-			if _, err := rand.Read(entropy); err != nil {
-				return fmt.Errorf("failed to generate entropy: %w", err)
-			}
-
-			// Compute commitment: SHA256(entropy || validator_address)
-			hasher := sha256.New()
-			hasher.Write(entropy)
-			hasher.Write([]byte(validatorAddr))
-			commitment := hasher.Sum(nil)
-
-			// Create output
-			output := EntropyOutput{
-				Validator:  validatorAddr,
-				Entropy:    hex.EncodeToString(entropy),
-				Commitment: hex.EncodeToString(commitment),
-			}
-
-			// Serialize to JSON
-			outputBytes, err := json.MarshalIndent(output, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to serialize output: %w", err)
-			}
-
-			// Write to file or stdout
-			if outputFile != "" {
-				// Use restrictive permissions for the entropy file
-				if err := os.WriteFile(outputFile, outputBytes, 0600); err != nil {
-					return fmt.Errorf("failed to write output: %w", err)
-				}
-				fmt.Printf("Entropy saved to: %s\n", outputFile)
-				fmt.Println("\nIMPORTANT: Keep this file secure! The entropy value should")
-				fmt.Println("be kept secret until you submit it to the chain.")
-			} else {
-				fmt.Println(string(outputBytes))
-			}
-
-			fmt.Println("\nEntropy generation complete!")
-			fmt.Println("Submit this to the chain using: qbtcd tx qbtc submit-zk-entropy ...")
-
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&validatorAddr, "validator", "", "Your validator address (required)")
-	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the entropy (defaults to stdout)")
-
-	return cmd
-}
-
-// EntropyOutput is the JSON output structure for generated entropy
-type EntropyOutput struct {
-	Validator  string `json:"validator"`
-	Entropy    string `json:"entropy"`
-	Commitment string `json:"commitment"`
 }

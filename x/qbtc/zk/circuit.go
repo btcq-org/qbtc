@@ -23,9 +23,8 @@ type Secp256k1Fr = emulated.Secp256k1Fr
 // 1. The Bitcoin address (via Hash160)
 // 2. The destination qbtc address (prevents front-running)
 // 3. The chain ID (prevents cross-chain replay)
-// 4. The epoch ID (prevents cross-epoch replay)
 //
-// This prevents replay attacks across chains/epochs and front-running within an epoch.
+// This prevents front-running and cross-chain replay attacks.
 type BTCAddressCircuit struct {
 	// Private inputs
 	// PrivateKey is the secp256k1 scalar (256 bits)
@@ -37,16 +36,12 @@ type BTCAddressCircuit struct {
 	AddressHash [20]frontend.Variable `gnark:",public"`
 
 	// BTCQAddressHash is the SHA256 hash of the destination address on qbtc
-	// This binds the proof to a specific claim destination (prevents replay/front-running)
+	// This binds the proof to a specific claim destination (prevents front-running)
 	BTCQAddressHash [32]frontend.Variable `gnark:",public"`
 
-	// ChainID is a hash of the chain identifier (8 bytes)
+	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
 	// This prevents cross-chain replay attacks
 	ChainID [8]frontend.Variable `gnark:",public"`
-
-	// EpochID is the epoch this proof is valid for (8 bytes big-endian)
-	// Proofs can only be used in their designated epoch
-	EpochID [8]frontend.Variable `gnark:",public"`
 }
 
 // Define implements the gnark circuit interface.
@@ -54,7 +49,12 @@ type BTCAddressCircuit struct {
 // 1. Knowledge of a private key that produces the claimed Bitcoin address hash
 // 2. Commitment to a specific destination qbtc address (prevents front-running)
 // 3. Binding to chain ID (prevents cross-chain replay)
-// 4. Binding to epoch ID (prevents cross-epoch replay)
+//
+// SECURITY NOTE: BTCQAddressHash and ChainID are public inputs. PLONK verification
+// ensures the prover committed to specific values for these inputs, and the verifier
+// checks they match expected values derived from the message. This prevents:
+// - Front-running: attacker cannot reuse proof for different destination address
+// - Cross-chain replay: proof is bound to specific chain ID
 func (c *BTCAddressCircuit) Define(api frontend.API) error {
 	// Get secp256k1 curve API for emulated arithmetic
 	curve, err := sw_emulated.New[Secp256k1Fp, Secp256k1Fr](api, sw_emulated.GetSecp256k1Params())
@@ -79,72 +79,17 @@ func (c *BTCAddressCircuit) Define(api frontend.API) error {
 	hash160 := c.computeHash160(api, compressedPubKey[:])
 
 	// Assert hash160 == addressHash (byte by byte)
+	// This proves the prover knows a private key for this Bitcoin address
 	for i := 0; i < 20; i++ {
 		api.AssertIsEqual(hash160[i], c.AddressHash[i])
 	}
 
-	// CRITICAL: Compute the binding commitment that includes:
-	// - Address hash (20 bytes) - the BTC address being claimed
-	// - BTCQ address hash (32 bytes) - recipient address (prevents front-running)
-	// - Chain ID (8 bytes) - prevents cross-chain replay
-	// - Epoch ID (8 bytes) - binds to specific key ceremony epoch
-	//
-	// Binding: m = H("BTCQ-CLAIM" || H_pk || A_claim || chain_id || epoch_id)
-	bindingCommitment := c.computeBindingCommitment(api, hash160[:])
-
-	// The binding commitment must be non-zero (proves all public inputs were included)
-	var commitmentSum frontend.Variable = 0
-	for i := 0; i < 32; i++ {
-		commitmentSum = api.Add(commitmentSum, bindingCommitment[i])
-	}
-	api.AssertIsDifferent(commitmentSum, 0)
+	// NOTE: BTCQAddressHash and ChainID don't need explicit constraints here.
+	// As public inputs, PLONK cryptographically binds the proof to their values.
+	// The verifier reconstructs expected values from the message and verification
+	// fails if they don't match what the prover committed to.
 
 	return nil
-}
-
-// computeBindingCommitment computes the binding commitment:
-// H("BTCQ-CLAIM" || addressHash || btcqAddressHash || chainID || epochID)
-//
-// This binds the proof to:
-// - The BTC address being claimed (20 bytes)
-// - The destination BTCQ address (32 bytes) - prevents front-running
-// - The chain ID (8 bytes) - prevents cross-chain replay
-// - The epoch ID (8 bytes) - binds to key ceremony epoch
-func (c *BTCAddressCircuit) computeBindingCommitment(api frontend.API, addressHash []frontend.Variable) [32]frontend.Variable {
-	// Domain separator: "BTCQ-CLAIM" (10 bytes)
-	domainSeparator := []frontend.Variable{
-		frontend.Variable('B'), frontend.Variable('T'), frontend.Variable('C'), frontend.Variable('Q'),
-		frontend.Variable('-'), frontend.Variable('C'), frontend.Variable('L'), frontend.Variable('A'),
-		frontend.Variable('I'), frontend.Variable('M'),
-	}
-
-	// Build the message:
-	// domainSeparator (10) + addressHash (20) + btcqAddressHash (32) + chainID (8) + epochID (8) = 78 bytes
-	message := make([]frontend.Variable, 78)
-
-	// Copy domain separator
-	copy(message[0:10], domainSeparator)
-
-	// Copy address hash
-	copy(message[10:30], addressHash)
-
-	// Copy BTCQ address hash
-	for i := 0; i < 32; i++ {
-		message[30+i] = c.BTCQAddressHash[i]
-	}
-
-	// Copy chain ID
-	for i := 0; i < 8; i++ {
-		message[62+i] = c.ChainID[i]
-	}
-
-	// Copy epoch ID
-	for i := 0; i < 8; i++ {
-		message[70+i] = c.EpochID[i]
-	}
-
-	// Compute SHA256 of the message
-	return computeSHA256Circuit(api, message)
 }
 
 // compressPubKey computes the compressed public key (33 bytes)
@@ -207,13 +152,13 @@ type CircuitParams struct {
 // DefaultCircuitParams returns default parameters for the circuit
 func DefaultCircuitParams() CircuitParams {
 	return CircuitParams{
-		Curve: ecc.BN254, // Use BN254 for Groth16
+		Curve: ecc.BN254, // Use BN254 for PLONK
 	}
 }
 
 // NewBTCAddressCircuit creates a new circuit instance with the given parameters.
 // This is used for witness assignment during proof generation.
-func NewBTCAddressCircuit(addressHash [20]byte, btcqAddressHash [32]byte, chainID [8]byte, epochID uint64) *BTCAddressCircuit {
+func NewBTCAddressCircuit(addressHash [20]byte, btcqAddressHash [32]byte, chainID [8]byte) *BTCAddressCircuit {
 	circuit := &BTCAddressCircuit{}
 
 	for i := 0; i < 20; i++ {
@@ -227,11 +172,6 @@ func NewBTCAddressCircuit(addressHash [20]byte, btcqAddressHash [32]byte, chainI
 	// Copy chain ID bytes
 	for i := 0; i < 8; i++ {
 		circuit.ChainID[i] = chainID[i]
-	}
-
-	// Convert epoch ID to 8 bytes (big-endian)
-	for i := 0; i < 8; i++ {
-		circuit.EpochID[i] = byte(epochID >> (56 - i*8))
 	}
 
 	return circuit

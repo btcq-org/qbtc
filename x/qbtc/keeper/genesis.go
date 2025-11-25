@@ -2,7 +2,6 @@ package keeper
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -33,52 +32,24 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 		}
 	}
 
-	// Initialize airdrop entries
-	for _, entry := range genState.AirdropEntries {
-		// Convert address hash bytes to hex key
-		addressHashHex := hex.EncodeToString(entry.AddressHash)
-		err := k.AirdropEntries.Set(ctx, addressHashHex, entry.Amount)
-		if err != nil {
-			return fmt.Errorf("failed to set airdrop entry for %s: %w", addressHashHex, err)
-		}
-		// If the entry is marked as already claimed, record it
-		if entry.Claimed {
-			err := k.ClaimedAirdrops.Set(ctx, addressHashHex, true)
-			if err != nil {
-				return fmt.Errorf("failed to set claimed status for %s: %w", addressHashHex, err)
-			}
-		}
-	}
+	// AirdropEntries are deprecated/removed in favor of using the UTXO set directly.
+	// Genesis loading for AirdropEntries is skipped.
 
-	// Initialize ZK entropy state if provided
-	if genState.ZKEntropyState != nil {
-		if err := k.ZKEntropyState.Set(ctx, *genState.ZKEntropyState); err != nil {
-			return fmt.Errorf("failed to set ZK entropy state: %w", err)
+	// Initialize ZK verifying key from genesis
+	if len(genState.ZkVerifyingKey) > 0 {
+		// Store the VK in state
+		if err := k.ZkVerifyingKey.Set(ctx, genState.ZkVerifyingKey); err != nil {
+			return fmt.Errorf("failed to set ZK verifying key: %w", err)
 		}
 
-		// Restore individual submissions
-		for _, sub := range genState.ZKEntropyState.Submissions {
-			if err := k.ZKEntropySubmissions.Set(ctx, sub.Validator, sub); err != nil {
-				return fmt.Errorf("failed to set ZK entropy submission for %s: %w", sub.Validator, err)
-			}
+		// Register the global verifier
+		if err := zk.RegisterVerifier(genState.ZkVerifyingKey); err != nil {
+			sdkCtx.Logger().Error("failed to register ZK verifier from genesis", "error", err)
+			return fmt.Errorf("failed to register ZK verifier: %w", err)
 		}
-	}
-
-	// Initialize ZK setup keys if provided
-	if genState.ZKSetupKeys != nil {
-		if err := k.ZKSetupKeys.Set(ctx, *genState.ZKSetupKeys); err != nil {
-			return fmt.Errorf("failed to set ZK setup keys: %w", err)
-		}
-
-		// Initialize the default verifier with the stored verifying key
-		if len(genState.ZKSetupKeys.VerifyingKey) > 0 {
-			if err := zk.InitDefaultVerifier(genState.ZKSetupKeys.VerifyingKey); err != nil {
-				sdkCtx.Logger().Error("failed to initialize ZK verifier from genesis", "error", err)
-				// Don't fail genesis - the key can be loaded later
-			} else {
-				sdkCtx.Logger().Info("ZK verifier initialized from genesis")
-			}
-		}
+		sdkCtx.Logger().Info("ZK PLONK verifier registered from genesis")
+	} else {
+		sdkCtx.Logger().Warn("no ZK verifying key in genesis - airdrop claims will fail until VK is set")
 	}
 
 	return nil
@@ -119,40 +90,16 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 	}
 	genesis.Params = params
 
-	// Export airdrop entries
-	airdropEntries := make([]types.AirdropEntry, 0)
-	if err := k.AirdropEntries.Walk(ctx, nil, func(key string, value uint64) (stop bool, err error) {
-		// Check if claimed
-		claimed, _ := k.ClaimedAirdrops.Get(ctx, key)
+	// Airdrop entries are no longer exported as they are removed/deprecated.
+	// If legacy entries existed, they would be converted to UTXOs or ignored.
+	genesis.AirdropEntries = []types.AirdropEntry{}
 
-		// Convert hex key back to bytes
-		addressHash, err := hex.DecodeString(key)
-		if err != nil {
-			return false, fmt.Errorf("failed to decode address hash %s: %w", key, err)
-		}
-
-		airdropEntries = append(airdropEntries, types.AirdropEntry{
-			AddressHash: addressHash,
-			Amount:      value,
-			Claimed:     claimed,
-		})
-		return false, nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to export airdrop entries: %w", err)
-	}
-	genesis.AirdropEntries = airdropEntries
-
-	// Export ZK entropy state
-	zkEntropyState, err := k.ZKEntropyState.Get(ctx)
-	if err == nil {
-		genesis.ZKEntropyState = &zkEntropyState
-	}
-
-	// Export ZK setup keys
-	zkSetupKeys, err := k.ZKSetupKeys.Get(ctx)
-	if err == nil {
-		genesis.ZKSetupKeys = &zkSetupKeys
+	// Export ZK verifying key
+	zkVK, err := k.ZkVerifyingKey.Get(ctx)
+	if err == nil && len(zkVK) > 0 {
+		genesis.ZkVerifyingKey = zkVK
 	}
 
 	return genesis, nil
 }
+

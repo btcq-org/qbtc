@@ -194,3 +194,150 @@ func TestKnownBitcoinVectors(t *testing.T) {
 	
 	t.Logf("Address hash for private key 1: %s", hex.EncodeToString(addressHash[:]))
 }
+
+func TestValidatePrivateKey(t *testing.T) {
+	testCases := []struct {
+		name        string
+		key         *big.Int
+		expectError bool
+		errContains string
+	}{
+		{
+			name:        "valid key = 1",
+			key:         big.NewInt(1),
+			expectError: false,
+		},
+		{
+			name:        "valid key = large",
+			key:         new(big.Int).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}),
+			expectError: false,
+		},
+		{
+			name:        "nil key",
+			key:         nil,
+			expectError: true,
+			errContains: "nil",
+		},
+		{
+			name:        "zero key",
+			key:         big.NewInt(0),
+			expectError: true,
+			errContains: "positive",
+		},
+		{
+			name:        "negative key",
+			key:         big.NewInt(-1),
+			expectError: true,
+			errContains: "positive",
+		},
+		{
+			name: "key >= curve order",
+			// secp256k1 order: FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+			key: func() *big.Int {
+				n, _ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
+				return n
+			}(),
+			expectError: true,
+			errContains: "curve order",
+		},
+		{
+			name: "key > curve order",
+			key: func() *big.Int {
+				n, _ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364142", 16)
+				return n
+			}(),
+			expectError: true,
+			errContains: "curve order",
+		},
+		{
+			name: "key = curve order - 1 (valid, max key)",
+			key: func() *big.Int {
+				n, _ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140", 16)
+				return n
+			}(),
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidatePrivateKey(tc.key)
+			if tc.expectError {
+				require.Error(t, err)
+				if tc.errContains != "" {
+					require.Contains(t, err.Error(), tc.errContains)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPrivateKeyToAddressHash_InvalidKeys(t *testing.T) {
+	// Test that invalid private keys are rejected
+	testCases := []struct {
+		name string
+		key  *big.Int
+	}{
+		{"nil", nil},
+		{"zero", big.NewInt(0)},
+		{"negative", big.NewInt(-1)},
+		{">= curve order", func() *big.Int {
+			n, _ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
+			return n
+		}()},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := PrivateKeyToAddressHash(tc.key)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestBech32Checksum(t *testing.T) {
+	// Test valid bech32 addresses (mainnet P2WPKH)
+	// These are well-known test vectors
+	validAddresses := []struct {
+		address string
+		valid   bool
+	}{
+		// Valid mainnet P2WPKH addresses
+		{"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", true},
+		// Invalid checksum (last char changed)
+		{"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5", false},
+		// Invalid checksum (char changed in middle)
+		{"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3s4", false},
+	}
+
+	for _, tc := range validAddresses {
+		t.Run(tc.address[:20]+"...", func(t *testing.T) {
+			_, _, err := bech32Decode(tc.address)
+			if tc.valid {
+				require.NoError(t, err, "expected valid bech32 address")
+			} else {
+				require.Error(t, err, "expected invalid bech32 address")
+				require.Contains(t, err.Error(), "checksum")
+			}
+		})
+	}
+}
+
+func TestBech32PolymodVectors(t *testing.T) {
+	// Verify our bech32 polymod implementation against known values
+	// The polymod of a valid bech32 string's expanded form should be 1
+	
+	// Test HRP expansion
+	hrp := "bc"
+	expanded := bech32HRPExpand(hrp)
+	// "bc" expands to [3, 3, 0, 2, 3] where:
+	// 'b' = 98, 98 >> 5 = 3, 98 & 31 = 2
+	// 'c' = 99, 99 >> 5 = 3, 99 & 31 = 3
+	require.Equal(t, byte(3), expanded[0]) // 'b' >> 5
+	require.Equal(t, byte(3), expanded[1]) // 'c' >> 5
+	require.Equal(t, byte(0), expanded[2]) // separator
+	require.Equal(t, byte(2), expanded[3]) // 'b' & 31
+	require.Equal(t, byte(3), expanded[4]) // 'c' & 31
+}

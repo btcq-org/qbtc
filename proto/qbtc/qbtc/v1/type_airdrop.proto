@@ -17,9 +17,9 @@ message AirdropEntry {
   bool claimed = 3;
 }
 
-// ZKProof contains the Groth16 proof data for claiming an airdrop.
+// ZKProof contains the PLONK proof data for claiming an airdrop.
 message ZKProof {
-  // The proof data (Groth16 proof serialized)
+  // The proof data (PLONK proof serialized)
   bytes proof_data = 1;
   // Public inputs to the circuit
   repeated bytes public_inputs = 2;

@@ -165,12 +165,5 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		return err
 	}
 
-	// Check for ZK entropy finalization
-	if err := am.keeper.CheckZKEntropyFinalization(ctx); err != nil {
-		sdkCtx := sdk.UnwrapSDKContext(ctx)
-		sdkCtx.Logger().Error("ZK entropy finalization check failed", "error", err)
-		// Don't return error - this shouldn't halt the chain
-	}
-
 	return nil
 }

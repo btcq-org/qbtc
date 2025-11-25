@@ -3,19 +3,20 @@ package zk
 import (
 	"bytes"
 	"fmt"
+	"sync"
 
 	"github.com/consensys/gnark-crypto/ecc"
-	"github.com/consensys/gnark/backend/groth16"
+	"github.com/consensys/gnark/backend/plonk"
 	"github.com/consensys/gnark/frontend"
 )
 
-// Verifier handles ZK proof verification
+// Verifier handles ZK proof verification using PLONK
 type Verifier struct {
-	vk groth16.VerifyingKey
+	vk plonk.VerifyingKey
 }
 
 // NewVerifier creates a new verifier with the given verifying key
-func NewVerifier(vk groth16.VerifyingKey) *Verifier {
+func NewVerifier(vk plonk.VerifyingKey) *Verifier {
 	return &Verifier{vk: vk}
 }
 
@@ -28,24 +29,11 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 	return &Verifier{vk: vk}, nil
 }
 
-// VerifyProof verifies a ZK proof for a Bitcoin address claim (legacy, without epoch binding)
-// DEPRECATED: Use VerifyProofWithEpoch for epoch-aware verification
-func (v *Verifier) VerifyProof(proof *Proof, addressHash [20]byte, btcqAddressHash [32]byte) error {
-	// For legacy proofs, use zero epoch and context
-	return v.VerifyProofWithEpoch(proof, EpochVerificationParams{
-		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
-		EpochID:         0,
-		ContextHash:     [32]byte{},
-	})
-}
-
-// VerifyProofWithEpoch verifies a ZK proof with full epoch and context binding.
-// This is the preferred method for verifying proofs in the epoch-based system.
-func (v *Verifier) VerifyProofWithEpoch(proof *Proof, params EpochVerificationParams) error {
+// VerifyProof verifies a PLONK proof for a Bitcoin address claim.
+func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 	// Deserialize the proof
-	groth16Proof := groth16.NewProof(ecc.BN254)
-	_, err := groth16Proof.ReadFrom(bytes.NewReader(proof.ProofData))
+	plonkProof := plonk.NewProof(ecc.BN254)
+	_, err := plonkProof.ReadFrom(bytes.NewReader(proof.ProofData))
 	if err != nil {
 		return fmt.Errorf("failed to deserialize proof: %w", err)
 	}
@@ -58,13 +46,9 @@ func (v *Verifier) VerifyProofWithEpoch(proof *Proof, params EpochVerificationPa
 	for i := 0; i < 32; i++ {
 		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
 	}
-	// Set epoch ID (8 bytes big-endian)
+	// Set chain ID (8 bytes)
 	for i := 0; i < 8; i++ {
-		assignment.EpochID[i] = byte(params.EpochID >> (56 - i*8))
-	}
-	// Set context hash
-	for i := 0; i < 32; i++ {
-		assignment.ContextHash[i] = params.ContextHash[i]
+		assignment.ChainID[i] = params.ChainID[i]
 	}
 
 	// Create witness from assignment (public only)
@@ -74,7 +58,7 @@ func (v *Verifier) VerifyProofWithEpoch(proof *Proof, params EpochVerificationPa
 	}
 
 	// Verify the proof
-	err = groth16.Verify(groth16Proof, v.vk, witness)
+	err = plonk.Verify(plonkProof, v.vk, witness)
 	if err != nil {
 		return fmt.Errorf("proof verification failed: %w", err)
 	}
@@ -82,17 +66,8 @@ func (v *Verifier) VerifyProofWithEpoch(proof *Proof, params EpochVerificationPa
 	return nil
 }
 
-// VerifyProofBytes verifies a proof from raw bytes
-func (v *Verifier) VerifyProofBytes(proofBytes []byte, addressHash [20]byte, btcqAddressHash [32]byte) error {
-	proof, err := ProofFromProtoZKProof(proofBytes)
-	if err != nil {
-		return fmt.Errorf("failed to parse proof: %w", err)
-	}
-	return v.VerifyProof(proof, addressHash, btcqAddressHash)
-}
-
 // GetVerifyingKey returns the verifying key
-func (v *Verifier) GetVerifyingKey() groth16.VerifyingKey {
+func (v *Verifier) GetVerifyingKey() plonk.VerifyingKey {
 	return v.vk
 }
 
@@ -101,88 +76,90 @@ func (v *Verifier) GetVerifyingKeyBytes() ([]byte, error) {
 	return SerializeVerifyingKey(v.vk)
 }
 
-// VerificationResult represents the result of a proof verification
-type VerificationResult struct {
-	Valid   bool
-	Error   error
-	Details string
+// globalVerifierState holds the global verifier state with thread-safe access.
+// SECURITY: Once initialized, the verifier is immutable to prevent VK replacement attacks.
+type globalVerifierState struct {
+	mu          sync.RWMutex
+	verifier    *Verifier
+	initialized bool // once true, verifier cannot be changed
 }
 
-// VerifyProofWithDetails verifies a proof and returns detailed results
-func (v *Verifier) VerifyProofWithDetails(proof *Proof, addressHash [20]byte, btcqAddressHash [32]byte) VerificationResult {
-	err := v.VerifyProof(proof, addressHash, btcqAddressHash)
-	if err != nil {
-		return VerificationResult{
-			Valid:   false,
-			Error:   err,
-			Details: err.Error(),
-		}
+// globalState is the singleton verifier state instance.
+var globalState = &globalVerifierState{}
+
+// ErrVerifierAlreadyInitialized is returned when attempting to re-register the verifier.
+var ErrVerifierAlreadyInitialized = fmt.Errorf("verifier already initialized - cannot re-register VK")
+
+// RegisterVerifier registers the global verifier from VK bytes.
+// This should be called once at node startup from genesis.
+// Thread-safe: uses mutex for concurrent access.
+//
+// SECURITY: This function can only be called once. Subsequent calls will return
+// ErrVerifierAlreadyInitialized. This prevents malicious VK replacement attacks.
+func RegisterVerifier(vkBytes []byte) error {
+	globalState.mu.Lock()
+	defer globalState.mu.Unlock()
+
+	// SECURITY: Prevent re-registration of verifier
+	if globalState.initialized {
+		return ErrVerifierAlreadyInitialized
 	}
-	return VerificationResult{
-		Valid:   true,
-		Details: "Proof verified successfully",
-	}
-}
 
-// DefaultVerifier holds a pre-configured verifier with the embedded verification key
-// DEPRECATED: For epoch-based verification, use EpochVerifiers instead
-// This is set during module initialization for backward compatibility
-var DefaultVerifier *Verifier
-
-// EpochVerifiers maps epoch IDs to their verifiers
-// This allows verification of proofs from any epoch
-var EpochVerifiers = make(map[uint64]*Verifier)
-
-// InitDefaultVerifier initializes the default verifier with the embedded key
-// DEPRECATED: Use RegisterEpochVerifier for epoch-based verification
-func InitDefaultVerifier(vkBytes []byte) error {
-	var err error
-	DefaultVerifier, err = NewVerifierFromBytes(vkBytes)
-	return err
-}
-
-// RegisterEpochVerifier registers a verifier for a specific epoch
-func RegisterEpochVerifier(epochID uint64, vkBytes []byte) error {
 	verifier, err := NewVerifierFromBytes(vkBytes)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create verifier: %w", err)
 	}
-	EpochVerifiers[epochID] = verifier
+
+	globalState.verifier = verifier
+	globalState.initialized = true
 	return nil
 }
 
-// GetEpochVerifier returns the verifier for a specific epoch
-func GetEpochVerifier(epochID uint64) (*Verifier, error) {
-	verifier, ok := EpochVerifiers[epochID]
-	if !ok {
-		return nil, fmt.Errorf("no verifier registered for epoch %d", epochID)
+// RegisterVerifierFromVK registers the global verifier from a VK object.
+// Thread-safe: uses mutex for concurrent access.
+//
+// SECURITY: This function can only be called once. Subsequent calls will return
+// ErrVerifierAlreadyInitialized. This prevents malicious VK replacement attacks.
+func RegisterVerifierFromVK(vk plonk.VerifyingKey) error {
+	globalState.mu.Lock()
+	defer globalState.mu.Unlock()
+
+	// SECURITY: Prevent re-registration of verifier
+	if globalState.initialized {
+		return ErrVerifierAlreadyInitialized
 	}
-	return verifier, nil
+
+	globalState.verifier = NewVerifier(vk)
+	globalState.initialized = true
+	return nil
 }
 
-// VerifyWithDefault verifies a proof using the default verifier
-// DEPRECATED: Use VerifyWithEpoch for epoch-based verification
-func VerifyWithDefault(proof *Proof, addressHash [20]byte, btcqAddressHash [32]byte) error {
-	if DefaultVerifier == nil {
-		return fmt.Errorf("default verifier not initialized")
+// GetVerifier returns the global verifier.
+// Thread-safe: uses read lock for concurrent access.
+func GetVerifier() (*Verifier, error) {
+	globalState.mu.RLock()
+	defer globalState.mu.RUnlock()
+
+	if globalState.verifier == nil {
+		return nil, fmt.Errorf("verifier not initialized - VK not loaded from genesis")
 	}
-	return DefaultVerifier.VerifyProof(proof, addressHash, btcqAddressHash)
+	return globalState.verifier, nil
 }
 
-// VerifyWithEpoch verifies a proof using the appropriate epoch verifier
-// It enforces that the proof's epoch matches the expected current epoch
-func VerifyWithEpoch(proof *Proof, params EpochVerificationParams, expectedCurrentEpoch uint64) error {
-	// Enforce that the proof is for the current epoch
-	if params.EpochID != expectedCurrentEpoch {
-		return fmt.Errorf("epoch mismatch: proof is for epoch %d, expected %d", params.EpochID, expectedCurrentEpoch)
-	}
+// IsVerifierInitialized returns true if the global verifier has been registered.
+// Thread-safe: uses read lock for concurrent access.
+func IsVerifierInitialized() bool {
+	globalState.mu.RLock()
+	defer globalState.mu.RUnlock()
+	return globalState.initialized
+}
 
-	// Get the verifier for this epoch
-	verifier, err := GetEpochVerifier(params.EpochID)
+// VerifyProofGlobal verifies a proof using the global verifier.
+// Returns an error if the verifier is not initialized.
+func VerifyProofGlobal(proof *Proof, params VerificationParams) error {
+	verifier, err := GetVerifier()
 	if err != nil {
 		return err
 	}
-
-	return verifier.VerifyProofWithEpoch(proof, params)
+	return verifier.VerifyProof(proof, params)
 }
-
