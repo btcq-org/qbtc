@@ -14,6 +14,7 @@ type Config struct {
 	KeyName          string         `mapstructure:"key_name" json:"key_name"`
 	StartBlockHeight int64          `mapstructure:"start_block_height" json:"start_block_height"`
 	BitcoinConfig    bitcoin.Config `mapstructure:"bitcoin" json:"bitcoin"`
+	QBTCHome         string         `mapstructure:"qbtc_home" json:"qbtc_home"`
 }
 
 type P2PConfig struct {
