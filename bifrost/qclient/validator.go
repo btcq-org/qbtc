@@ -6,6 +6,7 @@ import (
 
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	query "github.com/cosmos/cosmos-sdk/types/query"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
@@ -38,6 +39,9 @@ func (c *Client) Validator(ctx context.Context, address string) (ValidatorVoting
 func (c *Client) ActiveValidators(ctx context.Context) ([]stakingtypes.Validator, error) {
 	resp, err := c.stakingClient.Validators(ctx, &stakingtypes.QueryValidatorsRequest{
 		Status: stakingtypes.Bonded.String(),
+		Pagination: &query.PageRequest{
+			Limit: 500,
+		},
 	})
 	if err != nil {
 		return nil, err

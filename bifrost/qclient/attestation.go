@@ -61,10 +61,8 @@ func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attesta
 
 	ctx := context.Background()
 
-	// Get all bonded validators at once
-	validatorsResp, err := c.stakingClient.Validators(ctx, &stakingtypes.QueryValidatorsRequest{
-		Status: stakingtypes.Bonded.String(),
-	})
+	// Get all active validators
+	activeValidators, err := c.ActiveValidators(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get validators: %w", err)
 	}
@@ -81,8 +79,8 @@ func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attesta
 	totalVotingPower := math.NewInt(sdk.TokensToConsensusPower(poolResp.Pool.BondedTokens, sdk.DefaultPowerReduction))
 
 	// Create a map of validators by address for quick lookup
-	validatorsByAddr := make(map[string]stakingtypes.Validator, len(validatorsResp.Validators))
-	for _, validator := range validatorsResp.Validators {
+	validatorsByAddr := make(map[string]stakingtypes.Validator, len(activeValidators))
+	for _, validator := range activeValidators {
 		validatorsByAddr[validator.OperatorAddress] = validator
 	}
 
@@ -124,7 +122,7 @@ func (c *Client) CheckAttestationsSuperMajority(block types.BlockGossip, attesta
 			continue
 		}
 
-		// Get consensus public key
+		// Get consensus public key (in this case consensus and account keys are the same)
 		publicKey, err := validator.ConsPubKey()
 		if err != nil {
 			c.logger.Error().
