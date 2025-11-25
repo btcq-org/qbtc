@@ -139,7 +139,10 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("qbtc node instance is nil")
 	}
 
-	if p.qbtcNode.VerifyAttestation(block) != nil {
+	// max 1 second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+	if p.qbtcNode.VerifyAttestation(ctx, block) != nil {
 		return fmt.Errorf("failed to verify attestation")
 	}
 

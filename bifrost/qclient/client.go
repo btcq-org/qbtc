@@ -26,7 +26,7 @@ type Client struct {
 
 type QBTCNode interface {
 	GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error)
-	VerifyAttestation(block types.BlockGossip) error
+	VerifyAttestation(ctx context.Context, block types.BlockGossip) error
 }
 
 var _ QBTCNode = &Client{}

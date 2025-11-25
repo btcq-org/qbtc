@@ -10,7 +10,7 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
-func (c *Client) VerifyAttestation(block types.BlockGossip) error {
+func (c *Client) VerifyAttestation(ctx context.Context, block types.BlockGossip) error {
 	if block.Attestation == nil {
 		return fmt.Errorf("no attestation provided")
 	}
@@ -22,7 +22,6 @@ func (c *Client) VerifyAttestation(block types.BlockGossip) error {
 	}
 
 	// Query validator by address to get public key
-	ctx := context.Background()
 	resp, err := c.stakingClient.Validator(ctx, &stakingtypes.QueryValidatorRequest{
 		ValidatorAddr: block.Attestation.Address,
 	})
