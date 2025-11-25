@@ -91,7 +91,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start p2p network: %w", err)
 	}
 	s.logger.Info().Msg("bifrost service started")
-	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db)
+	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}

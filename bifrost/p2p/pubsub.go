@@ -22,17 +22,18 @@ import (
 const topic = "bifrost-bitcoin-block-gossip-sub"
 const DefaultTimeout = 10 * time.Second // in seconds
 type PubSubService struct {
-	pubsub   *pubsub.PubSub
-	host     host.Host
-	topic    *pubsub.Topic
-	logger   zerolog.Logger
-	stopchan chan struct{}
-	wg       *sync.WaitGroup
-	db       *leveldb.DB
+	pubsub             *pubsub.PubSub
+	host               host.Host
+	topic              *pubsub.Topic
+	logger             zerolog.Logger
+	stopchan           chan struct{}
+	wg                 *sync.WaitGroup
+	db                 *leveldb.DB
+	attestationService AttestationService
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, attestationService AttestationService) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
@@ -200,4 +201,8 @@ func (p *PubSubService) Stop() error {
 		}
 	}
 	return nil
+}
+
+type AttestationService interface {
+	VerifyAttestation(block types.BlockGossip) error
 }

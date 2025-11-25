@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -25,6 +26,7 @@ type Client struct {
 
 type QBTCNode interface {
 	GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error)
+	VerifyAttestation(block types.BlockGossip) error
 }
 
 var _ QBTCNode = &Client{}
