@@ -140,7 +140,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	}
 
 	// max 1 second timeout
-	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), time.Second*1)
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer verifyCancel()
 	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
 		return fmt.Errorf("failed to verify attestation")
@@ -173,7 +173,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if err != nil {
 		return err
 	}
-	checkCtx, checkCancel := context.WithTimeout(context.Background(), time.Second*1)
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer checkCancel()
 	// consensus reached
 	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, &msgBlock); err == nil {
