@@ -558,19 +558,3 @@ For testing, use the provided emulator:
 ```bash
 tss-emulator --port :8080 --private-key <32-byte-hex>
 ```
-
----
-
-## Appendix B: Audit Checklist
-
-- [ ] Verify ECDSA gadget correctly implements signature verification
-- [ ] Verify public key compression matches Bitcoin's SEC1 format
-- [ ] Verify Hash160 implementation matches Bitcoin's RIPEMD160(SHA256(x))
-- [ ] Verify message binding includes all required fields
-- [ ] Verify verifier cannot be re-initialized after genesis
-- [ ] Verify proof size limits prevent DoS
-- [ ] Verify UTXO cannot be claimed twice
-- [ ] Verify front-running is prevented by BTCQAddressHash binding
-- [ ] Verify cross-chain replay is prevented by ChainID binding
-- [ ] Verify PTAU conversion preserves ceremony security
-- [ ] Review gnark version for known vulnerabilities

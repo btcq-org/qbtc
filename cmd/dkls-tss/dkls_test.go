@@ -11,8 +11,8 @@ import (
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
-	session "github.com/vultisig/go-wrappers/go-dkls/sessions"
 	"github.com/stretchr/testify/require"
+	session "github.com/vultisig/go-wrappers/go-dkls/sessions"
 )
 
 // TestDKLSTSS_2of2_Keygen tests basic 2-of-2 distributed key generation
@@ -376,4 +376,3 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 
 	t.Log("2-of-3 TSS + ZK proof test passed!")
 }
-
