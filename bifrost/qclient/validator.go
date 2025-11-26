@@ -3,6 +3,7 @@ package qclient
 import (
 	"context"
 	"errors"
+	"time"
 
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -37,6 +38,18 @@ func (c *Client) Validator(ctx context.Context, address string) (ValidatorVoting
 }
 
 func (c *Client) ActiveValidators(ctx context.Context) ([]stakingtypes.Validator, error) {
+	c.validatorsMu.RLock()
+	// if the validators are cached and less than 1 minute old, return them
+	if time.Since(c.lastUpdateTime) < time.Minute && len(c.activeValidators) > 0 {
+		// Make a copy of the slice before releasing the lock to avoid data races
+		result := make([]stakingtypes.Validator, len(c.activeValidators))
+		copy(result, c.activeValidators)
+		c.validatorsMu.RUnlock()
+		return result, nil
+	}
+	c.validatorsMu.RUnlock()
+
+	// fetch new validators
 	resp, err := c.stakingClient.Validators(ctx, &stakingtypes.QueryValidatorsRequest{
 		Status: stakingtypes.Bonded.String(),
 		Pagination: &query.PageRequest{
@@ -46,7 +59,16 @@ func (c *Client) ActiveValidators(ctx context.Context) ([]stakingtypes.Validator
 	if err != nil {
 		return nil, err
 	}
-	return resp.Validators, nil
+	// update the validators
+	c.validatorsMu.Lock()
+	defer c.validatorsMu.Unlock()
+	c.activeValidators = resp.Validators
+	c.lastUpdateTime = time.Now()
+
+	// Make a copy of the slice before releasing the lock to avoid data races
+	result := make([]stakingtypes.Validator, len(c.activeValidators))
+	copy(result, c.activeValidators)
+	return result, nil
 }
 
 type ValidatorVotingPower struct {

@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"net"
 	"strings"
+	"sync"
+	"time"
 
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -21,6 +23,11 @@ type Client struct {
 	qClient       qtypes.QueryClient
 	stakingClient stakingtypes.QueryClient
 	logger        zerolog.Logger
+
+	// cached validators
+	validatorsMu     sync.RWMutex
+	activeValidators []stakingtypes.Validator
+	lastUpdateTime   time.Time
 }
 
 type QBTCNode interface {
@@ -44,10 +51,12 @@ func New(target string, insecure bool) (*Client, error) {
 		}
 
 		return &Client{
-			conn:          conn,
-			qClient:       qtypes.NewQueryClient(conn),
-			stakingClient: stakingtypes.NewQueryClient(conn),
-			logger:        log.With().Str("module", "qclient").Logger(),
+			conn:             conn,
+			qClient:          qtypes.NewQueryClient(conn),
+			stakingClient:    stakingtypes.NewQueryClient(conn),
+			logger:           log.With().Str("module", "qclient").Logger(),
+			activeValidators: make([]stakingtypes.Validator, 0),
+			lastUpdateTime:   time.Now().Add(-time.Minute),
 		}, nil
 	}
 
