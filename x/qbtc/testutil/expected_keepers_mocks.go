@@ -62,6 +62,21 @@ func (m *MockStakingKeeper) PowerReduction(ctx context.Context) math.Int {
 	return ret0
 }
 
+func (m *MockStakingKeeper) Validator(ctx context.Context, addr sdk.ValAddress) (stakingtypes.ValidatorI, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validator", ctx, addr)
+	ret0, _ := ret[0].(stakingtypes.ValidatorI)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (m *MockStakingKeeper) IterateBondedValidatorsByPower(ctx context.Context, fn func(index int64, validator stakingtypes.ValidatorI) (stop bool)) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IterateBondedValidatorsByPower", ctx, fn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
 func (mr *MockStakingKeeperRecorder) GetValidator(ctx, address any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockStakingKeeper)(nil).GetValidator), ctx, address)
@@ -78,4 +93,14 @@ func (mr *MockStakingKeeperRecorder) GetLastTotalPower(ctx any) *gomock.Call {
 func (mr *MockStakingKeeperRecorder) PowerReduction(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PowerReduction", reflect.TypeOf((*MockStakingKeeper)(nil).PowerReduction), ctx)
+}
+
+func (mr *MockStakingKeeperRecorder) Validator(ctx, addr any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockStakingKeeper)(nil).Validator), ctx, addr)
+}
+
+func (mr *MockStakingKeeperRecorder) IterateBondedValidatorsByPower(ctx, fn any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IterateBondedValidatorsByPower", reflect.TypeOf((*MockStakingKeeper)(nil).IterateBondedValidatorsByPower), ctx, fn)
 }

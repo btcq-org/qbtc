@@ -1,0 +1,12 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// ZKProof contains the PLONK proof data for claiming UTXOs.
+message ZKProof {
+  // The proof data (PLONK proof serialized)
+  bytes proof_data = 1;
+  // Public inputs to the circuit
+  repeated bytes public_inputs = 2;
+}

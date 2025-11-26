@@ -25,4 +25,7 @@ var (
 	NodePeerAddressKeys = collections.NewPrefix("node_peer_address")
 	// ConstOverrideKeys is the prefix for constant overrides
 	ConstOverrideKeys = collections.NewPrefix("const_override")
+
+	// ZkVerifyingKeyKey stores the PLONK verifying key for ZK proof verification
+	ZkVerifyingKeyKey = collections.NewPrefix("zk_verifying_key")
 )

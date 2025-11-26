@@ -19,7 +19,7 @@ func (s *msgServer) GovClaimUTXO(ctx context.Context, msg *types.MsgGovClaimUTXO
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	cacheCtx, write := sdkCtx.CacheContext()
 	for _, utxo := range msg.Utxos {
-		if err := s.k.ClaimUTXO(cacheCtx, utxo.Txid, utxo.Vout); err != nil {
+		if err := s.k.ClaimUTXO(cacheCtx, utxo.Txid, utxo.Vout, nil); err != nil {
 			return nil, err
 		}
 	}
