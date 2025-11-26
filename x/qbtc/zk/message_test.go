@@ -124,3 +124,4 @@ func TestClaimMessageVersion(t *testing.T) {
 	require.NotEqual(t, msg, hashWithoutVersion, "version string should affect the hash")
 }
 
+

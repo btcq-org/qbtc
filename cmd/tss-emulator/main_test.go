@@ -188,3 +188,4 @@ func TestHash160(t *testing.T) {
 	require.Equal(t, hash, hash2)
 }
 
+

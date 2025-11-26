@@ -242,3 +242,4 @@ func FuzzBech32Decode(f *testing.F) {
 	})
 }
 
+

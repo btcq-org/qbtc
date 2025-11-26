@@ -59,3 +59,4 @@ func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, btcqAddressH
 	return messageHash == expected
 }
 
+

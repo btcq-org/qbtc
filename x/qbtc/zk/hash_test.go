@@ -233,3 +233,4 @@ func TestRIPEMD160CircuitProof(t *testing.T) {
 	assert.ProverSucceeded(&TestRIPEMD160Circuit{}, &witness, test.WithCurves(ecc.BN254), test.WithBackends(backend.PLONK))
 }
 
+
