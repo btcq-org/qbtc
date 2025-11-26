@@ -13,6 +13,7 @@ func TestGenesisState_Validate(t *testing.T) {
 		desc     string
 		genState *types.GenesisState
 		valid    bool
+		errMsg   string
 	}{
 		{
 			desc:     "default is valid",
@@ -24,6 +25,22 @@ func TestGenesisState_Validate(t *testing.T) {
 			genState: &types.GenesisState{},
 			valid:    true,
 		},
+		{
+			desc: "invalid VK - too small",
+			genState: &types.GenesisState{
+				ZkVerifyingKey: make([]byte, types.MinVerifyingKeySize-1),
+			},
+			valid:  false,
+			errMsg: "verifying key too small",
+		},
+		{
+			desc: "invalid VK - malformed",
+			genState: &types.GenesisState{
+				ZkVerifyingKey: make([]byte, types.MinVerifyingKeySize+100), // valid size but garbage data
+			},
+			valid:  false,
+			errMsg: "failed to deserialize verifying key",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -32,6 +49,9 @@ func TestGenesisState_Validate(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
+				if tc.errMsg != "" {
+					require.Contains(t, err.Error(), tc.errMsg)
+				}
 			}
 		})
 	}

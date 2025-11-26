@@ -5,12 +5,14 @@ import "amino/amino.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/type_utxo.proto";
 import "qbtc/qbtc/v1/query_params.proto";
+
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 message mimir {
   string key = 1;
   int64 value = 2;
 }
+
 // GenesisState defines the btcq module's genesis state.
 message GenesisState {
   repeated mimir mimirs = 1 [ (gogoproto.nullable) = false ];
@@ -21,6 +23,13 @@ message GenesisState {
   ];
   repeated UTXO utxos = 3;
   repeated Param params = 4;
+  // The PLONK verifying key for ZK proof verification.
+  // This is generated during setup and embedded in genesis.
+  // All nodes use this same VK for proof verification.
+  bytes zk_verifying_key = 5 [
+    (gogoproto.jsontag) = "zk_verifying_key",
+    (gogoproto.customname) = "ZkVerifyingKey"
+  ];
 }
 
 message GenesisPeerAddress {

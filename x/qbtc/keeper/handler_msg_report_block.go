@@ -179,38 +179,19 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) erro
 	if err != nil {
 		return fmt.Errorf("%s is an invalid qbtc address,%w", memo, err)
 	}
-	// create a cache context to process the claim tx
-	// the transaction either processes completely or not at all
+
+	// create a cache context to process the claim tx atomically
 	cacheCtx, writeCache := ctx.CacheContext()
 	for _, out := range tx.Vout {
 		if out.Value == 0 {
 			continue
 		}
-		utxoKey := getUTXOKey(tx.Txid, out.N)
-		existingUtxo, err := s.k.Utxoes.Get(cacheCtx, utxoKey)
-		if err != nil {
-			if !errors.Is(err, collections.ErrNotFound) {
-				ctx.Logger().Error("failed to get UTXO", "key", utxoKey, "error", err)
-			}
-			return fmt.Errorf("fail to get UTXO for claim tx,error: %w", err)
-		}
-		if existingUtxo.EntitledAmount == 0 {
-			// nothing to claim
-			continue
-		}
-		coin := sdk.NewInt64Coin(sdk.DefaultBondDenom, int64(existingUtxo.EntitledAmount))
-		if err := s.k.bankKeeper.MintCoins(cacheCtx, types.ReserveModuleName, sdk.NewCoins(coin)); err != nil {
-			return fmt.Errorf("fail to mint coins for claim tx,error: %w", err)
-		}
-		if err := s.k.bankKeeper.SendCoinsFromModuleToAccount(cacheCtx, types.ReserveModuleName, memoAddr, sdk.NewCoins(coin)); err != nil {
-			return fmt.Errorf("fail to send coins to claimant address,error: %w", err)
-		}
-		// update the entitled address
-		existingUtxo.EntitledAmount = 0
-		// mint to address
-		if err := s.k.Utxoes.Set(cacheCtx, existingUtxo.GetKey(), existingUtxo); err != nil {
-			ctx.Logger().Error("failed to update UTXO entitled address", "key", existingUtxo.GetKey(), "error", err)
-			return fmt.Errorf("fail to update UTXO entitled address,error: %w", err)
+		// Use the unified ClaimUTXO function
+		if err := s.k.ClaimUTXO(cacheCtx, tx.Txid, out.N, memoAddr); err != nil {
+			// ClaimUTXO returns nil if already claimed (EntitledAmount == 0)
+			// Only fail on actual errors
+			ctx.Logger().Error("failed to claim UTXO", "txid", tx.Txid, "vout", out.N, "error", err)
+			return fmt.Errorf("fail to claim UTXO: %w", err)
 		}
 	}
 	writeCache()

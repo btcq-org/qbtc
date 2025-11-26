@@ -1,0 +1,48 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "gogoproto/gogo.proto";
+import "qbtc/qbtc/v1/type_airdrop.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// UTXORef identifies a specific UTXO by its transaction ID and output index.
+message UTXORef {
+  // The Bitcoin transaction ID where this UTXO originates
+  string txid = 1;
+  // The output index in the Bitcoin transaction
+  uint32 vout = 2;
+}
+
+// MsgClaimWithProof is the message for claiming one or more UTXOs using a ZK
+// proof. The user proves ownership of a Bitcoin address without revealing
+// their private key. Only UTXOs belonging to the proven Bitcoin address will
+// be claimed; others are skipped. Maximum 50 UTXOs can be claimed in a single
+// batch to prevent DoS.
+message MsgClaimWithProof {
+  option (cosmos.msg.v1.signer) = "claimer";
+  option (amino.name) = "qbtc/MsgClaimWithProof";
+
+  // The address on the qbtc chain that will receive the claimed tokens
+  string claimer = 1;
+
+  // The UTXOs to claim. Only those matching the proven Bitcoin address will
+  // be claimed; others are skipped. Maximum 50 UTXOs per batch.
+  repeated UTXORef utxos = 2 [ (gogoproto.nullable) = false ];
+
+  // The ZK proof proving ownership of the Bitcoin address that controls
+  // these UTXOs
+  ZKProof proof = 3 [ (gogoproto.nullable) = false ];
+}
+
+// MsgClaimWithProofResponse is the response for a successful batch claim.
+message MsgClaimWithProofResponse {
+  // The total amount of tokens claimed across all UTXOs
+  uint64 total_amount_claimed = 1;
+  // The number of UTXOs successfully claimed
+  uint32 utxos_claimed = 2;
+  // The number of UTXOs skipped (not matching the proven address)
+  uint32 utxos_skipped = 3;
+}

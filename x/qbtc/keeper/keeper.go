@@ -31,6 +31,10 @@ type Keeper struct {
 	Utxoes            collections.Map[string, types.UTXO]
 	NodePeerAddresses collections.Map[string, string]
 	ConstOverrides    collections.Map[string, int64]
+
+	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
+	// The VK is stored in genesis and registered with the zk package at InitGenesis
+	ZkVerifyingKey collections.Item[[]byte]
 }
 
 func NewKeeper(
@@ -50,10 +54,11 @@ func NewKeeper(
 		stakingKeeper:     stakingKeeper,
 		bankKeeper:        bankKeeper,
 		authority:         authority,
+		authKeeper:        authKeeper,
 		Utxoes:            collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
 		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		authKeeper:        authKeeper,
+		ZkVerifyingKey:    collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {
@@ -72,6 +77,7 @@ func (k Keeper) GetBalanceOfModule(ctx context.Context, moduleName string, denom
 	moduleAddr := k.authKeeper.GetModuleAddress(moduleName)
 	return k.bankKeeper.GetBalance(ctx, moduleAddr, denom)
 }
+
 func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int64 {
 	keyName := constName.String()
 	// if the key is in constOverrides , which means nodes use mimir to override the const value

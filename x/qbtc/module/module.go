@@ -160,6 +160,10 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	return am.networkManager.ProcessNetworkReward(ctx)
+	// Process network rewards
+	if err := am.networkManager.ProcessNetworkReward(ctx); err != nil {
+		return err
+	}
 
+	return nil
 }
