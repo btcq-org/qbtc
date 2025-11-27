@@ -20,6 +20,7 @@ import (
 	"github.com/cometbft/cometbft/crypto"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/privval"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
@@ -82,7 +83,8 @@ func NewService(cfg config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get validator private key: %w", err)
 	}
-	log.Info().Str("validator_address", validatorPrivateKey.PubKey().Address().String()).Msg("loaded validator private key")
+	valAddr := sdk.ValAddress(validatorPrivateKey.PubKey().Address())
+	log.Info().Str("validator_address", valAddr.String()).Msg("loaded validator private key")
 	return &Service{
 		cfg:                 cfg,
 		network:             network,
@@ -222,12 +224,13 @@ func (s *Service) getBtcBlock(height int64) error {
 		return fmt.Errorf("failed to sign block content at height %d: %w", height, err)
 	}
 	s.logger.Info().Msgf("signature length for block at height %d: %d", height, len(sig))
+	valAddr := sdk.ValAddress(s.validatorPrivateKey.PubKey().Address())
 	blockGassip := types.BlockGossip{
 		Hash:         block.Hash,
 		Height:       uint64(block.Height),
 		BlockContent: compressedContent,
 		Attestation: &types.Attestation{
-			Address:   s.validatorPrivateKey.PubKey().Address().String(),
+			Address:   valAddr.String(),
 			Signature: sig,
 		},
 	}
