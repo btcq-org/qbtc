@@ -337,17 +337,21 @@ func fileExists(path string) bool {
 }
 
 // verifyFileBlake2b verifies the Blake2b-512 hash of a file against an expected hash.
+// Uses streaming to avoid loading large PTAU files (hundreds of MB) into memory.
 func verifyFileBlake2b(filePath, expectedHash string) error {
-	data, err := os.ReadFile(filePath)
+	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to open file: %w", err)
 	}
+	defer file.Close()
 
 	hash, err := blake2b.New512(nil)
 	if err != nil {
 		return fmt.Errorf("failed to create blake2b hasher: %w", err)
 	}
-	hash.Write(data)
+	if _, err := io.Copy(hash, file); err != nil {
+		return fmt.Errorf("failed to hash file: %w", err)
+	}
 	actualHash := fmt.Sprintf("%x", hash.Sum(nil))
 
 	if actualHash != expectedHash {
