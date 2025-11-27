@@ -45,30 +45,18 @@ var _ QBTCNode = &Client{}
 
 // New creates a new query client for QBTC blockchain node at the given target address.
 func New(target string, insecure bool) (*Client, error) {
-	var conn *grpc.ClientConn
-	var err error
-	registry := codectypes.NewInterfaceRegistry()
-	cryptocodec.RegisterInterfaces(registry)
+	// insecure grpc connection
 	if insecure {
-		conn, err = grpc.NewClient(target,
+		conn, err := grpc.NewClient(target,
 			grpc.WithTransportCredentials(insecurecreds.NewCredentials()),
 			grpc.WithContextDialer(dialerFunc))
 		if err != nil {
 			return nil, err
 		}
-
-		return &Client{
-			conn:             conn,
-			qClient:          qtypes.NewQueryClient(conn),
-			stakingClient:    stakingtypes.NewQueryClient(conn),
-			logger:           log.With().Str("module", "qclient").Logger(),
-			activeValidators: make([]stakingtypes.Validator, 0),
-			lastUpdateTime:   time.Now().Add(-time.Minute),
-			registry:         registry,
-		}, nil
+		return clientWithConn(conn), nil
 	}
 
-	conn, err = grpc.NewClient(
+	conn, err := grpc.NewClient(
 		target,
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			MinVersion: tls.VersionTLS13,
@@ -78,6 +66,12 @@ func New(target string, insecure bool) (*Client, error) {
 		return nil, err
 	}
 
+	return clientWithConn(conn), nil
+}
+
+func clientWithConn(conn *grpc.ClientConn) *Client {
+	registry := codectypes.NewInterfaceRegistry()
+	cryptocodec.RegisterInterfaces(registry)
 	return &Client{
 		conn:             conn,
 		qClient:          qtypes.NewQueryClient(conn),
@@ -86,7 +80,7 @@ func New(target string, insecure bool) (*Client, error) {
 		activeValidators: make([]stakingtypes.Validator, 0),
 		lastUpdateTime:   time.Now().Add(-time.Minute),
 		registry:         registry,
-	}, nil
+	}
 }
 
 func (c *Client) WithStakingClient(stakingClient stakingtypes.QueryClient) *Client {
