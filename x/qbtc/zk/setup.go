@@ -22,6 +22,7 @@ import (
 	"github.com/consensys/gnark/frontend/cs/scs"
 	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/test/unsafekzg"
+	"golang.org/x/crypto/blake2b"
 )
 
 const (
@@ -35,11 +36,16 @@ const (
 
 	// HermezPtauURL is the URL template for downloading Hermez Powers of Tau files.
 	// Use %d to specify the power (e.g., 16 for 2^16 constraints).
-	HermezPtauURL = "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_%02d.ptau"
+	// Hosted by Polygon zkEVM team - the original Hermez S3 bucket is no longer public.
+	HermezPtauURL = "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_%02d.ptau"
 
 	// DefaultPtauPower is the default power for the PTAU file (2^20 = ~1M constraints).
 	// This is more than enough for our circuit.
 	DefaultPtauPower = 20
+
+	// Ptau20Blake2b is the expected Blake2b hash of the power-20 PTAU file.
+	// From official snarkjs docs: https://github.com/iden3/snarkjs#7-prepare-phase-2
+	Ptau20Blake2b = "89a66eb5590a1c94e3f1ee0e72acf49b1669e050bb5f93c73b066b564dca4e0c7556a52b323178269d64af325d8fdddb33da3a27c34409b821de82aa2bf1a27b"
 )
 
 // Secp256k1Fp is the base field of secp256k1
@@ -257,6 +263,21 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (kz
 	ptauData, err := io.ReadAll(io.LimitReader(resp.Body, maxPtauSize))
 	if err != nil {
 		return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("failed to read PTAU data: %w", err)
+	}
+
+	// Verify Blake2b hash for known powers (security check)
+	// Using Blake2b to match official snarkjs documentation
+	if expectedHash := getPtauExpectedHash(power); expectedHash != "" {
+		hash, err := blake2b.New512(nil)
+		if err != nil {
+			return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("failed to create blake2b hasher: %w", err)
+		}
+		hash.Write(ptauData)
+		actualHash := fmt.Sprintf("%x", hash.Sum(nil))
+		if actualHash != expectedHash {
+			return kzg.SRS{}, kzg.SRS{}, fmt.Errorf("PTAU Blake2b mismatch: expected %s, got %s", expectedHash, actualHash)
+		}
+		fmt.Printf("PTAU Blake2b verified: %s\n", actualHash)
 	}
 
 	fmt.Println("Converting PTAU to gnark SRS format...")
@@ -508,6 +529,17 @@ func min(a, b int) int {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// getPtauExpectedHash returns the expected Blake2b hash for a PTAU file of the given power.
+// Returns empty string if no hash is known (hash verification will be skipped).
+// Hashes from: https://github.com/iden3/snarkjs#7-prepare-phase-2
+func getPtauExpectedHash(power int) string {
+	// Known Blake2b hashes for Hermez Powers of Tau ceremony outputs
+	knownHashes := map[int]string{
+		20: Ptau20Blake2b,
+	}
+	return knownHashes[power]
 }
 
 func saveBN254SRSToFile(srs *kzg.SRS, path string) error {

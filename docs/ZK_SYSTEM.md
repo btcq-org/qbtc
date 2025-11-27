@@ -284,9 +284,10 @@ MessageHash = SHA256(AddressHash || BTCQAddressHash || ChainID || "qbtc-claim-v1
 PLONK requires a universal SRS derived from a Powers of Tau ceremony.
 
 **Production**: Uses the Hermez/Polygon Powers of Tau ceremony:
-- URL: `https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_20.ptau`
+- URL: `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_20.ptau`
+- Blake2b (power 20): `89a66eb5590a1c94e3f1ee0e72acf49b1669e050bb5f93c73b066b564dca4e0c7556a52b323178269d64af325d8fdddb33da3a27c34409b821de82aa2bf1a27b`
 - Power: 2²⁰ (~1M constraints supported)
-- Participants: 54+ independent contributors
+- Participants: 54+ independent contributors  
 - Security: 1-of-N honest participant assumption
 
 ### 6.2 Setup Modes
