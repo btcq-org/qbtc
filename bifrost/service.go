@@ -84,7 +84,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		return nil, fmt.Errorf("failed to get validator private key: %w", err)
 	}
 	valAddr := sdk.ValAddress(validatorPrivateKey.PubKey().Address())
-	log.Info().Str("validator_address", valAddr.String()).Msg("loaded validator private key")
+	log.Info().Str("validator_address", valAddr.String()).Str("validator_pub_key", validatorPrivateKey.PubKey().Address().String()).Msg("loaded validator private key")
 	return &Service{
 		cfg:                 cfg,
 		network:             network,
@@ -224,7 +224,10 @@ func (s *Service) getBtcBlock(height int64) error {
 		return fmt.Errorf("failed to sign block content at height %d: %w", height, err)
 	}
 	s.logger.Info().Msgf("signature length for block at height %d: %d", height, len(sig))
-	valAddr := sdk.ValAddress(s.validatorPrivateKey.PubKey().Address())
+	// use consensus address to explicitly identify the consensus address of the validator
+	// sdk.ValAddress is reserved for the OperatorAddress
+	// eg: qbtcvalcons1...
+	valAddr := sdk.ConsAddress(s.validatorPrivateKey.PubKey().Address())
 	blockGassip := types.BlockGossip{
 		Hash:         block.Hash,
 		Height:       uint64(block.Height),

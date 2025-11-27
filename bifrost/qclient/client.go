@@ -8,7 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcq-org/qbtc/common"
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/rs/zerolog"
@@ -28,6 +32,7 @@ type Client struct {
 	validatorsMu     sync.RWMutex
 	activeValidators []stakingtypes.Validator
 	lastUpdateTime   time.Time
+	registry         codectypes.InterfaceRegistry
 }
 
 type QBTCNode interface {
@@ -42,6 +47,8 @@ var _ QBTCNode = &Client{}
 func New(target string, insecure bool) (*Client, error) {
 	var conn *grpc.ClientConn
 	var err error
+	registry := codectypes.NewInterfaceRegistry()
+	cryptocodec.RegisterInterfaces(registry)
 	if insecure {
 		conn, err = grpc.NewClient(target,
 			grpc.WithTransportCredentials(insecurecreds.NewCredentials()),
@@ -57,6 +64,7 @@ func New(target string, insecure bool) (*Client, error) {
 			logger:           log.With().Str("module", "qclient").Logger(),
 			activeValidators: make([]stakingtypes.Validator, 0),
 			lastUpdateTime:   time.Now().Add(-time.Minute),
+			registry:         registry,
 		}, nil
 	}
 
@@ -69,11 +77,15 @@ func New(target string, insecure bool) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &Client{
-		conn:          conn,
-		qClient:       qtypes.NewQueryClient(conn),
-		stakingClient: stakingtypes.NewQueryClient(conn),
-		logger:        log.With().Str("module", "qclient").Logger(),
+		conn:             conn,
+		qClient:          qtypes.NewQueryClient(conn),
+		stakingClient:    stakingtypes.NewQueryClient(conn),
+		logger:           log.With().Str("module", "qclient").Logger(),
+		activeValidators: make([]stakingtypes.Validator, 0),
+		lastUpdateTime:   time.Now().Add(-time.Minute),
+		registry:         registry,
 	}, nil
 }
 
@@ -105,4 +117,18 @@ func protocolAndAddress(listenAddr string) (string, string) {
 
 func (c *Client) Close() error {
 	return c.conn.Close()
+}
+
+func init() {
+	accountPubKeyPrefix := common.AccountAddressPrefix + "pub"
+	validatorAddressPrefix := common.AccountAddressPrefix + "valoper"
+	validatorPubKeyPrefix := common.AccountAddressPrefix + "valoperpub"
+	consNodeAddressPrefix := common.AccountAddressPrefix + "valcons"
+	consNodePubKeyPrefix := common.AccountAddressPrefix + "valconspub"
+
+	config := sdk.GetConfig()
+	config.SetBech32PrefixForAccount(common.AccountAddressPrefix, accountPubKeyPrefix)
+	config.SetBech32PrefixForValidator(validatorAddressPrefix, validatorPubKeyPrefix)
+	config.SetBech32PrefixForConsensusNode(consNodeAddressPrefix, consNodePubKeyPrefix)
+	config.Seal()
 }

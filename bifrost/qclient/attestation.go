@@ -15,33 +15,36 @@ func (c *Client) VerifyAttestation(ctx context.Context, block types.BlockGossip)
 		return fmt.Errorf("no attestation provided")
 	}
 
-	// Get validator address from attestation
-	valAddr, err := sdk.ValAddressFromBech32(block.Attestation.Address)
+	activeValidators, err := c.ActiveValidators(ctx)
 	if err != nil {
-		return fmt.Errorf("invalid validator address %s: %w", block.Attestation.Address, err)
+		return fmt.Errorf("failed to get active validators: %w", err)
 	}
 
-	// Query validator by address to get public key
-	resp, err := c.stakingClient.Validator(ctx, &stakingtypes.QueryValidatorRequest{
-		ValidatorAddr: block.Attestation.Address,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to query validator %s: %w", valAddr.String(), err)
+	validatorsByConsAddr := make(map[string]stakingtypes.Validator, len(activeValidators))
+	for _, validator := range activeValidators {
+		pubKey, err := validator.ConsPubKey()
+		if err != nil {
+			c.logger.Error().Err(err).Str("operator_address", validator.OperatorAddress).Msgf("failed to unpack any for validator")
+			continue
+		}
+		consAddr := sdk.ConsAddress(pubKey.Address())
+		validatorsByConsAddr[consAddr.String()] = validator
 	}
 
-	if resp.Validator.Status != stakingtypes.Bonded {
-		return fmt.Errorf("validator %s is not bonded (status: %s)", valAddr.String(), resp.Validator.Status.String())
+	validator, found := validatorsByConsAddr[block.Attestation.Address]
+	if !found {
+		return fmt.Errorf("validator not found or not bonded")
 	}
 
 	// Get consensus public key from validator
-	publicKey, err := resp.Validator.ConsPubKey()
+	publicKey, err := validator.ConsPubKey()
 	if err != nil {
-		return fmt.Errorf("failed to get consensus public key for validator %s: %w", valAddr.String(), err)
+		return fmt.Errorf("failed to get consensus public key for validator %s: %w", validator.OperatorAddress, err)
 	}
 
 	// Verify signature against block content
 	if !publicKey.VerifySignature(block.BlockContent, block.Attestation.Signature) {
-		return fmt.Errorf("signature verification failed for validator %s", valAddr.String())
+		return fmt.Errorf("signature verification failed for validator %s", validator.OperatorAddress)
 	}
 
 	c.logger.Debug().
@@ -75,10 +78,16 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 
 	totalVotingPower := math.NewInt(sdk.TokensToConsensusPower(poolResp.Pool.BondedTokens, sdk.DefaultPowerReduction))
 
-	// Create a map of validators by address for quick lookup
+	// Create a map of validators by consensus address for quick lookup
 	validatorsByAddr := make(map[string]stakingtypes.Validator, len(activeValidators))
 	for _, validator := range activeValidators {
-		validatorsByAddr[validator.OperatorAddress] = validator
+		pubKey, err := validator.ConsPubKey()
+		if err != nil {
+			return fmt.Errorf("failed to get consensus address for validator: %w", err)
+		}
+		consAddr := sdk.ConsAddress(pubKey.Address())
+
+		validatorsByAddr[consAddr.String()] = validator
 	}
 
 	// Track processed validators to avoid duplicates
@@ -101,7 +110,7 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 		}
 
 		// Validate validator address
-		_, err := sdk.ValAddressFromBech32(attestation.Address)
+		_, err := sdk.ConsAddressFromBech32(attestation.Address)
 		if err != nil {
 			c.logger.Error().
 				Err(err).
@@ -152,8 +161,7 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 	requiredPower := totalVotingPower.Mul(math.NewInt(2)).Quo(math.NewInt(3))
 
 	if validPower.LTE(requiredPower) {
-		return fmt.Errorf("insufficient voting power: have %s, required >%s (total: %s)",
-			validPower.String(), requiredPower.String(), totalVotingPower.String())
+		return fmt.Errorf("insufficient voting power: have %s, required >%s (total: %s)", validPower.String(), requiredPower.String(), totalVotingPower.String())
 	}
 
 	c.logger.Info().

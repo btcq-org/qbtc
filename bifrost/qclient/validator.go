@@ -63,6 +63,13 @@ func (c *Client) ActiveValidators(ctx context.Context) ([]stakingtypes.Validator
 	c.validatorsMu.Lock()
 	defer c.validatorsMu.Unlock()
 	c.activeValidators = resp.Validators
+	// unnpack interfaces so the public key is available and cached (avoiding unmarshaling on each call)
+	for _, validator := range c.activeValidators {
+		err := validator.UnpackInterfaces(c.registry)
+		if err != nil {
+			return nil, err
+		}
+	}
 	c.lastUpdateTime = time.Now()
 
 	// Make a copy of the slice before releasing the lock to avoid data races
