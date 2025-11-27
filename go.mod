@@ -397,6 +397,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/mdehoog/gnark-ptau v0.0.0-20240119193856-bb5fe9a06e49 // indirect
 	github.com/mdp/qrterminal/v3 v3.2.1 // indirect
 	github.com/mgechev/revive v1.12.0 // indirect
 	github.com/miekg/dns v1.1.68 // indirect
