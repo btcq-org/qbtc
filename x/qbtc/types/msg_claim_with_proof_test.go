@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,16 +18,13 @@ const validBitcoinTxID = "0123456789abcdef0123456789abcdef0123456789abcdef012345
 const validBitcoinTxID2 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 
 // makeValidProof creates a valid proof with proper size for testing
-func makeValidProof() ZKProof {
+func makeValidProof() string {
 	// Create proof data that meets minimum size requirement
 	proofData := make([]byte, MinProofSize+100)
 	for i := range proofData {
 		proofData[i] = byte(i % 256)
 	}
-	return ZKProof{
-		ProofData:    proofData,
-		PublicInputs: [][]byte{{1, 2}},
-	}
+	return hex.EncodeToString(proofData)
 }
 
 // makeValidUTXORefs creates a slice of UTXORef for testing
@@ -183,9 +181,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				Proof: ZKProof{
-					ProofData: []byte{},
-				},
+				Proof: "",
 			},
 			expectErr: true,
 			errMsg:    "proof data is required",
@@ -197,7 +193,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				Proof: ZKProof{},
+				Proof: "",
 			},
 			expectErr: true,
 			errMsg:    "proof data is required",
@@ -209,9 +205,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				Proof: ZKProof{
-					ProofData: make([]byte, MinProofSize-1),
-				},
+				Proof: "d6aa", // too small
 			},
 			expectErr: true,
 			errMsg:    "proof data too small",
@@ -223,9 +217,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				Proof: ZKProof{
-					ProofData: make([]byte, MaxProofSize+1),
-				},
+				Proof: makeValidProof() + "invalid extra data",
 			},
 			expectErr: true,
 			errMsg:    "proof data too large",

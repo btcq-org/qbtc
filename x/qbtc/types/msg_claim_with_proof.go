@@ -79,19 +79,30 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	}
 
 	// Validate proof data exists
-	if len(m.Proof.ProofData) == 0 {
+	if len(m.Proof) == 0 {
 		return se.ErrInvalidRequest.Wrap("proof data is required")
 	}
-
+	proofBytes, err := hex.DecodeString(m.Proof)
+	if err != nil {
+		return se.ErrInvalidRequest.Wrapf("proof data is not valid hex: %v", err)
+	}
 	// Validate proof size bounds (prevents DoS via oversized proofs)
-	if len(m.Proof.ProofData) > MaxProofSize {
-		return se.ErrInvalidRequest.Wrapf("proof data too large: %d bytes (max %d)", len(m.Proof.ProofData), MaxProofSize)
+	if len(proofBytes) > MaxProofSize {
+		return se.ErrInvalidRequest.Wrapf("proof data too large: %d bytes (max %d)", len(proofBytes), MaxProofSize)
 	}
 
-	if len(m.Proof.ProofData) < MinProofSize {
-		return se.ErrInvalidRequest.Wrapf("proof data too small: %d bytes (min %d)", len(m.Proof.ProofData), MinProofSize)
+	if len(proofBytes) < MinProofSize {
+		return se.ErrInvalidRequest.Wrapf("proof data too small: %d bytes (min %d)", len(proofBytes), MinProofSize)
 	}
 
+	if len(m.MessageHash) != 64 {
+		return se.ErrInvalidRequest.Wrapf("message_hash must be 64 hex characters, got %d", len(m.MessageHash))
+	}
+	if len(m.AddressHash) != 40 {
+		return se.ErrInvalidRequest.Wrapf("address_hash must be 40 hex characters, got %d", len(m.AddressHash))
+	}
+	if len(m.BtcqAddressHash) != 64 {
+		return se.ErrInvalidRequest.Wrapf("btcq_address_hash must be 64 hex characters, got %d", len(m.BtcqAddressHash))
+	}
 	return nil
 }
-
