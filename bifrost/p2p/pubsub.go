@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/gogo/protobuf/proto"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -29,10 +30,11 @@ type PubSubService struct {
 	stopchan chan struct{}
 	wg       *sync.WaitGroup
 	db       *leveldb.DB
+	qbtcNode qclient.QBTCNode
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
@@ -60,6 +62,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		stopchan: make(chan struct{}),
 		wg:       &sync.WaitGroup{},
 		db:       db,
+		qbtcNode: qbtcNode,
 	}, nil
 }
 
@@ -131,6 +134,18 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if p.db == nil {
 		return fmt.Errorf("leveldb instance is nil")
 	}
+
+	if p.qbtcNode == nil {
+		return fmt.Errorf("qbtc node instance is nil")
+	}
+
+	// max 1 second timeout
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer verifyCancel()
+	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
+		return fmt.Errorf("failed to verify attestation")
+	}
+
 	key := block.GetKey()
 	existingContent, err := p.db.Get([]byte(key), nil)
 	if err != nil {
@@ -153,8 +168,19 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("block content mismatch for block %s at height %d", block.Hash, block.Height)
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
-	// TODO: when it reach consensus , then sign and submit it to ebifrost
-	return p.saveMsgBtcBlock(msgBlock)
+
+	err = p.saveMsgBtcBlock(msgBlock)
+	if err != nil {
+		return err
+	}
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer checkCancel()
+	// consensus reached
+	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, &msgBlock); err == nil {
+		//TODO: Send block to network
+		p.logger.Info().Msg("sending block to network")
+	}
+	return nil
 }
 
 func (p *PubSubService) saveMsgBtcBlock(msgBlock types.MsgBtcBlock) error {
