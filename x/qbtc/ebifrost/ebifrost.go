@@ -25,6 +25,8 @@ const (
 	cachedBlocks = 10
 )
 
+var _ LocalhostBifrostServer = (*EnshrinedBifrost)(nil)
+
 // EnshrinedBifrost is an embedded btcq service that is used to communicate with bifrost
 // for observed transactions and processing quorum attestations.
 type EnshrinedBifrost struct {
