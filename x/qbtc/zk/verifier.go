@@ -56,17 +56,17 @@ func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 	assignment := &BTCSignatureCircuit{}
 
 	// Set message hash
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		assignment.MessageHash[i] = params.MessageHash[i]
 	}
 
 	// Set address hash
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		assignment.AddressHash[i] = params.AddressHash[i]
 	}
 
 	// Set BTCQ address hash
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
 	}
 

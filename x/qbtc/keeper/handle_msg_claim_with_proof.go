@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -16,12 +17,15 @@ import (
 // and releases only the UTXOs that match the proven address.
 // UTXOs with non-matching addresses are skipped (not failed) for better UX.
 func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithProof) (*types.MsgClaimWithProofResponse, error) {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	isDisabled := s.k.GetConfig(sdkCtx, constants.ClaimWithProofDisabled)
+	if isDisabled > 0 {
+		return nil, sdkerror.ErrInvalidRequest.Wrap("ClaimWithProof feature is disabled")
+	}
 	// Validate the message
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
 	}
-
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
 	// Ensure the ZK verifier is initialized
 	if !zk.IsVerifierInitialized() {

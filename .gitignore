@@ -20,3 +20,5 @@ utxo-indexer
 cmd/bifrost/bifrost_data/
 cmd/bifrost/bifrost
 cmd/bifrost/db
+cmd/zkprover/zk-setup
+cmd/zkprover/zkprover
