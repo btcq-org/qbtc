@@ -8,6 +8,7 @@ type ConstantName int
 const (
 	EmissionCurve ConstantName = iota
 	BlocksPerYear
+	ClaimWithProofDisabled
 )
 
 func FromString(s string) (ConstantName, bool) {
@@ -16,6 +17,8 @@ func FromString(s string) (ConstantName, bool) {
 		return EmissionCurve, true
 	case "BlocksPerYear":
 		return BlocksPerYear, true
+	case "ClaimWithProofDisabled":
+		return ClaimWithProofDisabled, true
 	default:
 		return 0, false
 	}
