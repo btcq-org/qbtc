@@ -243,7 +243,7 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*k
 	// Paths for cached files
 	srsPath := filepath.Join(cacheDir, fmt.Sprintf("srs_bn254_%d.dat", power))
 	srsLagrangePath := filepath.Join(cacheDir, fmt.Sprintf("srs_lagrange_bn254_%d_%d.dat", power, minConstraints))
-
+	rawSRSLagrangePath := filepath.Join(cacheDir, fmt.Sprintf("raw_srs_lagrange_bn254_%d_%d.dat", power, minConstraints))
 	// Check if cached files exist
 	if fileExists(srsPath) && fileExists(srsLagrangePath) {
 		fmt.Printf("Loading cached SRS from %s\n", cacheDir)
@@ -258,15 +258,15 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*k
 		return srs, srsLagrange, nil
 	}
 
-	if !fileExists(srsLagrangePath) {
+	if !fileExists(rawSRSLagrangePath) {
 		ptauURL := fmt.Sprintf(HermezPtauURL, power)
 		// Download and convert the PTAU file
 		fmt.Printf("Downloading Hermez Powers of Tau (2^%d), from %s...\n", power, ptauURL)
-		if err := DownloadFile(ptauURL, srsLagrangePath); err != nil {
+		if err := DownloadFile(ptauURL, rawSRSLagrangePath); err != nil {
 			return nil, nil, fmt.Errorf("failed to download PTAU file: %w", err)
 		}
 	}
-	file, err := os.Open(srsLagrangePath)
+	file, err := os.Open(rawSRSLagrangePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open downloaded PTAU file: %w", err)
 	}
@@ -505,7 +505,7 @@ func bigIntToLimbs(n *big.Int) []frontend.Variable {
 	limbs := make([]frontend.Variable, 4)
 
 	if n == nil {
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			limbs[i] = big.NewInt(0)
 		}
 		return limbs
@@ -517,7 +517,7 @@ func bigIntToLimbs(n *big.Int) []frontend.Variable {
 	copy(padded[32-len(nBytes):], nBytes)
 
 	// Convert to limbs (little-endian limb order, big-endian within limb)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		limb := new(big.Int)
 		limbBytes := padded[24-i*8 : 32-i*8]
 		limb.SetBytes(limbBytes)
