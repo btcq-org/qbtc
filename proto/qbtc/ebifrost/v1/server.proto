@@ -1,15 +1,22 @@
 syntax = "proto3";
 package qbtc.ebifrost.v1;
 
+import "qbtc/qbtc/v1/msg_report_block.proto";
+
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/ebifrost";
 
 // LocalhostBifrost exposes the enshrined bifrost control plane over gRPC.
 service LocalhostBifrost {
-
+  // SendBTCBlock sends a block to the btcq node once it has been validated with
+  // enough attestations.
+  rpc SendBTCBlock(.qbtc.qbtc.v1.MsgBtcBlock) returns (SendBTCBlockResponse);
   // SubscribeToEvents streams event notifications that match the requested
   // types.
   rpc SubscribeToEvents(SubscribeRequest) returns (stream EventNotification);
 }
+
+// SendBTCBlockResponse is the response to a SendBTCBlock request.
+message SendBTCBlockResponse {}
 
 // SubscribeRequest is a request to subscribe to events emitted by btcq node.
 message SubscribeRequest {
