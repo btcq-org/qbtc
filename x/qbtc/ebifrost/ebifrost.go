@@ -152,7 +152,15 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64)
 
 	// process btcq blocks
 	blocks := eb.btcBlockCache.ProcessForProposal(
-		func(block *types.MsgBtcBlock) (sdk.Msg, error) {
+		func(b *types.MsgBtcBlock) (sdk.Msg, error) {
+			// construct a new message with the signer set to the ebifrost signer
+			block := &types.MsgBtcBlock{
+				Height:       b.Height,
+				Hash:         b.Hash,
+				BlockContent: b.BlockContent,
+				Attestations: b.Attestations,
+				Signer:       ebifrostSignerAcc,
+			}
 			return block, nil
 		},
 		eb.MarshalTx,

@@ -2,14 +2,19 @@ package ebifrost
 
 import (
 	context "context"
-	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 // SendBTCBlock  handles sending a BTC block to the EnshrinedBifrost.
 func (eb *EnshrinedBifrost) SendBTCBlock(ctx context.Context, block *types.MsgBtcBlock) (*SendBTCBlockResponse, error) {
-	fmt.Println("Received BTC block to send to enshrined bifrost")
-	// todo: add to cache for later processing
+	if err := eb.btcBlockCache.AddItem(
+		block,
+		(*types.MsgBtcBlock).GetAttestations,
+		(*types.MsgBtcBlock).SetAttestations,
+		(*types.MsgBtcBlock).Equals,
+	); err != nil {
+		return nil, err
+	}
 	return &SendBTCBlockResponse{}, nil
 }

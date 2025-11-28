@@ -5,6 +5,7 @@ import (
 
 	"cosmossdk.io/log"
 	common "github.com/btcq-org/qbtc/common"
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -172,12 +173,12 @@ func (c *InjectCache[T]) MarkAttestationsConfirmed(
 // It filters out attestations that already exist in recent blocks and merges with existing items
 func (c *InjectCache[T]) AddItem(
 	newItem T,
-	getAttestations func(T) []*common.Attestation,
-	setAttestations func(T, []*common.Attestation) T,
+	getAttestations func(T) []*types.Attestation,
+	setAttestations func(T, []*types.Attestation) T,
 	itemsEqual func(T, T) bool,
 ) error {
 	// Filter out attestations that are already in recent blocks
-	newAttestations := make([]*common.Attestation, 0)
+	newAttestations := make([]*types.Attestation, 0)
 	for _, a := range getAttestations(newItem) {
 		found := c.CheckRecentBlocks(func(blockItem T) bool {
 			if !itemsEqual(blockItem, newItem) {

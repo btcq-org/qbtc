@@ -1,6 +1,7 @@
 package ebifrost
 
 import (
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -26,10 +27,8 @@ func (e *EnshrinedBifrostPostDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, s
 	// if the tx is a wInjectTx, then we need to inform enshrined bifrost that the tx has been processed.
 	for _, msg := range tx.GetMsgs() {
 		switch msg.(type) {
-		// TODO: handle utxo injection
-		default:
-			// proceed
-
+		case *types.MsgBtcBlock:
+			//TODO:mark as proccessed
 		}
 	}
 

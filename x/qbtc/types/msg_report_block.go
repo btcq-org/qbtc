@@ -1,6 +1,8 @@
 package types
 
 import (
+	"bytes"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/errors"
 )
@@ -36,4 +38,24 @@ func (m *MsgBtcBlock) GetSigners() []sdk.AccAddress {
 		panic(err)
 	}
 	return []sdk.AccAddress{creator}
+}
+
+func (m *MsgBtcBlock) GetAttestations() []*Attestation {
+	return m.Attestations
+}
+
+func (m *MsgBtcBlock) SetAttestations(attestations []*Attestation) *MsgBtcBlock {
+	m.Attestations = attestations
+	return m
+}
+
+func (m *MsgBtcBlock) Equals(other *MsgBtcBlock) bool {
+	return m.Height == other.Height && m.Hash == other.Hash
+}
+
+func (a *Attestation) Equals(other *Attestation) bool {
+	if a == nil || other == nil {
+		return a == other
+	}
+	return a.Address == other.Address && bytes.Equal(a.Signature, other.Signature)
 }

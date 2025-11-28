@@ -194,6 +194,8 @@ func New(
 	// build app
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
 
+	app.SetTxEncoder(ebifrost.TxEncoder(app.TxConfig().TxEncoder()))
+	app.SetTxDecoder(ebifrost.TxDecoder(app.AppCodec(), app.TxConfig().TxDecoder()))
 	// register legacy modules
 	if err := app.registerIBCModules(appOpts); err != nil {
 		panic(err)
