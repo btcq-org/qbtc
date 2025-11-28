@@ -21,6 +21,7 @@ import (
 	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/test/unsafekzg"
 	ptau "github.com/mdehoog/gnark-ptau"
+	"golang.org/x/crypto/blake2b"
 )
 
 const (
@@ -36,10 +37,16 @@ const (
 	// Use %d to specify the power (e.g., 16 for 2^16 constraints).
 	HermezPtauURL = "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_%02d.ptau"
 
-	// DefaultPtauPower is the default power for the PTAU file (2^20 = ~1M constraints).
+	// DefaultPtauPower is the default power for the PTAU file (2^21 = ~2M constraints).
 	// This is more than enough for our circuit.
 	DefaultPtauPower = 21
 )
+
+// Blake2b hashes for Hermez Powers of Tau ceremony outputs.
+// From official snarkjs docs: https://github.com/iden3/snarkjs#7-prepare-phase-2
+var ptauBlake2bHashes = map[int]string{
+	21: "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678",
+}
 
 // Secp256k1Fp is the base field of secp256k1
 type Secp256k1Fp = emulated.Secp256k1Fp
@@ -265,6 +272,16 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*k
 		if err := DownloadFile(ptauURL, rawSRSLagrangePath); err != nil {
 			return nil, nil, fmt.Errorf("failed to download PTAU file: %w", err)
 		}
+
+		// Verify Blake2b hash (security check against tampering)
+		// Hashes from: https://github.com/iden3/snarkjs#7-prepare-phase-2
+		if expectedHash, ok := ptauBlake2bHashes[power]; ok {
+			if err := verifyFileBlake2b(rawSRSLagrangePath, expectedHash); err != nil {
+				os.Remove(rawSRSLagrangePath) // Remove corrupted/tampered file
+				return nil, nil, fmt.Errorf("PTAU hash verification failed: %w", err)
+			}
+			fmt.Printf("PTAU Blake2b hash verified for power %d\n", power)
+		}
 	}
 	file, err := os.Open(rawSRSLagrangePath)
 	if err != nil {
@@ -317,6 +334,30 @@ func nextPowerOfTwo(n int) int {
 func fileExists(path string) bool {
 	f, err := os.Stat(path)
 	return err == nil && !f.IsDir()
+}
+
+// verifyFileBlake2b verifies the Blake2b-512 hash of a file against an expected hash.
+// Uses streaming to avoid loading large PTAU files (hundreds of MB) into memory.
+func verifyFileBlake2b(filePath, expectedHash string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	hash, err := blake2b.New512(nil)
+	if err != nil {
+		return fmt.Errorf("failed to create blake2b hasher: %w", err)
+	}
+	if _, err := io.Copy(hash, file); err != nil {
+		return fmt.Errorf("failed to hash file: %w", err)
+	}
+	actualHash := fmt.Sprintf("%x", hash.Sum(nil))
+
+	if actualHash != expectedHash {
+		return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+	return nil
 }
 
 func saveBN254SRSToFile(srs *kzg.SRS, path string) error {
