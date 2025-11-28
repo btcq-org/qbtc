@@ -53,7 +53,7 @@ type EnshrinedBifrost struct {
 // NewEnshrinedBifrost creates a new EnshrinedBifrost server.
 func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger) *EnshrinedBifrost {
 	s := grpc.NewServer()
-	return &EnshrinedBifrost{
+	eb := &EnshrinedBifrost{
 		s:             s,
 		logger:        logger,
 		cdc:           cdc,
@@ -62,6 +62,8 @@ func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger)
 		subscribers:   make(map[string][]chan *EventNotification),
 		btcBlockCache: NewInjectCache[*types.MsgBtcBlock](),
 	}
+	RegisterLocalhostBifrostServer(s, eb)
+	return eb
 }
 
 // Start starts the EnshrinedBifrost server and pruner service if cache ttl is enabled.
