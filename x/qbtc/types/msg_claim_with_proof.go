@@ -101,7 +101,7 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	if len(m.AddressHash) != 40 {
 		return se.ErrInvalidRequest.Wrapf("address_hash must be 40 hex characters, got %d", len(m.AddressHash))
 	}
-	if len(m.QbtcAddressHash) == 150 {
+	if len(m.QbtcAddressHash) != 64 {
 		return se.ErrInvalidRequest.Wrapf("qbtc_address_hash is required, got %d", len(m.QbtcAddressHash))
 	}
 	return nil

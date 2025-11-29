@@ -74,7 +74,8 @@ func makeValidMessageHash() string {
 	return hex.EncodeToString(hash) // 64 hex characters
 }
 func makeValidQBTCAddressHash() string {
-	return hex.EncodeToString(sha256.New().Sum([]byte(validBech32Address)))
+	h := sha256.Sum256([]byte(validBech32Address))
+	return hex.EncodeToString(h[:])
 }
 func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
