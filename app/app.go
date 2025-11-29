@@ -194,8 +194,6 @@ func New(
 	// build app
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
 
-	app.SetTxEncoder(ebifrost.TxEncoder(app.TxConfig().TxEncoder()))
-	app.SetTxDecoder(ebifrost.TxDecoder(app.AppCodec(), app.TxConfig().TxDecoder()))
 	// register legacy modules
 	if err := app.registerIBCModules(appOpts); err != nil {
 		panic(err)
@@ -223,8 +221,9 @@ func New(
 
 	app.sm.RegisterStoreDecoders()
 
-	// set custom ante handler
+	// set ante and post handlers
 	app.setAnteHandler(app.txConfig)
+	app.setPostHandler(app.txConfig)
 
 	// A custom InitChainer sets if extra pre-init-genesis logic is required.
 	// This is necessary for manually registered modules that do not support app wiring.
