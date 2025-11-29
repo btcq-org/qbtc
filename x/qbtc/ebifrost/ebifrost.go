@@ -53,7 +53,7 @@ type EnshrinedBifrost struct {
 // NewEnshrinedBifrost creates a new EnshrinedBifrost server.
 func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger) *EnshrinedBifrost {
 	s := grpc.NewServer()
-	return &EnshrinedBifrost{
+	eb := &EnshrinedBifrost{
 		s:             s,
 		logger:        logger,
 		cdc:           cdc,
@@ -62,6 +62,8 @@ func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger)
 		subscribers:   make(map[string][]chan *EventNotification),
 		btcBlockCache: NewInjectCache[*types.MsgBtcBlock](),
 	}
+	RegisterLocalhostBifrostServer(s, eb)
+	return eb
 }
 
 // Start starts the EnshrinedBifrost server and pruner service if cache ttl is enabled.
@@ -150,7 +152,15 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64)
 
 	// process btcq blocks
 	blocks := eb.btcBlockCache.ProcessForProposal(
-		func(block *types.MsgBtcBlock) (sdk.Msg, error) {
+		func(b *types.MsgBtcBlock) (sdk.Msg, error) {
+			// construct a new message with the signer set to the ebifrost signer
+			block := &types.MsgBtcBlock{
+				Height:       b.Height,
+				Hash:         b.Hash,
+				BlockContent: b.BlockContent,
+				Attestations: b.Attestations,
+				Signer:       ebifrostSignerAcc,
+			}
 			return block, nil
 		},
 		eb.MarshalTx,

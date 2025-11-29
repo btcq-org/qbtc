@@ -8,6 +8,13 @@ import (
 
 // SendBTCBlock  handles sending a BTC block to the EnshrinedBifrost.
 func (eb *EnshrinedBifrost) SendBTCBlock(ctx context.Context, block *types.MsgBtcBlock) (*SendBTCBlockResponse, error) {
-	// todo: add to cache for later processing
+	if err := eb.btcBlockCache.AddItem(
+		block,
+		(*types.MsgBtcBlock).GetAttestations,
+		(*types.MsgBtcBlock).SetAttestations,
+		(*types.MsgBtcBlock).Equals,
+	); err != nil {
+		return nil, err
+	}
 	return &SendBTCBlockResponse{}, nil
 }

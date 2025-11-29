@@ -1,6 +1,10 @@
 package app
 
 import (
+	// import for side-effects (custom tx config)
+	_ "github.com/btcq-org/qbtc/app/config"
+
+	// sdk modules
 	runtimev1alpha1 "cosmossdk.io/api/cosmos/app/runtime/v1alpha1"
 	appv1alpha1 "cosmossdk.io/api/cosmos/app/v1alpha1"
 	authmodulev1 "cosmossdk.io/api/cosmos/auth/module/v1"
@@ -31,7 +35,6 @@ import (
 	_ "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtcmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
-	_ "github.com/cosmos/cosmos-sdk/x/auth/tx/config" // import for side-effects
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	_ "github.com/cosmos/cosmos-sdk/x/auth/vesting" // import for side-effects
 	"github.com/cosmos/cosmos-sdk/x/authz"
@@ -185,7 +188,10 @@ var (
 				Config: appconfig.WrapAny(&slashingmodulev1.Module{}),
 			},
 			{
-				Name:   "tx",
+				Name: "tx",
+				// TxConfig is now provided by tx_config.go to support
+				// custom tx encoder and decoding
+				// avoid importing sdk's tx/config module directly
 				Config: appconfig.WrapAny(&txconfigv1.Config{}),
 			},
 			{

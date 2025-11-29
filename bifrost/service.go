@@ -16,6 +16,7 @@ import (
 	"github.com/btcq-org/qbtc/bifrost/p2p"
 	"github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/bitcoin"
+	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cometbft/cometbft/crypto"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
@@ -40,6 +41,7 @@ type Service struct {
 	stopChan            chan struct{}
 	wg                  *sync.WaitGroup
 	qclient             qclient.QBTCNode
+	ebifrost            ebifrost.LocalhostBifrostClient
 	validatorPrivateKey crypto.PrivKey
 }
 
@@ -58,6 +60,14 @@ func NewService(cfg config.Config) (*Service, error) {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
 
+	ebifrostConn, err := qclient.NewGRPCConnection(fmt.Sprintf("localhost:%d", 50051), true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
+	}
+	ebifrostClient := ebifrost.NewLocalhostBifrostClient(ebifrostConn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
+	}
 	kstore, err := keystore.NewFileKeyStore(cfg.RootPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file key store,err: %w", err)
@@ -95,6 +105,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		stopChan:            make(chan struct{}),
 		wg:                  &sync.WaitGroup{},
 		qclient:             qClient,
+		ebifrost:            ebifrostClient,
 		validatorPrivateKey: validatorPrivateKey,
 	}, nil
 }
@@ -134,7 +145,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start p2p network: %w", err)
 	}
 	s.logger.Info().Msg("bifrost service started")
-	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient)
+	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient, s.ebifrost)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}

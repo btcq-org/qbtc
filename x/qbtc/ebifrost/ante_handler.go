@@ -47,7 +47,8 @@ func (itd InjectedTxDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate b
 	// make sure entire tx is only allowed msgs
 	for _, m := range msgs {
 		switch m.(type) {
-		// TODO: handle utxo injection
+		case *types.MsgBtcBlock:
+			// allowed
 		default:
 			return ctx, se.ErrUnauthorized.Wrap(fmt.Sprintf("invalid inject tx message type: %T", m))
 		}
