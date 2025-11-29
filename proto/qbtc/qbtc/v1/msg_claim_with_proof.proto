@@ -38,8 +38,8 @@ message MsgClaimWithProof {
   string message_hash = 4;
   // hex encoded address hash
   string address_hash = 5;
-  // hex encoded btcq address hash
-  string btcq_address_hash = 6;
+  // hex encoded qbtc address hash
+  string qbtc_address_hash = 6;
 }
 
 // MsgClaimWithProofResponse is the response for a successful batch claim.

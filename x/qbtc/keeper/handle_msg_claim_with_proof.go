@@ -203,10 +203,6 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	if err != nil {
 		return fmt.Errorf("proof data is not valid hex: %w", err)
 	}
-	proof, err := zk.ProofFromProtoZKProof(proofBytes)
-	if err != nil {
-		return fmt.Errorf("invalid proof format: %w", err)
-	}
 
 	// Compute the btcq address hash for binding (prevents front-running)
 	btcqAddressHash := zk.HashBTCQAddress(msg.Claimer)
@@ -222,10 +218,10 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	params := zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: btcqAddressHash,
 		ChainID:         chainIDHash,
 	}
 
 	// Verify the proof using the global verifier
-	return zk.VerifyProofGlobal(proof, params)
+	return zk.VerifyProofGlobal(proofBytes, params)
 }

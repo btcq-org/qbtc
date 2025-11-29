@@ -34,20 +34,20 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 // It checks that:
 // 1. The proof is valid
 // 2. The message hash matches the expected value (computed from the claim parameters)
-func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
+func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	if proof == nil {
 		return fmt.Errorf("proof cannot be nil")
 	}
 
 	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessage(params.AddressHash, params.BTCQAddressHash, params.ChainID)
+	expectedMessage := ComputeClaimMessage(params.AddressHash, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
 
 	// Deserialize the proof
 	plonkProof := plonk.NewProof(ecc.BN254)
-	_, err := plonkProof.ReadFrom(bytes.NewReader(proof.ProofData))
+	_, err := plonkProof.ReadFrom(bytes.NewReader(proof))
 	if err != nil {
 		return fmt.Errorf("failed to deserialize proof: %w", err)
 	}
@@ -67,7 +67,7 @@ func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 
 	// Set BTCQ address hash
 	for i := range 32 {
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.BTCQAddressHash[i] = params.QBTCAddressHash[i]
 	}
 
 	// Set chain ID
@@ -180,7 +180,7 @@ func IsVerifierInitialized() bool {
 
 // VerifyProofGlobal verifies a proof using the global verifier.
 // Returns an error if the verifier is not initialized.
-func VerifyProofGlobal(proof *Proof, params VerificationParams) error {
+func VerifyProofGlobal(proof []byte, params VerificationParams) error {
 	verifier, err := GetVerifier()
 	if err != nil {
 		return err

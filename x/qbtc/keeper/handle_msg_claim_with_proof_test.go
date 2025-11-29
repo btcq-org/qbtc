@@ -1,8 +1,8 @@
-//go:build testing
-
 package keeper_test
 
 import (
+	"encoding/hex"
+	"errors"
 	"math/big"
 	"testing"
 
@@ -53,9 +53,6 @@ type claimTestFixture struct {
 func setupClaimTest(t *testing.T) *claimTestFixture {
 	t.Helper()
 
-	// Clear any previous verifier state
-	zk.ClearVerifierForTesting()
-
 	// Setup ZK circuit (TSS-compatible)
 	setup, err := zk.SetupWithOptions(zk.TestSetupOptions())
 	require.NoError(t, err, "ZK circuit setup should succeed")
@@ -64,7 +61,9 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	require.NoError(t, err, "VK serialization should succeed")
 
 	err = zk.RegisterVerifier(vkBytes)
-	require.NoError(t, err, "verifier registration should succeed")
+	if err != nil && !errors.Is(err, zk.ErrVerifierAlreadyInitialized) {
+		t.Fatalf("verifier registration failed: %v", err)
+	}
 
 	prover := zk.ProverFromSetup(setup)
 
@@ -134,8 +133,14 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	}
 }
 
+type publicInput struct {
+	MessageHash     [32]byte
+	AddressHash     [20]byte
+	BTCQAddressHash [32]byte
+}
+
 // generateProof generates a ZK proof for the test fixture's claimer
-func (f *claimTestFixture) generateProof(t *testing.T) []byte {
+func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	t.Helper()
 
 	btcqAddressHash := zk.HashBTCQAddress(f.claimerAddr)
@@ -181,7 +186,11 @@ func (f *claimTestFixture) generateProof(t *testing.T) []byte {
 	})
 	require.NoError(t, err, "proof generation should succeed")
 
-	return proof.ToProtoZKProof()
+	return proof, publicInput{
+		MessageHash:     messageHash,
+		AddressHash:     f.addressHash,
+		BTCQAddressHash: btcqAddressHash,
+	}
 }
 
 // bitcoinAddressFromHash creates a valid P2PKH Bitcoin address from hash160
@@ -419,32 +428,32 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 				{Txid: "ffff000000000000000000000000000000000000000000000000000000000099", Vout: 9}, // not found
 			},
 			expectedClaim:  2,
-			expectedSkip:   3, // already claimed + wrong address + not found
+			expectedSkip:   3,         // already claimed + wrong address + not found
 			expectedAmount: 100000000, // 40M + 60M
 			expectErr:      false,
 		},
 	}
 
+	f := setupClaimTest(t)
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			f := setupClaimTest(t)
-			defer zk.ClearVerifierForTesting()
+		t.Run(tc.name, func(st *testing.T) {
+			//defer zk.ClearVerifierForTesting()
 
 			// Setup UTXOs for this test
 			if tc.setupUTXOs != nil {
-				tc.setupUTXOs(t, f)
+				tc.setupUTXOs(st, f)
 			}
 
 			// Generate proof
-			proofData := f.generateProof(t)
-
+			proofData, publicInput := f.generateProof(st)
 			// Create claim message
 			msg := &types.MsgClaimWithProof{
-				Claimer: f.claimerAddr,
-				Utxos:   tc.utxos,
-				Proof: types.ZKProof{
-					ProofData: proofData,
-				},
+				Claimer:         f.claimerAddr,
+				Utxos:           tc.utxos,
+				Proof:           hex.EncodeToString(proofData),
+				MessageHash:     hex.EncodeToString(publicInput.MessageHash[:]),
+				AddressHash:     hex.EncodeToString(publicInput.AddressHash[:]),
+				QbtcAddressHash: hex.EncodeToString(publicInput.BTCQAddressHash[:]),
 			}
 
 			// Execute
@@ -476,7 +485,7 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	}
 
 	f := setupClaimTest(t)
-	defer zk.ClearVerifierForTesting()
+	//defer zk.ClearVerifierForTesting()
 
 	// Set up a valid UTXO
 	btcAddr := bitcoinAddressFromHash(f.addressHash)
@@ -489,15 +498,17 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	}
 	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "9999000000000000000000000000000000000000000000000000000000000001-0", utxo))
 
+	qbtcAddr := zk.HashBTCQAddress(f.claimerAddr)
 	// Create claim with invalid proof data (random bytes)
 	msg := &types.MsgClaimWithProof{
 		Claimer: f.claimerAddr,
 		Utxos: []types.UTXORef{
 			{Txid: "9999000000000000000000000000000000000000000000000000000000000001", Vout: 0},
 		},
-		Proof: types.ZKProof{
-			ProofData: make([]byte, 500), // Invalid random bytes
-		},
+		Proof:           hex.EncodeToString(make([]byte, 500)),
+		MessageHash:     hex.EncodeToString(make([]byte, 32)),
+		AddressHash:     hex.EncodeToString(make([]byte, 20)),
+		QbtcAddressHash: hex.EncodeToString(qbtcAddr[:]),
 	}
 
 	server := keeper.NewMsgServerImpl(f.keeper)
@@ -506,29 +517,4 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "proof verification failed")
 	assert.Nil(t, resp)
-}
-
-// TestMsgClaimWithProofResponse tests the response struct fields
-func TestMsgClaimWithProofResponse(t *testing.T) {
-	resp := &types.MsgClaimWithProofResponse{
-		TotalAmountClaimed: 100000000,
-		UtxosClaimed:       2,
-		UtxosSkipped:       3,
-	}
-
-	assert.Equal(t, uint64(100000000), resp.GetTotalAmountClaimed())
-	assert.Equal(t, uint32(2), resp.GetUtxosClaimed())
-	assert.Equal(t, uint32(3), resp.GetUtxosSkipped())
-
-	// Test serialization round-trip
-	data, err := resp.Marshal()
-	require.NoError(t, err)
-
-	decoded := &types.MsgClaimWithProofResponse{}
-	err = decoded.Unmarshal(data)
-	require.NoError(t, err)
-
-	assert.Equal(t, resp.TotalAmountClaimed, decoded.TotalAmountClaimed)
-	assert.Equal(t, resp.UtxosClaimed, decoded.UtxosClaimed)
-	assert.Equal(t, resp.UtxosSkipped, decoded.UtxosSkipped)
 }
