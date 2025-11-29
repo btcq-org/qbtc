@@ -4,7 +4,6 @@ package qbtc.qbtc.v1;
 import "amino/amino.proto";
 import "cosmos/msg/v1/msg.proto";
 import "gogoproto/gogo.proto";
-import "qbtc/qbtc/v1/type_airdrop.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
@@ -32,9 +31,15 @@ message MsgClaimWithProof {
   // be claimed; others are skipped. Maximum 50 UTXOs per batch.
   repeated UTXORef utxos = 2 [ (gogoproto.nullable) = false ];
 
-  // The ZK proof proving ownership of the Bitcoin address that controls
-  // these UTXOs
-  ZKProof proof = 3 [ (gogoproto.nullable) = false ];
+  // Hex-encoded ZK proof proving ownership of the Bitcoin address associated
+  // with the UTXOs being claimed.
+  string proof = 3;
+  // hex encoded message hash
+  string message_hash = 4;
+  // hex encoded address hash
+  string address_hash = 5;
+  // hex encoded qbtc address hash
+  string qbtc_address_hash = 6;
 }
 
 // MsgClaimWithProofResponse is the response for a successful batch claim.

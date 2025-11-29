@@ -3,6 +3,7 @@ package keeper
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/btcq-org/qbtc/constants"
@@ -198,9 +199,9 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 // The proof must demonstrate a valid ECDSA signature from the key that controls the Bitcoin address.
 func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, addressHash [20]byte) error {
 	// Convert the proof from proto format
-	proof, err := zk.ProofFromProtoZKProof(msg.Proof.ProofData)
+	proofBytes, err := hex.DecodeString(msg.Proof)
 	if err != nil {
-		return fmt.Errorf("invalid proof format: %w", err)
+		return fmt.Errorf("proof data is not valid hex: %w", err)
 	}
 
 	// Compute the btcq address hash for binding (prevents front-running)
@@ -217,10 +218,10 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	params := zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: btcqAddressHash,
 		ChainID:         chainIDHash,
 	}
 
 	// Verify the proof using the global verifier
-	return zk.VerifyProofGlobal(proof, params)
+	return zk.VerifyProofGlobal(proofBytes, params)
 }

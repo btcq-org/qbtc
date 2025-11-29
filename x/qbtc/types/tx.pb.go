@@ -125,7 +125,8 @@ type MsgClient interface {
 	// module.
 	GovClaimUTXO(ctx context.Context, in *MsgGovClaimUTXO, opts ...grpc.CallOption) (*MsgEmpty, error)
 	UpdateParam(ctx context.Context, in *MsgUpdateParam, opts ...grpc.CallOption) (*MsgEmpty, error)
-	// ClaimWithProof allows users to claim their airdrop using a ZK proof of Bitcoin address ownership.
+	// ClaimWithProof allows users to claim their airdrop using a ZK proof of
+	// Bitcoin address ownership.
 	ClaimWithProof(ctx context.Context, in *MsgClaimWithProof, opts ...grpc.CallOption) (*MsgClaimWithProofResponse, error)
 }
 
@@ -193,7 +194,8 @@ type MsgServer interface {
 	// module.
 	GovClaimUTXO(context.Context, *MsgGovClaimUTXO) (*MsgEmpty, error)
 	UpdateParam(context.Context, *MsgUpdateParam) (*MsgEmpty, error)
-	// ClaimWithProof allows users to claim their airdrop using a ZK proof of Bitcoin address ownership.
+	// ClaimWithProof allows users to claim their airdrop using a ZK proof of
+	// Bitcoin address ownership.
 	ClaimWithProof(context.Context, *MsgClaimWithProof) (*MsgClaimWithProofResponse, error)
 }
 
