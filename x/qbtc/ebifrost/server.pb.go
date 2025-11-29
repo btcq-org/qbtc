@@ -219,7 +219,8 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type LocalhostBifrostClient interface {
-	// SendBTCBlock sends a block to the btcq node once it has been validated with enough attestations.
+	// SendBTCBlock sends a block to the btcq node once it has been validated with
+	// enough attestations.
 	SendBTCBlock(ctx context.Context, in *types.MsgBtcBlock, opts ...grpc.CallOption) (*SendBTCBlockResponse, error)
 	// SubscribeToEvents streams event notifications that match the requested
 	// types.
@@ -277,7 +278,8 @@ func (x *localhostBifrostSubscribeToEventsClient) Recv() (*EventNotification, er
 
 // LocalhostBifrostServer is the server API for LocalhostBifrost service.
 type LocalhostBifrostServer interface {
-	// SendBTCBlock sends a block to the btcq node once it has been validated with enough attestations.
+	// SendBTCBlock sends a block to the btcq node once it has been validated with
+	// enough attestations.
 	SendBTCBlock(context.Context, *types.MsgBtcBlock) (*SendBTCBlockResponse, error)
 	// SubscribeToEvents streams event notifications that match the requested
 	// types.

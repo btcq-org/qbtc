@@ -467,7 +467,7 @@ type ProofParams struct {
 
 // GenerateProof generates a PLONK proof that proves ownership of a Bitcoin address
 // using an ECDSA signature. The signature and public key are private inputs.
-func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
+func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 	// Create witness assignment
 	assignment := &BTCSignatureCircuit{}
 
@@ -534,11 +534,7 @@ func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
 	}
-
-	return &Proof{
-		ProofData:    proofBuf.Bytes(),
-		PublicInputs: publicBuf.Bytes(),
-	}, nil
+	return proofBuf.Bytes(), nil
 }
 
 // bigIntToLimbs converts a big.Int to 4 limbs of 64 bits each for emulated field elements
@@ -568,57 +564,6 @@ func bigIntToLimbs(n *big.Int) []frontend.Variable {
 	return limbs
 }
 
-// Proof contains the serialized PLONK proof and public inputs
-type Proof struct {
-	ProofData    []byte
-	PublicInputs []byte
-}
-
-// ToProtoZKProof converts the proof to the protobuf ZKProof type
-func (p *Proof) ToProtoZKProof() []byte {
-	// Combine proof data and public inputs
-	// Format: [4 bytes proof length][proof data][public inputs]
-	proofLen := uint32(len(p.ProofData))
-	result := make([]byte, 4+len(p.ProofData)+len(p.PublicInputs))
-	result[0] = byte(proofLen >> 24)
-	result[1] = byte(proofLen >> 16)
-	result[2] = byte(proofLen >> 8)
-	result[3] = byte(proofLen)
-	copy(result[4:], p.ProofData)
-	copy(result[4+len(p.ProofData):], p.PublicInputs)
-	return result
-}
-
-// ProofFromProtoZKProof parses a proof from the protobuf ZKProof format
-func ProofFromProtoZKProof(data []byte) (*Proof, error) {
-	if len(data) < 4 {
-		return nil, fmt.Errorf("proof data too short: got %d bytes, need at least 4", len(data))
-	}
-
-	proofLen := uint32(data[0])<<24 | uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3])
-
-	// Security: Check for maximum proof length to prevent DoS
-	if proofLen > MaxProofDataLen {
-		return nil, fmt.Errorf("proof length %d exceeds maximum allowed %d", proofLen, MaxProofDataLen)
-	}
-
-	// Security: Check for minimum proof length
-	if proofLen < MinProofDataLen {
-		return nil, fmt.Errorf("proof length %d is below minimum valid length %d", proofLen, MinProofDataLen)
-	}
-
-	// Security: Check total data length (prevent integer overflow)
-	totalRequired := uint64(4) + uint64(proofLen)
-	if totalRequired > uint64(len(data)) {
-		return nil, fmt.Errorf("proof data truncated: expected at least %d bytes, got %d", totalRequired, len(data))
-	}
-
-	return &Proof{
-		ProofData:    data[4 : 4+proofLen],
-		PublicInputs: data[4+proofLen:],
-	}, nil
-}
-
 // HashBTCQAddress hashes a BTCQ address string to get the binding commitment
 func HashBTCQAddress(btcqAddress string) [32]byte {
 	return sha256.Sum256([]byte(btcqAddress))
@@ -628,7 +573,7 @@ func HashBTCQAddress(btcqAddress string) [32]byte {
 type VerificationParams struct {
 	MessageHash     [32]byte // The message that was signed
 	AddressHash     [20]byte // Hash160 of BTC pubkey
-	BTCQAddressHash [32]byte // H(claimer_address)
+	QBTCAddressHash [32]byte // H(claimer_address)
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)
 }
 
