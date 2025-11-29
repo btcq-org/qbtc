@@ -98,11 +98,20 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	if len(m.MessageHash) != 64 {
 		return se.ErrInvalidRequest.Wrapf("message_hash must be 64 hex characters, got %d", len(m.MessageHash))
 	}
+	if _, err := hex.DecodeString(m.MessageHash); err != nil {
+		return se.ErrInvalidRequest.Wrapf("message_hash is not valid hex: %v", err)
+	}
 	if len(m.AddressHash) != 40 {
 		return se.ErrInvalidRequest.Wrapf("address_hash must be 40 hex characters, got %d", len(m.AddressHash))
 	}
+	if _, err := hex.DecodeString(m.AddressHash); err != nil {
+		return se.ErrInvalidRequest.Wrapf("address_hash is not valid hex: %v", err)
+	}
 	if len(m.QbtcAddressHash) != 64 {
 		return se.ErrInvalidRequest.Wrapf("qbtc_address_hash is required, got %d", len(m.QbtcAddressHash))
+	}
+	if _, err := hex.DecodeString(m.QbtcAddressHash); err != nil {
+		return se.ErrInvalidRequest.Wrapf("qbtc_address_hash is not valid hex: %v", err)
 	}
 	return nil
 }

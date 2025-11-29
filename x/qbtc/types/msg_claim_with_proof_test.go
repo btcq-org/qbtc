@@ -302,7 +302,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 			errMsg:    "message_hash must be 64 hex characters",
 		},
 		{
-			name: "invalid message - no address hash",
+			name: "invalid message - no qbtc address hash",
 			msg: &MsgClaimWithProof{
 				Claimer: validBech32Address,
 				Utxos: []UTXORef{
