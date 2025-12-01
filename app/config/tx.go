@@ -26,10 +26,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/cosmos/cosmos-sdk/x/bank/types"
 
-	corestoretypes "cosmossdk.io/core/store"
-	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
-	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 )
 
 func init() {
@@ -59,11 +56,6 @@ type ModuleInputs struct {
 	FeeGrantKeeper         ante.FeegrantKeeper                `optional:"true"`
 	CustomSignModeHandlers func() []txsigning.SignModeHandler `optional:"true"`
 	CustomGetSigners       []txsigning.CustomGetSigner        `optional:"true"`
-
-	// Custom keepers for qbtc ante handler
-	QbtcKeeper            keeper.Keeper                 `optional:"true"`
-	WasmConfig            *wasmtypes.WasmConfig         `optional:"true"`
-	TXCounterStoreService corestoretypes.KVStoreService `optional:"true"`
 }
 
 type ModuleOutputs struct {
