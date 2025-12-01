@@ -47,6 +47,19 @@ func (m *MockStakingKeeper) GetAllValidators(ctx context.Context) (validators []
 	return ret0, ret1
 }
 
+func (m *MockStakingKeeper) GetBondedValidatorsByPower(ctx context.Context) ([]stakingtypes.Validator, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBondedValidatorsByPower", ctx)
+	ret0, _ := ret[0].([]stakingtypes.Validator)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (mr *MockStakingKeeperRecorder) GetBondedValidatorsByPower(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBondedValidatorsByPower", reflect.TypeOf((*MockStakingKeeper)(nil).GetBondedValidatorsByPower), ctx)
+}
+
 func (m *MockStakingKeeper) GetLastTotalPower(ctx context.Context) (math.Int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLastTotalPower", ctx)
