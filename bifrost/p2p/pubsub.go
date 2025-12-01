@@ -134,16 +134,20 @@ func (p *PubSubService) handleMessage(sub *pubsub.Subscription) {
 }
 
 func (p *PubSubService) checkAttestations(msgBlock *types.MsgBtcBlock) error {
-	checkCtx, checkCancel := context.WithTimeout(context.Background(), time.Second*5)
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer checkCancel()
 	// consensus reached
 	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, msgBlock); err == nil {
-		resp, err := p.ebifrost.SendBTCBlock(context.Background(), msgBlock)
+		sendCtx, sendCancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		defer sendCancel()
+		resp, err := p.ebifrost.SendBTCBlock(sendCtx, msgBlock)
 		if err != nil {
-
+			p.logger.Error().Err(err).Msg("failed to send block to enshrined bifrost")
 			return fmt.Errorf("failed to send block to enshrined bifrost: %w", err)
 		}
 		p.logger.Info().Msgf("sent block to enshrined bifrost: %s", resp)
+	} else {
+		p.logger.Error().Err(err).Msg("consensus not reached")
 	}
 	return nil
 }
@@ -158,7 +162,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	}
 
 	// max 1 second timeout
-	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), time.Second*5)
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer verifyCancel()
 	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
 		return fmt.Errorf("failed to verify attestation")

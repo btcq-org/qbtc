@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/btcq-org/qbtc/common"
-	ebifrost "github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -27,7 +26,6 @@ type Client struct {
 	conn          *grpc.ClientConn
 	qClient       qtypes.QueryClient
 	stakingClient stakingtypes.QueryClient
-	ebifrost      ebifrost.LocalhostBifrostClient
 	logger        zerolog.Logger
 
 	// cached validators
