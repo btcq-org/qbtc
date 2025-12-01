@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -34,7 +33,6 @@ import (
 )
 
 func init() {
-	fmt.Println("init tx_config")
 	appmodule.Register(&txconfigv1.Config{},
 		appmodule.Provide(ProvideModule),
 		appmodule.Provide(ProvideProtoRegistry),

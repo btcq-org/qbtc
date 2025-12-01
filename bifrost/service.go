@@ -61,11 +61,29 @@ func NewService(cfg config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
+	// Track if connections should be cleaned up on error
+	cleanupQClient := true
+	defer func() {
+		if cleanupQClient && qClient != nil {
+			if closeErr := qClient.Close(); closeErr != nil {
+				log.Error().Err(closeErr).Msg("failed to close qclient connection during error cleanup")
+			}
+		}
+	}()
 
 	ebifrostConn, err := qclient.NewGRPCConnection(fmt.Sprintf("localhost:%d", 50051), true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
 	}
+	// Track if connections should be cleaned up on error
+	cleanupEbifrostConn := true
+	defer func() {
+		if cleanupEbifrostConn && ebifrostConn != nil {
+			if closeErr := ebifrostConn.Close(); closeErr != nil {
+				log.Error().Err(closeErr).Msg("failed to close ebifrost connection during error cleanup")
+			}
+		}
+	}()
 
 	ebifrostClient := ebifrost.NewLocalhostBifrostClient(ebifrostConn)
 
@@ -96,6 +114,11 @@ func NewService(cfg config.Config) (*Service, error) {
 	}
 	valAddr := sdk.ValAddress(validatorPrivateKey.PubKey().Address())
 	log.Info().Str("validator_address", valAddr.String()).Str("validator_pub_key", validatorPrivateKey.PubKey().Address().String()).Msg("loaded validator private key")
+
+	// Successfully initialized - don't clean up connections as they're now owned by the service
+	cleanupQClient = false
+	cleanupEbifrostConn = false
+
 	return &Service{
 		cfg:                 cfg,
 		network:             network,

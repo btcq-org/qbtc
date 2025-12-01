@@ -47,10 +47,6 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 			ctx.Logger().Error("validator not found or not bonded", "address", attestation.Address)
 			continue
 		}
-		if err != nil {
-			ctx.Logger().Error("failed to get validator for attestation", "address", attestation.Address, "error", err)
-			continue
-		}
 		publicKey, err := val.ConsPubKey()
 		if err != nil {
 			ctx.Logger().Error("failed to get consensus public key for validator", "address", attestation.Address, "error", err)
