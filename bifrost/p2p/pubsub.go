@@ -169,8 +169,9 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 
 	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer verifyCancel()
-	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
-		return fmt.Errorf("failed to verify attestation")
+	if err := p.qbtcNode.VerifyAttestation(verifyCtx, block); err != nil {
+		p.logger.Error().Err(err).Msg("failed to verify attestation")
+		return fmt.Errorf("failed to verify attestation: %w", err)
 	}
 
 	key := block.GetKey()
