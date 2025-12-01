@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"cosmossdk.io/log"
-	common "github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -142,8 +141,8 @@ func (c *InjectCache[T]) MarkAttestationsConfirmed(
 	item T,
 	logger log.Logger,
 	equals func(T, T) bool,
-	getAttestations func(T) []*common.Attestation,
-	removeAttestations func(T, []*common.Attestation) bool,
+	getAttestations func(T) []*types.Attestation,
+	removeAttestations func(T, []*types.Attestation) bool,
 	logInfo func(T, log.Logger),
 ) bool {
 	c.mu.Lock()

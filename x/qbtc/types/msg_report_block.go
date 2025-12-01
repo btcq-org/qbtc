@@ -49,6 +49,10 @@ func (m *MsgBtcBlock) SetAttestations(attestations []*Attestation) *MsgBtcBlock 
 	return m
 }
 
+func (m *MsgBtcBlock) RemoveAttestations(attestations []*Attestation) bool {
+	m.Attestations = removeAttestations(m.Attestations, attestations)
+	return len(m.Attestations) == 0
+}
 func (m *MsgBtcBlock) Equals(other *MsgBtcBlock) bool {
 	return m.Height == other.Height && m.Hash == other.Hash
 }

@@ -26,9 +26,9 @@ func (e *EnshrinedBifrostPostDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, s
 
 	// if the tx is a wInjectTx, then we need to inform enshrined bifrost that the tx has been processed.
 	for _, msg := range tx.GetMsgs() {
-		switch msg.(type) {
+		switch m := msg.(type) {
 		case *types.MsgBtcBlock:
-			//TODO:mark as proccessed
+			e.EnshrinedBifrost.MarkBlockAsProcessed(ctx, m)
 		}
 	}
 
