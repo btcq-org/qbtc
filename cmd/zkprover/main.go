@@ -241,8 +241,11 @@ The proof proves ownership without revealing the signature or public key.`,
 			}
 
 			// Verify the public key matches the claimed address hash
-			computedHash := zk.Hash160(pubKey.SerializeCompressed())
-			if !bytes.Equal(computedHash, addressHash[:]) {
+			computedHash, err := zk.PublicKeyToAddressHash(pubKey.SerializeCompressed())
+			if err != nil {
+				return fmt.Errorf("failed to compute address hash from public key: %w", err)
+			}
+			if !bytes.Equal(computedHash[:], addressHash[:]) {
 				return fmt.Errorf("public key from TSS does not match claimed address hash")
 			}
 			fmt.Println("Public key verified against address hash")
