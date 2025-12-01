@@ -15,24 +15,36 @@ import (
 	"github.com/btcsuite/btcd/btcjson"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
 func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.MsgBtcBlock) error {
 	validPower := math.ZeroInt()
 	processedValidator := make(map[string]bool, len(msg.Attestations))
+	validators, err := s.k.stakingKeeper.GetBondedValidatorsByPower(ctx)
+	if err != nil {
+		return sdkerror.ErrUnknownRequest.Wrapf("failed to get bonded validators by power: %v", err)
+	}
+	validatorsByConsAddr := make(map[string]stakingtypes.Validator, len(validators))
+	for _, validator := range validators {
+		pubKey, err := validator.ConsPubKey()
+		if err != nil {
+			ctx.Logger().Error("failed to get consensus address for validator", "address", validator.GetOperator(), "error", err)
+			continue
+		}
+
+		consAddr := sdk.ConsAddress(pubKey.Address())
+		validatorsByConsAddr[consAddr.String()] = validator
+
+	}
 	for _, attestation := range msg.Attestations {
 		if processedValidator[attestation.Address] {
 			// skip duplicate attestation from the same validator
 			continue
 		}
-		valAddr, err := sdk.ValAddressFromBech32(attestation.Address)
-		if err != nil {
-			ctx.Logger().Error("invalid validator address in attestation", "address", attestation.Address, "error", err)
-			continue
-		}
-		val, err := s.k.stakingKeeper.GetValidator(ctx, valAddr)
-		if err != nil {
-			ctx.Logger().Error("failed to get validator for attestation", "address", attestation.Address, "error", err)
+		val, found := validatorsByConsAddr[attestation.Address]
+		if !found {
+			ctx.Logger().Error("validator not found or not bonded", "address", attestation.Address)
 			continue
 		}
 		publicKey, err := val.ConsPubKey()

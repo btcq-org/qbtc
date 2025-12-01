@@ -43,9 +43,7 @@ type QBTCNode interface {
 
 var _ QBTCNode = &Client{}
 
-// New creates a new query client for QBTC blockchain node at the given target address.
-func New(target string, insecure bool) (*Client, error) {
-	// insecure grpc connection
+func NewGRPCConnection(target string, insecure bool) (*grpc.ClientConn, error) {
 	if insecure {
 		conn, err := grpc.NewClient(target,
 			grpc.WithTransportCredentials(insecurecreds.NewCredentials()),
@@ -53,7 +51,7 @@ func New(target string, insecure bool) (*Client, error) {
 		if err != nil {
 			return nil, err
 		}
-		return clientWithConn(conn), nil
+		return conn, nil
 	}
 
 	conn, err := grpc.NewClient(
@@ -62,6 +60,15 @@ func New(target string, insecure bool) (*Client, error) {
 			MinVersion: tls.VersionTLS13,
 		})),
 	)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+// New creates a new query client for QBTC blockchain node at the given target address.
+func New(target string, insecure bool) (*Client, error) {
+	conn, err := NewGRPCConnection(target, insecure)
 	if err != nil {
 		return nil, err
 	}

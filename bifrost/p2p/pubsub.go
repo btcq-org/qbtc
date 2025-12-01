@@ -9,6 +9,7 @@ import (
 	"time"
 
 	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
+	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/gogo/protobuf/proto"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -31,12 +32,19 @@ type PubSubService struct {
 	wg       *sync.WaitGroup
 	db       *leveldb.DB
 	qbtcNode qclient.QBTCNode
+	ebifrost ebifrost.LocalhostBifrostClient
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
+	}
+	if qbtcNode == nil {
+		return nil, fmt.Errorf("qbtc node instance is nil")
+	}
+	if ebifrost == nil {
+		return nil, fmt.Errorf("ebifrost client instance is nil")
 	}
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
@@ -63,6 +71,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		wg:       &sync.WaitGroup{},
 		db:       db,
 		qbtcNode: qbtcNode,
+		ebifrost: ebifrost,
 	}, nil
 }
 
@@ -130,6 +139,25 @@ func (p *PubSubService) handleMessage(sub *pubsub.Subscription) {
 
 }
 
+func (p *PubSubService) checkAttestations(msgBlock *types.MsgBtcBlock) error {
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	defer checkCancel()
+	// consensus reached
+	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, msgBlock); err == nil {
+		sendCtx, sendCancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		defer sendCancel()
+		resp, err := p.ebifrost.SendBTCBlock(sendCtx, msgBlock)
+		if err != nil {
+			p.logger.Error().Err(err).Msg("failed to send block to enshrined bifrost")
+			return fmt.Errorf("failed to send block to enshrined bifrost: %w", err)
+		}
+		p.logger.Info().Msgf("sent block to enshrined bifrost: %s", resp)
+	} else {
+		p.logger.Error().Err(err).Msg("consensus not reached")
+	}
+	return nil
+}
+
 func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if p.db == nil {
 		return fmt.Errorf("leveldb instance is nil")
@@ -139,11 +167,11 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("qbtc node instance is nil")
 	}
 
-	// max 1 second timeout
-	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), time.Second*5)
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer verifyCancel()
-	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
-		return fmt.Errorf("failed to verify attestation")
+	if err := p.qbtcNode.VerifyAttestation(verifyCtx, block); err != nil {
+		p.logger.Error().Err(err).Msg("failed to verify attestation")
+		return fmt.Errorf("failed to verify attestation: %w", err)
 	}
 
 	key := block.GetKey()
@@ -156,7 +184,11 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 				BlockContent: block.BlockContent,
 				Attestations: []*types.Attestation{block.Attestation},
 			}
-			return p.saveMsgBtcBlock(msg)
+			err = p.saveMsgBtcBlock(msg)
+			if err != nil {
+				return err
+			}
+			return p.checkAttestations(&msg)
 		}
 		return fmt.Errorf("failed to get existing attestations from db: %w", err)
 	}
@@ -173,14 +205,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if err != nil {
 		return err
 	}
-	checkCtx, checkCancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer checkCancel()
-	// consensus reached
-	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, &msgBlock); err == nil {
-		//TODO: Send block to network
-		p.logger.Info().Msg("sending block to network")
-	}
-	return nil
+	return p.checkAttestations(&msgBlock)
 }
 
 func (p *PubSubService) saveMsgBtcBlock(msgBlock types.MsgBtcBlock) error {

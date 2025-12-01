@@ -63,6 +63,7 @@ func initFixture(t *testing.T) *fixture {
 	stakingKeeper.EXPECT().GetLastTotalPower(gomock.Any()).AnyTimes().Return(math.NewInt(1000000), nil)
 	stakingKeeper.EXPECT().GetValidator(gomock.Any(), gomock.Any()).AnyTimes().Return(validator, nil)
 	stakingKeeper.EXPECT().PowerReduction(gomock.Any()).AnyTimes().Return(math.NewInt(1000))
+	stakingKeeper.EXPECT().GetBondedValidatorsByPower(gomock.Any()).AnyTimes().Return([]stakingtypes.Validator{validator}, nil)
 
 	bankKeeper := qbtctestutil.NewMockBankKeeper(ctrl)
 	authKeeper := qbtctestutil.NewMockAuthKeeper(ctrl)
@@ -98,4 +99,12 @@ func (f *fixture) GetRandomQbtcAddress() (string, error) {
 	privateKey := mldsa.GenPrivKey()
 	pubKey := privateKey.PubKey()
 	return f.GetAddressFromPubKey(pubKey.Address().Bytes())
+}
+func (f *fixture) GetConsensusAddress() (string, error) {
+	pubKey, err := f.validator.ConsPubKey()
+	if err != nil {
+		return "", err
+	}
+	consAddr := sdk.ConsAddress(pubKey.Address())
+	return consAddr.String(), nil
 }

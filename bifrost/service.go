@@ -16,6 +16,7 @@ import (
 	"github.com/btcq-org/qbtc/bifrost/p2p"
 	"github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/bitcoin"
+	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cometbft/cometbft/crypto"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
@@ -25,6 +26,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
 	"github.com/syndtr/goleveldb/leveldb"
+	grpc "google.golang.org/grpc"
 )
 
 // Service represents the bifrost service
@@ -40,6 +42,8 @@ type Service struct {
 	stopChan            chan struct{}
 	wg                  *sync.WaitGroup
 	qclient             qclient.QBTCNode
+	ebifrost            ebifrost.LocalhostBifrostClient
+	ebifrostConn        *grpc.ClientConn
 	validatorPrivateKey crypto.PrivKey
 }
 
@@ -57,6 +61,31 @@ func NewService(cfg config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
+	// Track if connections should be cleaned up on error
+	cleanupQClient := true
+	defer func() {
+		if cleanupQClient && qClient != nil {
+			if closeErr := qClient.Close(); closeErr != nil {
+				log.Error().Err(closeErr).Msg("failed to close qclient connection during error cleanup")
+			}
+		}
+	}()
+
+	ebifrostConn, err := qclient.NewGRPCConnection(fmt.Sprintf("localhost:%d", 50051), true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
+	}
+	// Track if connections should be cleaned up on error
+	cleanupEbifrostConn := true
+	defer func() {
+		if cleanupEbifrostConn && ebifrostConn != nil {
+			if closeErr := ebifrostConn.Close(); closeErr != nil {
+				log.Error().Err(closeErr).Msg("failed to close ebifrost connection during error cleanup")
+			}
+		}
+	}()
+
+	ebifrostClient := ebifrost.NewLocalhostBifrostClient(ebifrostConn)
 
 	kstore, err := keystore.NewFileKeyStore(cfg.RootPath)
 	if err != nil {
@@ -85,6 +114,11 @@ func NewService(cfg config.Config) (*Service, error) {
 	}
 	valAddr := sdk.ValAddress(validatorPrivateKey.PubKey().Address())
 	log.Info().Str("validator_address", valAddr.String()).Str("validator_pub_key", validatorPrivateKey.PubKey().Address().String()).Msg("loaded validator private key")
+
+	// Successfully initialized - don't clean up connections as they're now owned by the service
+	cleanupQClient = false
+	cleanupEbifrostConn = false
+
 	return &Service{
 		cfg:                 cfg,
 		network:             network,
@@ -95,6 +129,8 @@ func NewService(cfg config.Config) (*Service, error) {
 		stopChan:            make(chan struct{}),
 		wg:                  &sync.WaitGroup{},
 		qclient:             qClient,
+		ebifrost:            ebifrostClient,
+		ebifrostConn:        ebifrostConn,
 		validatorPrivateKey: validatorPrivateKey,
 	}, nil
 }
@@ -134,7 +170,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start p2p network: %w", err)
 	}
 	s.logger.Info().Msg("bifrost service started")
-	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient)
+	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient, s.ebifrost)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}
@@ -264,6 +300,11 @@ func (s *Service) Stop() {
 		s.logger.Error().Err(err).Msg("failed to close btc client")
 	} else {
 		s.logger.Info().Msg("btc client closed")
+	}
+	if err := s.ebifrostConn.Close(); err != nil {
+		s.logger.Error().Err(err).Msg("failed to close ebifrost connection")
+	} else {
+		s.logger.Info().Msg("ebifrost connection closed")
 	}
 	if err := s.db.Close(); err != nil {
 		s.logger.Error().Err(err).Msg("failed to close leveldb")
