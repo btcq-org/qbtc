@@ -40,6 +40,12 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
+	if qbtcNode == nil {
+		return nil, fmt.Errorf("qbtc node instance is nil")
+	}
+	if ebifrost == nil {
+		return nil, fmt.Errorf("ebifrost client instance is nil")
+	}
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
 		pubsub.WithDirectPeers(directPeers),
@@ -161,7 +167,6 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("qbtc node instance is nil")
 	}
 
-	// max 1 second timeout
 	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer verifyCancel()
 	if p.qbtcNode.VerifyAttestation(verifyCtx, block) != nil {
