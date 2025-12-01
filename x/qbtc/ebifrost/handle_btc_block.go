@@ -22,7 +22,7 @@ func (eb *EnshrinedBifrost) SendBTCBlock(ctx context.Context, block *types.MsgBt
 }
 
 func (eb *EnshrinedBifrost) MarkBlockAsProcessed(ctx sdk.Context, block *types.MsgBtcBlock) {
-	if eb == nil {
+	if eb == nil || eb.btcBlockCache == nil {
 		return
 	}
 
