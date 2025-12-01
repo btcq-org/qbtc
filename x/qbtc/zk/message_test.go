@@ -1,5 +1,3 @@
-//go:build testing
-
 package zk
 
 import (
@@ -123,5 +121,3 @@ func TestClaimMessageVersion(t *testing.T) {
 	hashWithoutVersion := sha256.Sum256(dataWithoutVersion)
 	require.NotEqual(t, msg, hashWithoutVersion, "version string should affect the hash")
 }
-
-

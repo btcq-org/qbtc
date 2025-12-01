@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -32,9 +33,6 @@ import (
 
 // testChainID is the chain ID used for testing
 const testChainID = "qbtc-test-1"
-
-// testPrivateKey is a test private key for ZK proof generation (same as in zk tests)
-var testPrivateKey = big.NewInt(12345)
 
 // claimTestFixture contains all dependencies for claim tests
 type claimTestFixture struct {
@@ -111,13 +109,11 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	// Create claimer address
 	claimerAddr := qbtctestutil.GetRandomBTCQAddress()
 
-	// Create a Bitcoin private key for signing
-	pkBytes := make([]byte, 32)
-	testPrivateKey.FillBytes(pkBytes)
-	btcPrivKey, _ := btcec.PrivKeyFromBytes(pkBytes)
+	privateKey, err := btcec.NewPrivateKey()
+	require.NoError(t, err, "should create new private key")
 
 	// Compute the address hash from test private key
-	addressHash, err := zk.PrivateKeyToAddressHash(testPrivateKey)
+	addressHash, err := zk.PrivateKeyToAddressHash(privateKey)
 	require.NoError(t, err, "should compute address hash")
 
 	return &claimTestFixture{
@@ -129,7 +125,7 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 		prover:        prover,
 		claimerAddr:   claimerAddr,
 		addressHash:   addressHash,
-		btcPrivKey:    btcPrivKey,
+		btcPrivKey:    privateKey,
 	}
 }
 
@@ -194,8 +190,13 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 }
 
 // bitcoinAddressFromHash creates a valid P2PKH Bitcoin address from hash160
+// this method is only used in test , so it is ok to panic on error
 func bitcoinAddressFromHash(hash [20]byte) string {
-	return zk.Hash160ToP2PKHAddress(hash)
+	addr, err := zk.Hash160ToP2PKHAddress(hash)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create Bitcoin address from hash: %v", err))
+	}
+	return addr
 }
 
 // TestClaimWithProof_PartialClaiming tests the partial claiming behavior.
