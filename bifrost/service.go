@@ -26,6 +26,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
 	"github.com/syndtr/goleveldb/leveldb"
+	grpc "google.golang.org/grpc"
 )
 
 // Service represents the bifrost service
@@ -42,6 +43,7 @@ type Service struct {
 	wg                  *sync.WaitGroup
 	qclient             qclient.QBTCNode
 	ebifrost            ebifrost.LocalhostBifrostClient
+	ebifrostConn        *grpc.ClientConn
 	validatorPrivateKey crypto.PrivKey
 }
 
@@ -64,10 +66,9 @@ func NewService(cfg config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
 	}
+
 	ebifrostClient := ebifrost.NewLocalhostBifrostClient(ebifrostConn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
-	}
+
 	kstore, err := keystore.NewFileKeyStore(cfg.RootPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file key store,err: %w", err)
@@ -106,6 +107,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		wg:                  &sync.WaitGroup{},
 		qclient:             qClient,
 		ebifrost:            ebifrostClient,
+		ebifrostConn:        ebifrostConn,
 		validatorPrivateKey: validatorPrivateKey,
 	}, nil
 }
@@ -275,6 +277,11 @@ func (s *Service) Stop() {
 		s.logger.Error().Err(err).Msg("failed to close btc client")
 	} else {
 		s.logger.Info().Msg("btc client closed")
+	}
+	if err := s.ebifrostConn.Close(); err != nil {
+		s.logger.Error().Err(err).Msg("failed to close ebifrost connection")
+	} else {
+		s.logger.Info().Msg("ebifrost connection closed")
 	}
 	if err := s.db.Close(); err != nil {
 		s.logger.Error().Err(err).Msg("failed to close leveldb")
