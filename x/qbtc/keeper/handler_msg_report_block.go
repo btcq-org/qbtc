@@ -71,6 +71,15 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 
 // SetMsgReportBlock processes a reported Bitcoin block.
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
+	lastProcessedBlock, err := s.k.LastProcessedBlock.Get(ctx)
+	if err != nil {
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
+	}
+	// check if the block height is the next block height
+	if msg.Height != lastProcessedBlock+1 {
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("block height %d is not the next block height, last processed block height: %d", msg.Height, lastProcessedBlock)
+	}
+
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
@@ -112,6 +121,13 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 			continue
 		}
 	}
+
+	// store last block processed height
+	err = s.k.LastProcessedBlock.Set(sdkCtx, msg.Height)
+	if err != nil {
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
+	}
+
 	// write the cache context to the main context if we reach here without error
 	writeCache()
 	return &types.MsgEmpty{}, nil
