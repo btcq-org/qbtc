@@ -49,6 +49,13 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 		sdkCtx.Logger().Warn("no ZK verifying key in genesis - airdrop claims will fail until VK is set")
 	}
 
+	// set the last processed block height to the initial block height - 1
+	if genState.BtcInitialHeight > 0 {
+		err := k.LastProcessedBlock.Set(ctx, genState.BtcInitialHeight-1)
+		if err != nil {
+			return fmt.Errorf("failed to set last processed block height: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -95,4 +102,3 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 
 	return genesis, nil
 }
-

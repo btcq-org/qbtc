@@ -94,3 +94,16 @@ func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int
 	}
 	return v
 }
+
+func (k Keeper) GetLastProcessedBlock(ctx context.Context) (uint64, error) {
+	v, err := k.LastProcessedBlock.Get(ctx)
+	// if the last processed block is not found, return 0
+	// this means  no block has been processed yet
+	if errors.Is(err, collections.ErrNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}

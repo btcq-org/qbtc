@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"cosmossdk.io/log"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -109,30 +108,6 @@ func (eb *EnshrinedBifrost) Stop() {
 
 	close(eb.stopCh)
 	eb.s.Stop()
-}
-
-// nolint:unused
-func (eb *EnshrinedBifrost) broadcastEvent(eventType string, payload []byte) {
-	event := &EventNotification{
-		EventType: eventType,
-		Payload:   payload,
-		Timestamp: time.Now().Unix(),
-	}
-
-	eb.subscribersMu.Lock()
-	subscribers := eb.subscribers[eventType]
-	eb.subscribersMu.Unlock()
-
-	for _, ch := range subscribers {
-		select {
-		case ch <- event:
-			eb.logger.Debug("Event sent to subscriber", "event", eventType)
-			// Event sent successfully
-		default:
-			eb.logger.Error("Failed to send event to subscriber", "event", eventType)
-			// Channel is full or closed, could implement cleanup here
-		}
-	}
 }
 
 func (eb *EnshrinedBifrost) MarshalTx(msg sdk.Msg) ([]byte, error) {
