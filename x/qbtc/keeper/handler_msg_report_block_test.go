@@ -41,12 +41,47 @@ func TestSetMsgReportBlock(t *testing.T) {
 			height:    923828,
 			blockHash: "00000000000000000000dddb246d85ece1541da3cf95e5044def6b2f7d733a0d",
 			fileName:  "../../../testdata/block/923828.json",
-			setup:     nil,
+			setup: func(st *testing.T, f *fixture) {
+				key := "714e0124f36a99799ab034629d1a3abe248dc492b7f1404467d50921d617d6f8-279"
+				utxo := types.UTXO{
+					Txid:           "714e0124f36a99799ab034629d1a3abe248dc492b7f1404467d50921d617d6f8",
+					Vout:           279,
+					Amount:         2748504,
+					EntitledAmount: 2748504,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
+					},
+				}
+				err := f.keeper.Utxoes.Set(f.ctx, key, utxo)
+				require.NoError(st, err)
+				key1 := "da31e2e6b9b8fd8c34d944d79ccf92d69bfb28823c6ec36a9118d7280cd4d315-0"
+				utxo1 := types.UTXO{
+					Txid:           "da31e2e6b9b8fd8c34d944d79ccf92d69bfb28823c6ec36a9118d7280cd4d315",
+					Vout:           0,
+					Amount:         5433643000,
+					EntitledAmount: 5433643000,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
+					},
+				}
+				err = f.keeper.Utxoes.Set(f.ctx, key1, utxo1)
+				require.NoError(st, err)
+			},
 			checkFunc: func(st *testing.T, f *fixture) {
-				// make sure coinbase UTXO is created
 				key := "8eb9d5922df115ccea20adf84f2b1e6664fd9a2c196a3f863303283353d52a33-0"
 				_, err := f.keeper.Utxoes.Get(f.ctx, key)
 				require.Error(st, err)
+				// make sure coinbase UTXO has deducted the fee
+				coinbaseKey := "7025015c9a362d21ac2731bcad2f0ef6c7bb9a1a7bf297c443eb53e952beb8dd-1"
+				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
+				require.NoError(st, err)
+				require.NotNil(st, utxo)
+				require.Equal(st, utxo.EntitledAmount, uint64(313461773))
+
 			},
 		},
 		{
@@ -61,7 +96,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, utxo.EntitledAmount, uint64(2502766489))
+				require.Equal(st, uint64(2502676488), utxo.EntitledAmount)
 
 				key1 := "e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714-0"
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
@@ -97,12 +132,13 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, utxo.EntitledAmount, uint64(2502766489))
+				require.Equal(st, uint64(2502666488), utxo.EntitledAmount)
 
 				key1 := "2bda3732778da19cbf8799aceed3a6ab270948aeac85678bee013ddf3070687e-0"
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
 				require.NoError(st, err)
 				require.NotNil(st, utxo1)
+
 				require.Equal(st, uint64(20000000), utxo1.EntitledAmount)
 
 				key2 := "2bda3732778da19cbf8799aceed3a6ab270948aeac85678bee013ddf3070687e-1"
@@ -166,7 +202,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, utxo.EntitledAmount, uint64(2502766489))
+				require.Equal(st, uint64(2502666488), utxo.EntitledAmount)
 
 				key1 := "bfa3ed4869f33192946dcc03d7789d6be32aa07f083e9752fcea2a5568a9ea47-0"
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
