@@ -98,6 +98,8 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	}
 	cacheContext, writeCache := sdkCtx.CacheContext()
 	claimTxIds := make([]string, 0)
+	totalFee := uint64(0)
+	var coinBaseTx *btcjson.TxRawResult
 	// process the reported block
 	for _, tx := range block.Tx {
 		// check if it is a claim transaction , need to check it before the transaction is processed
@@ -105,12 +107,26 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 		if s.isClaimTx(cacheContext, tx) {
 			claimTxIds = append(claimTxIds, tx.Txid)
 		}
-		if err := s.processTransaction(cacheContext, tx); err != nil {
+
+		if len(tx.Vin) > 0 && tx.Vin[0].IsCoinBase() {
+			// coinbase transaction , process it later, need to calculate the transaction fee first
+			coinBaseTx = &tx
+			continue
+		}
+		fee, err := s.processTransaction(cacheContext, tx)
+		if err != nil {
 			cacheContext.Logger().Error("failed to process transaction", "txid", tx.Txid, "error", err)
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", tx.Txid, err)
 		}
+		totalFee += fee
 	}
-
+	// update coinbase transaction
+	if coinBaseTx != nil {
+		if err := s.processCoinbaseVOuts(cacheContext, coinBaseTx.Vout, coinBaseTx.Txid, totalFee); err != nil {
+			cacheContext.Logger().Error("failed to process coinbase transaction", "txid", coinBaseTx.Txid, "error", err)
+			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinBaseTx.Txid, err)
+		}
+	}
 	for _, tx := range block.Tx {
 		if !slices.Contains(claimTxIds, tx.Txid) {
 			continue
@@ -133,10 +149,11 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	return &types.MsgEmpty{}, nil
 }
 
-func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) error {
+func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) (uint64, error) {
+	fee := uint64(0)
 	totalClaimable, totalInput, hasClaimed, err := s.processVIn(ctx, tx.Vin)
 	if err != nil {
-		return err
+		return fee, err
 	}
 	totalOutput := uint64(0)
 	for _, out := range tx.Vout {
@@ -145,9 +162,9 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 		}
 		totalOutput += uint64(out.Value * 1e8)
 	}
-	if totalInput > 0 {
+	if totalInput > 0 && totalInput > totalOutput {
 		// calculate the transaction fee
-		fee := totalInput - totalOutput
+		fee = totalInput - totalOutput
 		if totalClaimable > fee {
 			totalClaimable = totalClaimable - fee
 		} else {
@@ -155,10 +172,10 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 		}
 	}
 	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalOutput); err != nil {
-		return err
+		return fee, err
 	}
 
-	return nil
+	return fee, nil
 }
 
 const claimPrefix = "claim:"
@@ -340,6 +357,37 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 		entitleAmount := uint64(out.Value * 1e8)
 		if hasClaim {
 			entitleAmount = totalClaimableAmount * uint64(out.Value*1e8) / totalOutputAmount
+		}
+		utxo := types.UTXO{
+			Txid:           txID,
+			Vout:           out.N,
+			Amount:         uint64(out.Value * 1e8),
+			EntitledAmount: entitleAmount,
+			ScriptPubKey: &types.ScriptPubKeyResult{
+				Hex:     out.ScriptPubKey.Hex,
+				Type:    out.ScriptPubKey.Type,
+				Address: out.ScriptPubKey.Address,
+			},
+		}
+		if err := s.k.Utxoes.Set(ctx, utxo.GetKey(), utxo); err != nil {
+			ctx.Logger().Error("failed to save UTXO", "key", utxo.GetKey(), "error", err)
+			return fmt.Errorf("fail to save UTXO,error: %w", err)
+		}
+	}
+	return nil
+}
+func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
+	outs []btcjson.Vout,
+	txID string,
+	totalFee uint64) error {
+	for _, out := range outs {
+		if out.Value == 0 {
+			continue
+		}
+
+		entitleAmount := uint64(out.Value * 1e8)
+		if entitleAmount > totalFee {
+			entitleAmount = entitleAmount - totalFee
 		}
 		utxo := types.UTXO{
 			Txid:           txID,
