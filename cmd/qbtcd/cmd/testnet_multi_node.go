@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,11 +11,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/btcq-org/qbtc/bifrost/keystore"
+	"github.com/btcq-org/qbtc/bifrost/p2p"
 	cmtconfig "github.com/cometbft/cometbft/config"
 	types "github.com/cometbft/cometbft/types"
 	tmtime "github.com/cometbft/cometbft/types/time"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -37,6 +42,8 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
 	runtime "github.com/cosmos/cosmos-sdk/runtime"
+
+	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 var (
@@ -159,6 +166,11 @@ func addTestnetFlagsToCmd(cmd *cobra.Command) {
 	})
 }
 
+type PeerInfo struct {
+	Validator   string
+	PeerAddress string
+}
+
 // initTestnetFiles initializes testnet files for a testnet to be run in a separate process
 func initTestnetFiles(
 	clientCtx client.Context,
@@ -188,6 +200,7 @@ func initTestnetFiles(
 		genFiles        []string
 		persistentPeers string
 		gentxsFiles     []string
+		p2pPeers        []PeerInfo
 	)
 
 	inBuf := bufio.NewReader(cmd.InOrStdin())
@@ -204,6 +217,30 @@ func initTestnetFiles(
 		if err := os.MkdirAll(filepath.Join(nodeDir, "config"), nodeDirPerm); err != nil {
 			_ = os.RemoveAll(args.outputDir)
 			return err
+		}
+
+		bifrostHome := filepath.Join(nodeDir, "bifrost")
+		// Create bifrost home directory
+		if err := os.MkdirAll(bifrostHome, nodeDirPerm); err != nil {
+			_ = os.RemoveAll(args.outputDir)
+			return err
+		}
+
+		kstore, err := keystore.NewFileKeyStore(bifrostHome)
+		if err != nil {
+			return err
+		}
+		p2pKey, err := keystore.GetOrCreateKey(kstore, "bifrost-p2p-key")
+		if err != nil {
+			return fmt.Errorf("failed to get or create p2p key, err: %w", err)
+		}
+		p2pPrivKey, err := crypto.UnmarshalPrivateKey(p2pKey.Body)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal p2p key, err: %w", err)
+		}
+		id, err := p2p.ID(p2pPrivKey)
+		if err != nil {
+			return fmt.Errorf("failed to get peer id, err: %w", err)
 		}
 
 		nodeIDs[i], valPubKeys[i], err = genutil.InitializeNodeValidatorFiles(nodeConfig)
@@ -238,6 +275,12 @@ func initTestnetFiles(
 			_ = os.RemoveAll(args.outputDir)
 			return err
 		}
+
+		peerInfo := PeerInfo{
+			Validator:   sdk.ValAddress(addr).String(),
+			PeerAddress: id.String(),
+		}
+		p2pPeers = append(p2pPeers, peerInfo)
 
 		info := map[string]string{"secret": secret}
 
@@ -312,7 +355,7 @@ func initTestnetFiles(
 		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
 	}
 
-	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators); err != nil {
+	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers); err != nil {
 		return err
 	}
 	// copy gentx file
@@ -361,7 +404,7 @@ func writeFile(file, dir string, contents []byte) error {
 func initGenFiles(
 	clientCtx client.Context, mbm module.BasicManager, chainID string,
 	genAccounts []authtypes.GenesisAccount, genBalances []banktypes.Balance,
-	genFiles []string, numValidators int,
+	genFiles []string, numValidators int, p2pPeers []PeerInfo,
 ) error {
 	appGenState := mbm.DefaultGenesis(clientCtx.Codec)
 
@@ -387,6 +430,18 @@ func initGenFiles(
 	}
 	appGenState[banktypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(&bankGenState)
 
+	var btcqGenesis qbtctypes.GenesisState
+	clientCtx.Codec.MustUnmarshalJSON(appGenState[qbtctypes.ModuleName], &btcqGenesis)
+
+	btcqGenesis.PeerAddresses = make([]qbtctypes.GenesisPeerAddress, len(p2pPeers))
+	for i, peer := range p2pPeers {
+		peerAddress := fmt.Sprintf("%s@%s:%s", peer.PeerAddress, fmt.Sprintf("node-%d", i), "30006")
+		btcqGenesis.PeerAddresses[i] = qbtctypes.GenesisPeerAddress{
+			Validator:   peer.Validator,
+			PeerAddress: peerAddress,
+		}
+	}
+	appGenState[qbtctypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(&btcqGenesis)
 	appGenStateJSON, err := json.MarshalIndent(appGenState, "", "  ")
 	if err != nil {
 		return err
@@ -537,4 +592,36 @@ func generateRandomString(length int) string {
 		b[i] = charset[seededRand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+type ValidatorNode struct {
+	Name string
+}
+
+const dockerComposeDefinition = `
+services:{{range $validator := .Validators }}
+	{{ $validator.Name }}:
+		image: btcq-org/qbtc:latest
+		pull_policy: always
+		restart: always
+{{end}}
+`
+
+func docker(validators []ValidatorNode, tag string) (string, error) {
+	def := strings.ReplaceAll(dockerComposeDefinition, "\t", "  ")
+	t, err := template.New("definition").Parse(def)
+	if err != nil {
+		return "", err
+	}
+	d := struct {
+		Validators []ValidatorNode
+		Tag        string
+	}{Validators: validators}
+
+	buf := bytes.NewBufferString("")
+	err = t.Execute(buf, d)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

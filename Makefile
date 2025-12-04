@@ -163,3 +163,8 @@ govulncheck:
 	@govulncheck ./...
 
 .PHONY: govet govulncheck
+
+
+generate-testnet-files:
+	rm -rf .testnets
+	go run cmd/qbtcd/main.go  multi-node
