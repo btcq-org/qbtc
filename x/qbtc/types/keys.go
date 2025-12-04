@@ -28,4 +28,7 @@ var (
 
 	// ZkVerifyingKeyKey stores the PLONK verifying key for ZK proof verification
 	ZkVerifyingKeyKey = collections.NewPrefix("zk_verifying_key")
+
+	// LastProcessedBlockKey stores the last processed block height
+	LastProcessedBlockKey = collections.NewPrefix("last_processed_block")
 )

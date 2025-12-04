@@ -30,6 +30,7 @@ message GenesisState {
     (gogoproto.jsontag) = "zk_verifying_key",
     (gogoproto.customname) = "ZkVerifyingKey"
   ];
+  uint64 btc_initial_height = 6;
 }
 
 message GenesisPeerAddress {

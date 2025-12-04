@@ -26,6 +26,8 @@ func (eb *EnshrinedBifrost) MarkBlockAsProcessed(ctx sdk.Context, block *types.M
 		return
 	}
 
+	go eb.broadcastBtcBlockEvent(block)
+
 	for i := 0; i < len(eb.btcBlockCache.items); i++ {
 		if eb.btcBlockCache.items[i].Item.Equals(block) {
 			eb.btcBlockCache.RemoveAt(i)

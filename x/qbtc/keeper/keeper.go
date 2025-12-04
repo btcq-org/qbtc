@@ -32,6 +32,8 @@ type Keeper struct {
 	NodePeerAddresses collections.Map[string, string]
 	ConstOverrides    collections.Map[string, int64]
 
+	LastProcessedBlock collections.Item[uint64]
+
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
@@ -48,17 +50,18 @@ func NewKeeper(
 ) Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService:      storeService,
-		cdc:               cdc,
-		addressCodec:      addressCodec,
-		stakingKeeper:     stakingKeeper,
-		bankKeeper:        bankKeeper,
-		authority:         authority,
-		authKeeper:        authKeeper,
-		Utxoes:            collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodePeerAddresses: collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
-		ConstOverrides:    collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		ZkVerifyingKey:    collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
+		storeService:       storeService,
+		cdc:                cdc,
+		addressCodec:       addressCodec,
+		stakingKeeper:      stakingKeeper,
+		bankKeeper:         bankKeeper,
+		authority:          authority,
+		authKeeper:         authKeeper,
+		Utxoes:             collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodePeerAddresses:  collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
+		ConstOverrides:     collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		ZkVerifyingKey:     collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
+		LastProcessedBlock: collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
 	}
 	schema, err := sb.Build()
 	if err != nil {
@@ -90,4 +93,17 @@ func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int
 		return constants.DefaultValues[constName]
 	}
 	return v
+}
+
+func (k Keeper) GetLastProcessedBlock(ctx context.Context) (uint64, error) {
+	v, err := k.LastProcessedBlock.Get(ctx)
+	// if the last processed block is not found, return 0
+	// this means  no block has been processed yet
+	if errors.Is(err, collections.ErrNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
 }
