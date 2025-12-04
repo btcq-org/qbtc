@@ -1,0 +1,14 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.marshaler_all) = true;
+
+// QueryLastProcessedBlockRequest is the request type for the
+// Query/LastProcessedBlock RPC method.
+message QueryLastProcessedBlockRequest {}
+// QueryLastProcessedBlockResponse is the response type for the
+// Query/LastProcessedBlock RPC method.
+message QueryLastProcessedBlockResponse { uint64 height = 1; }
