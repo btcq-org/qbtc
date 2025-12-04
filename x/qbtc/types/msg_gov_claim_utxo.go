@@ -1,6 +1,8 @@
 package types
 
 import (
+	"strconv"
+
 	se "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
@@ -17,4 +19,12 @@ func (m *MsgGovClaimUTXO) ValidateBasic() error {
 		}
 	}
 	return nil
+}
+
+func (m *MsgGovClaimUTXO) GetUtxoString() []string {
+	utxoIds := make([]string, len(m.Utxos))
+	for i, utxo := range m.Utxos {
+		utxoIds[i] = utxo.Txid + ":" + strconv.FormatInt(int64(utxo.Vout), 10)
+	}
+	return utxoIds
 }

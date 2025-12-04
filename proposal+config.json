@@ -1,0 +1,16 @@
+{
+  "@type": "/cosmos.gov.v1.MsgSubmitProposal",
+  "messages": [
+    {
+      "@type": "/qbtc.qbtc.v1.MsgUpdateParam",
+      "key": "EmissionCurve",
+      "value": "6",
+      "authority": "qbtc10d07y265gmmuvt4z0w9aw880jnsr700j89jqe8"
+    }
+  ],
+  "metadata": "", 
+  "title": "Update emission curve to 6",
+  "summary": "Update emission curve to 6",
+  "proposer": "qbtc1ddffch4l0ynyd8v4q05j9chzqf7dl2pvz9knds",
+  "deposit": "900000000qbtc"
+}
