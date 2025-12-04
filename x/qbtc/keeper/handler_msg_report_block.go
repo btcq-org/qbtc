@@ -143,7 +143,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	if err != nil {
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
 	}
-
+	sdkCtx.Logger().Info("processed btc block", "height", msg.Height, "hash", msg.Hash)
 	// write the cache context to the main context if we reach here without error
 	writeCache()
 	return &types.MsgEmpty{}, nil

@@ -32,3 +32,15 @@ var (
 	// LastProcessedBlockKey stores the last processed block height
 	LastProcessedBlockKey = collections.NewPrefix("last_processed_block")
 )
+
+const (
+	EventTypeUpdateParam = "update_param"
+
+	AttributeKeyParamKey   = "param_key"
+	AttributeKeyParamValue = "param_value"
+
+	EventTypeGovClaimUTXO  = "gov_claim_utxo"
+	AttributeKeyUTXOCount  = "utxo_count"
+	AttributeKeyGovClaimer = "gov_claimer"
+	AttributeUtxos         = "utxos"
+)
