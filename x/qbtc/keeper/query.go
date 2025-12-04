@@ -73,7 +73,7 @@ func (qs queryServer) Params(ctx context.Context, req *types.QueryParamsRequest)
 
 func (qs queryServer) LastProcessedBlock(ctx context.Context, req *types.QueryLastProcessedBlockRequest) (*types.QueryLastProcessedBlockResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	height, err := qs.k.LastProcessedBlock.Get(sdkCtx)
+	height, err := qs.k.GetLastProcessedBlock(sdkCtx)
 	if err != nil {
 		return nil, err
 	}
