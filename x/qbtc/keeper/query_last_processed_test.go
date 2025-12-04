@@ -12,7 +12,8 @@ func TestQueryLastProcessedBlock(t *testing.T) {
 	f := initFixture(t)
 	queryClient := keeper.NewQueryServerImpl(f.keeper)
 
-	f.keeper.LastProcessedBlock.Set(f.ctx, 100)
+	err := f.keeper.LastProcessedBlock.Set(f.ctx, 100)
+	require.NoError(t, err)
 	height, err := queryClient.LastProcessedBlock(f.ctx, &types.QueryLastProcessedBlockRequest{})
 	require.NoError(t, err)
 	require.NotNil(t, height)
