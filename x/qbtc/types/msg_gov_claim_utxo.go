@@ -18,3 +18,11 @@ func (m *MsgGovClaimUTXO) ValidateBasic() error {
 	}
 	return nil
 }
+
+func (m *MsgGovClaimUTXO) GetUtxos() []string {
+	utxoIds := make([]string, len(m.Utxos))
+	for i, utxo := range m.Utxos {
+		utxoIds[i] = utxo.Txid + ":" + string(rune(utxo.Vout))
+	}
+	return utxoIds
+}
