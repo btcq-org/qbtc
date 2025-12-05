@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -21,5 +22,14 @@ func (s *msgServer) UpdateParam(ctx context.Context, msg *types.MsgUpdateParam) 
 		return nil, err
 	}
 	write()
+	// add event
+	sdkCtx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeUpdateParam,
+			sdk.NewAttribute(types.AttributeKeyParamKey, msg.Key),
+			sdk.NewAttribute(types.AttributeKeyParamValue, strconv.FormatInt(msg.Value, 10)),
+		),
+	)
+	sdkCtx.Logger().Info("parameter updated", "key", msg.Key, "value", msg.Value)
 	return &types.MsgEmpty{}, nil
 }

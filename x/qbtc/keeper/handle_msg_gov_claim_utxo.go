@@ -2,6 +2,8 @@ package keeper
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -24,5 +26,14 @@ func (s *msgServer) GovClaimUTXO(ctx context.Context, msg *types.MsgGovClaimUTXO
 		}
 	}
 	write()
+	// add event
+	sdkCtx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.EventTypeGovClaimUTXO,
+			sdk.NewAttribute(types.AttributeKeyUTXOCount, strconv.FormatInt(int64(len(msg.Utxos)), 10)),
+			sdk.NewAttribute(types.AttributeUtxos, strings.Join(msg.GetUtxoString(), ",")),
+		),
+	)
+	sdkCtx.Logger().Info("governance claimed UTXOs", "claimer", msg.Authority, "count", len(msg.Utxos))
 	return &types.MsgEmpty{}, nil
 }
