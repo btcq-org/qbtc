@@ -160,6 +160,10 @@ func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k keeper.Keeper, c
 		if err := proto.Unmarshal(utxoBytes, &utxo); err != nil {
 			return err
 		}
+		// This is the first UTXO , set it to already claimed , we need to mint 50 QBTC to start our genesis node
+		if utxo.Txid == "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b" {
+			utxo.EntitledAmount = 0
+		}
 		err = k.Utxoes.Set(ctx, utxo.GetKey(), utxo)
 		if err != nil {
 			return err
