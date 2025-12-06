@@ -151,7 +151,10 @@ func (AppModule) ConsensusVersion() uint64 { return 1 }
 func (am AppModule) BeginBlock(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	utxoLoader := NewUtxoLoader(am.dataDir)
-	if err := utxoLoader.EnsureLoadUtxoFromChunkFile(sdkCtx, int(sdkCtx.BlockHeight()), am.keeper); err != nil {
+	if sdkCtx.BlockHeight() <= 0 {
+		return nil
+	}
+	if err := utxoLoader.EnsureLoadUtxoFromChunkFile(sdkCtx, int(sdkCtx.BlockHeight()-1), am.keeper); err != nil {
 		sdkCtx.Logger().Error("fail to load utxo from chunk file", "error", err)
 	}
 	return nil
