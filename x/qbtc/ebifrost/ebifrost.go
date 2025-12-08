@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 
 	"cosmossdk.io/log"
@@ -141,6 +142,17 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64)
 		eb.MarshalTx,
 		func(block *types.MsgBtcBlock, logger log.Logger) {
 			logger.Info("Processed btcq block", "height", block.Height, "hash", block.Hash)
+		},
+		func(blocks []*types.MsgBtcBlock) {
+			slices.SortFunc(blocks, func(a, b *types.MsgBtcBlock) int {
+				if a.Height < b.Height {
+					return -1
+				}
+				if a.Height > b.Height {
+					return 1
+				}
+				return 0
+			})
 		},
 		eb.logger,
 	)

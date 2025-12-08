@@ -256,11 +256,13 @@ func (c *InjectCache[T]) ProcessForProposal(
 	createMsg func(T) (sdk.Msg, error),
 	createTx func(sdk.Msg) ([]byte, error),
 	logItem func(T, log.Logger),
+	sortItems func([]T),
 	logger log.Logger,
 ) [][]byte {
 	var injectTxs [][]byte
 
 	items := c.Get()
+	sortItems(items)
 	for _, item := range items {
 		msg, err := createMsg(item)
 		if err != nil {

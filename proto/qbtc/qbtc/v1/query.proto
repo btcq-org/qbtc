@@ -7,6 +7,7 @@ import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "qbtc/qbtc/v1/query_peer_address.proto";
 import "qbtc/qbtc/v1/query_params.proto";
+import "qbtc/qbtc/v1/query_last_processed.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // Query defines the gRPC querier service.
@@ -20,6 +21,10 @@ service Query {
   rpc AllNodePeerAddresses(QueryAllNodePeerAddressesRequest)
       returns (QueryAllNodePeerAddressesResponse) {
     option (google.api.http).get = "/qbtc/v1/node_peer_addresses";
+  }
+  rpc LastProcessedBlock(QueryLastProcessedBlockRequest)
+      returns (QueryLastProcessedBlockResponse) {
+    option (google.api.http).get = "/qbtc/v1/last_processed_block";
   }
   // Params returns the parameter for a specific key.
   rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
