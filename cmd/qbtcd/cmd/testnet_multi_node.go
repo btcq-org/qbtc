@@ -182,7 +182,7 @@ Example:
 	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host")
 	cmd.Flags().Int64(flagBitcoinRPCPort, 8332, "Bitcoin RPC port")
 	cmd.Flags().String(flagBitcoinRPCUser, "bitcoinrpc", "Bitcoin RPC user")
-	cmd.Flags().String(flagBitcoinRPCPassword, "securepassword", "Bitcoin RPC password")
+	cmd.Flags().String(flagBitcoinRPCPassword, "", "Bitcoin RPC password (consider using BITCOIN_RPC_PASSWORD env var)")
 	return cmd
 }
 
@@ -726,6 +726,8 @@ services:{{range $validator := .Validators }}
 		command: [ "bifrost", "--config", "/qbtc_data/.qbtc/bifrost/config.json"]
 		volumes:
 			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
+		depends_on:
+			- {{ $validator.Name }}
 {{end}}
 `
 
