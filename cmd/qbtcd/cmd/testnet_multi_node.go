@@ -188,6 +188,9 @@ func initTestnetFiles(
 
 	appConfig := srvconfig.DefaultConfig()
 	appConfig.MinGasPrices = args.minGasPrices
+	if args.minGasPrices == "" {
+		appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
+	}
 	appConfig.API.Enable = false
 	// 	appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
 	appConfig.Telemetry.EnableHostnameLabel = false
@@ -204,14 +207,24 @@ func initTestnetFiles(
 	)
 
 	inBuf := bufio.NewReader(cmd.InOrStdin())
+
+	nodes := make([]ValidatorNode, args.numValidators)
+	for i := range nodes {
+		nodes[i] = ValidatorNode{
+			Name:    fmt.Sprintf("node_%d", i),
+			RPCPort: args.ports[i],
+			Volume:  fmt.Sprintf("validator%d", i),
+		}
+	}
+
 	for i := 0; i < args.numValidators; i++ {
 		nodeDirName := fmt.Sprintf("%s%d", args.nodeDirPrefix, i)
 		nodeDir := filepath.Join(args.outputDir, nodeDirName)
 		gentxsDir := filepath.Join(args.outputDir, nodeDirName, "config", "gentx")
-
 		nodeConfig.SetRoot(nodeDir)
 		nodeConfig.Moniker = nodeDirName
 		nodeConfig.RPC.ListenAddress = "tcp://0.0.0.0:" + args.ports[i]
+		nodeConfig.RPC.CORSAllowedOrigins = []string{"*"}
 
 		var err error
 		if err := os.MkdirAll(filepath.Join(nodeDir, "config"), nodeDirPerm); err != nil {
@@ -249,7 +262,7 @@ func initTestnetFiles(
 			return err
 		}
 
-		memo := fmt.Sprintf("%s@%s:"+strconv.Itoa(26656-3*i), nodeIDs[i], args.startingIPAddress)
+		memo := fmt.Sprintf("%s@node_%d:"+strconv.Itoa(26656-3*i), nodeIDs[i], i)
 
 		if persistentPeers == "" {
 			persistentPeers = memo
@@ -385,6 +398,18 @@ func initTestnetFiles(
 		return err
 	}
 
+	def, err := docker(nodes, "localnet")
+	if err != nil {
+		return err
+	}
+
+	dockComposeFile := filepath.Join(args.outputDir, "docker-compose.yml")
+
+	err = writeFile(dockComposeFile, args.outputDir, []byte(def))
+	if err != nil {
+		return err
+	}
+
 	cmd.PrintErrf("Successfully initialized %d node directories\n", args.numValidators)
 	return nil
 }
@@ -435,7 +460,7 @@ func initGenFiles(
 
 	btcqGenesis.PeerAddresses = make([]qbtctypes.GenesisPeerAddress, len(p2pPeers))
 	for i, peer := range p2pPeers {
-		peerAddress := fmt.Sprintf("%s@%s:%s", peer.PeerAddress, fmt.Sprintf("node-%d", i), "30006")
+		peerAddress := fmt.Sprintf("%s@%s:%s", peer.PeerAddress, fmt.Sprintf("node_%d_bifrost", i), "30006")
 		btcqGenesis.PeerAddresses[i] = qbtctypes.GenesisPeerAddress{
 			Validator:   peer.Validator,
 			PeerAddress: peerAddress,
@@ -595,15 +620,20 @@ func generateRandomString(length int) string {
 }
 
 type ValidatorNode struct {
-	Name string
+	Name    string
+	Volume  string
+	RPCPort string
 }
 
 const dockerComposeDefinition = `
 services:{{range $validator := .Validators }}
 	{{ $validator.Name }}:
-		image: btcq-org/qbtc:latest
-		pull_policy: always
+		image: btcq-org/qbtc:{{ $.Tag }}
 		restart: always
+		ports:
+			- "{{ $validator.RPCPort }}:26657"
+		volumes:
+			- ./{{ $validator.Volume }}:/qbtc_data/.qbtcd
 {{end}}
 `
 
@@ -616,7 +646,7 @@ func docker(validators []ValidatorNode, tag string) (string, error) {
 	d := struct {
 		Validators []ValidatorNode
 		Tag        string
-	}{Validators: validators}
+	}{Validators: validators, Tag: tag}
 
 	buf := bytes.NewBufferString("")
 	err = t.Execute(buf, d)

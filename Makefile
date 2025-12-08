@@ -17,7 +17,14 @@ ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
 	-X github.com/cosmos/cosmos-sdk/version.Version=$(VERSION) \
 	-X github.com/cosmos/cosmos-sdk/version.Commit=$(COMMIT)
 
-BUILD_FLAGS := -ldflags '$(ldflags)'
+ifeq ($(LINK_STATICALLY),true)
+	ldflags += -linkmode=external -extldflags "-Wl,-z,muldefs -static"
+endif
+
+build_tags = netgo
+build_tags += $(BUILD_TAGS)
+
+BUILD_FLAGS := -tags "$(build_tags)" -ldflags '$(ldflags)'
 
 .PHONY: build
 
@@ -28,7 +35,8 @@ build:
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version
 	@echo "build bifrost and tools"
-	@go build ./cmd/bifrost ./cmd/utxo-indexer
+	@go build -o ./build/bifrost  ./cmd/bifrost 
+	@go build -o ./build/utxo-indexer ./cmd/utxo-indexer
 ##############
 ###  Test  ###
 ##############
@@ -164,6 +172,9 @@ govulncheck:
 
 .PHONY: govet govulncheck
 
+docker-localnet:
+	@echo "Building docker image for local development"
+	@docker build -t btcq-org/qbtc:localnet .
 
 generate-testnet-files:
 	rm -rf .testnets
