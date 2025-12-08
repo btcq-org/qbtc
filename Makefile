@@ -176,6 +176,32 @@ docker-localnet:
 	@echo "Building docker image for local development"
 	@docker build -t btcq-org/qbtc:localnet .
 
-generate-testnet-files:
+
+
+generate-testnet:
+	@echo "Generating testnet files"
+	@if [ -z "$$BITCOIN_RPC_HOST" ]; then \
+		echo "Error: BITCOIN_RPC_HOST environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_PORT" ]; then \
+		echo "Error: BITCOIN_RPC_PORT environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_USER" ]; then \
+		echo "Error: BITCOIN_RPC_USER environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_PASSWORD" ]; then \
+		echo "Error: BITCOIN_RPC_PASSWORD environment variable is not set"; \
+		exit 1; \
+	fi
 	rm -rf .testnets
-	go run cmd/qbtcd/main.go  multi-node
+	go run cmd/qbtcd/main.go multi-node \
+		--bifrost-start-block-height 927000 \
+		--bitcoin-rpc-host $$BITCOIN_RPC_HOST \
+		--bitcoin-rpc-port $$BITCOIN_RPC_PORT \
+		--bitcoin-rpc-user $$BITCOIN_RPC_USER \
+		--bitcoin-rpc-password $$BITCOIN_RPC_PASSWORD
+
+.PHONY: generate-testnet

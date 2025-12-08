@@ -401,8 +401,8 @@ func initTestnetFiles(
 			return err
 		}
 
-		appConfig.GRPC.Address = args.startingIPAddress + ":" + strconv.Itoa(9090-2*i)
-		appConfig.API.Address = "tcp://localhost:" + strconv.Itoa(1317-i)
+		appConfig.GRPC.Address = "0.0.0.0:" + strconv.Itoa(9090-2*i)
+		appConfig.API.Address = "tcp://0.0.0.0:" + strconv.Itoa(1317-i)
 		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
 
 		bitcoinDataHome := filepath.Join(nodeDir, "bitcoin_data")
@@ -613,7 +613,7 @@ func collectGenFiles(
 		nodeConfig.P2P.PersistentPeers = persistentPeers
 		nodeConfig.P2P.AllowDuplicateIP = true
 		nodeConfig.P2P.ListenAddress = "tcp://0.0.0.0:" + strconv.Itoa(26656-3*i)
-		nodeConfig.RPC.ListenAddress = "tcp://127.0.0.1:" + args.ports[i]
+		nodeConfig.RPC.ListenAddress = "tcp://0.0.0.0:" + args.ports[i]
 		nodeConfig.ProxyApp = "tcp://127.0.0.1:" + strconv.Itoa(26658-3*i)
 		nodeConfig.Instrumentation.PrometheusListenAddr = ":" + strconv.Itoa(26660+i)
 		nodeConfig.Instrumentation.Prometheus = true
