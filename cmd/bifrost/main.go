@@ -32,15 +32,24 @@ func main() {
 	showVersion := flag.Bool("version", false, "Shows version")
 	logLevel := flag.StringP("log-level", "l", "info", "Log Level")
 	pretty := flag.BoolP("pretty-log", "p", false, "Enables unstructured prettified logging. This is useful for local debugging")
+	configPath := flag.StringP("config", "c", "", "Path to config file or directory containing config.json")
 	flag.Parse()
 	initLog(*logLevel, *pretty)
 	if *showVersion {
 		printVersion()
 		return
 	}
-	cfg, err := bifrostConfig.GetConfig()
+
+	var cfg *bifrostConfig.Config
+	var err error
+	if *configPath != "" {
+		cfg, err = bifrostConfig.GetConfig(*configPath)
+	} else {
+		cfg, err = bifrostConfig.GetConfig()
+	}
+
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("failed to get bifrost config")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()

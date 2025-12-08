@@ -43,6 +43,7 @@ import (
 
 	runtime "github.com/cosmos/cosmos-sdk/runtime"
 
+	bifrostconfig "github.com/btcq-org/qbtc/bifrost/config"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
@@ -53,6 +54,15 @@ var (
 	flagOutputDir             = "output-dir"
 	flagValidatorsStakeAmount = "validators-stake-amount"
 	flagStartingIPAddress     = "starting-ip-address"
+
+	// bifrost specific arguments
+	flagBifrostStartBlockHeight = "bifrost-start-block-height"
+
+	// bitcoin specific arguments
+	flagBitcoinRPCHost     = "bitcoin-rpc-host"
+	flagBitcoinRPCPort     = "bitcoin-rpc-port"
+	flagBitcoinRPCUser     = "bitcoin-rpc-user"
+	flagBitcoinRPCPassword = "bitcoin-rpc-password"
 )
 
 const nodeDirPerm = 0o755
@@ -68,6 +78,15 @@ type initArgs struct {
 	startingIPAddress      string
 	validatorsStakesAmount map[int]sdk.Coin
 	ports                  map[int]string
+
+	// bifrost specific arguments
+	bifrostStartBlockHeight int64
+
+	// bitcoin specific arguments
+	bitcoinRPCHost     string
+	bitcoinRPCPort     int64
+	bitcoinRPCUser     string
+	bitcoinRPCPassword string
 }
 
 // NewTestnetMultiNodeCmd returns a cmd to initialize all files for tendermint testnet and application
@@ -146,6 +165,14 @@ Example:
 	cmd.Flags().String(flagStartingIPAddress, "localhost", "Starting IP address (192.168.0.1 results in persistent peers list ID0@192.168.0.1:46656, ID1@192.168.0.2:46656, ...)")
 	cmd.Flags().String(flags.FlagKeyringBackend, "test", "Select keyring's backend (os|file|test)")
 
+	// bifrost specific arguments
+	cmd.Flags().Int64(flagBifrostStartBlockHeight, 0, "Start block height for bifrost")
+
+	// bitcoin specific arguments
+	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host")
+	cmd.Flags().Int64(flagBitcoinRPCPort, 8332, "Bitcoin RPC port")
+	cmd.Flags().String(flagBitcoinRPCUser, "bitcoinrpc", "Bitcoin RPC user")
+	cmd.Flags().String(flagBitcoinRPCPassword, "securepassword", "Bitcoin RPC password")
 	return cmd
 }
 
@@ -234,7 +261,8 @@ func initTestnetFiles(
 
 		bifrostHome := filepath.Join(nodeDir, "bifrost")
 		// Create bifrost home directory
-		if err := os.MkdirAll(bifrostHome, nodeDirPerm); err != nil {
+		err = ensureDir(bifrostHome)
+		if err != nil {
 			_ = os.RemoveAll(args.outputDir)
 			return err
 		}
@@ -366,6 +394,17 @@ func initTestnetFiles(
 		appConfig.GRPC.Address = args.startingIPAddress + ":" + strconv.Itoa(9090-2*i)
 		appConfig.API.Address = "tcp://localhost:" + strconv.Itoa(1317-i)
 		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
+
+		bitcoinDataHome := filepath.Join(nodeDir, "bitcoin_data")
+		// Create bitcoin data home directory
+		err = ensureDir(bitcoinDataHome)
+		if err != nil {
+			_ = os.RemoveAll(args.outputDir)
+			return err
+		}
+		if err := initBifrostFiles(args, bifrostHome, "/qbtc_data/.qbtc/bitcoin_data"); err != nil {
+			return err
+		}
 	}
 
 	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers); err != nil {
@@ -414,9 +453,17 @@ func initTestnetFiles(
 	return nil
 }
 
-func writeFile(file, dir string, contents []byte) error {
+func ensureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("could not create directory %q: %w", dir, err)
+	}
+	return nil
+}
+func writeFile(file, dir string, contents []byte) error {
+
+	err := ensureDir(dir)
+	if err != nil {
+		return err
 	}
 
 	if err := os.WriteFile(file, contents, 0o644); err != nil {
@@ -424,6 +471,27 @@ func writeFile(file, dir string, contents []byte) error {
 	}
 
 	return nil
+}
+
+func initBifrostFiles(args initArgs, outputDir, dataDir string) error {
+	bifrostConfig := bifrostconfig.DefaultConfig()
+	bifrostConfig.StartBlockHeight = args.bifrostStartBlockHeight
+	bifrostConfig.BitcoinConfig.Host = args.bitcoinRPCHost
+	bifrostConfig.BitcoinConfig.Port = args.bitcoinRPCPort
+	bifrostConfig.BitcoinConfig.RPCUser = args.bitcoinRPCUser
+	bifrostConfig.BitcoinConfig.Password = args.bitcoinRPCPassword
+	bifrostConfig.BitcoinConfig.LocalDBPath = filepath.Join(dataDir, "db")
+
+	bifrostConfig.RootPath = "/qbtc_data/.qbtc/bifrost"
+	bifrostConfig.KeyName = "bifrost-p2p-key"
+	bifrostConfig.ListenAddr = "0.0.0.0:30006"
+	bifrostConfig.ExternalIP = ""
+
+	bifrostConfigJSON, err := json.Marshal(bifrostConfig)
+	if err != nil {
+		return err
+	}
+	return writeFile(filepath.Join(outputDir, "config.json"), outputDir, bifrostConfigJSON)
 }
 
 func initGenFiles(
@@ -633,7 +701,13 @@ services:{{range $validator := .Validators }}
 		ports:
 			- "{{ $validator.RPCPort }}:26657"
 		volumes:
-			- ./{{ $validator.Volume }}:/qbtc_data/.qbtcd
+			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
+	{{ $validator.Name }}_bifrost:
+		image: btcq-org/qbtc:{{ $.Tag }}
+		restart: always
+		command: [ "bifrost", "--config", "/qbtc_data/.qbtc/bifrost/config.json"]
+		volumes:
+			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
 {{end}}
 `
 
