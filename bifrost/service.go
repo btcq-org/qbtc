@@ -57,7 +57,12 @@ func NewService(cfg config.Config) (*Service, error) {
 		ExternalIP: cfg.ExternalIP,
 	}
 	//  client to retrieve node peer addresses
-	qClient, err := qclient.New(fmt.Sprintf("localhost:%d", 9090), true)
+
+	qbtcGRPCAddress := cfg.QBTCGRPCAddress
+	if qbtcGRPCAddress == "" {
+		qbtcGRPCAddress = "localhost:9090"
+	}
+	qClient, err := qclient.New(qbtcGRPCAddress, true)
 	if err != nil {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
@@ -71,7 +76,11 @@ func NewService(cfg config.Config) (*Service, error) {
 		}
 	}()
 
-	ebifrostConn, err := qclient.NewGRPCConnection(fmt.Sprintf("localhost:%d", 50051), true)
+	ebifrostAddress := cfg.EbifrostAddress
+	if ebifrostAddress == "" {
+		ebifrostAddress = "localhost:50051"
+	}
+	ebifrostConn, err := qclient.NewGRPCConnection(ebifrostAddress, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ebifrost client: %w", err)
 	}

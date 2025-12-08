@@ -154,6 +154,16 @@ Example:
 				}
 			}
 
+			// bifrost
+			args.bifrostStartBlockHeight, _ = cmd.Flags().GetInt64(flagBifrostStartBlockHeight)
+			if args.bifrostStartBlockHeight == 0 {
+				return fmt.Errorf("bifrost start block height is required")
+			}
+			args.bitcoinRPCHost, _ = cmd.Flags().GetString(flagBitcoinRPCHost)
+			args.bitcoinRPCPort, _ = cmd.Flags().GetInt64(flagBitcoinRPCPort)
+			args.bitcoinRPCUser, _ = cmd.Flags().GetString(flagBitcoinRPCUser)
+			args.bitcoinRPCPassword, _ = cmd.Flags().GetString(flagBitcoinRPCPassword)
+
 			return initTestnetFiles(clientCtx, cmd, config, mbm, genBalIterator, args)
 		},
 	}
@@ -402,7 +412,11 @@ func initTestnetFiles(
 			_ = os.RemoveAll(args.outputDir)
 			return err
 		}
-		if err := initBifrostFiles(args, bifrostHome, "/qbtc_data/.qbtc/bitcoin_data"); err != nil {
+		if err := initBifrostFiles(args,
+			bifrostHome,
+			fmt.Sprintf("node_%d:50051", i),
+			fmt.Sprintf("node_%d:%d", i, 9090-2*i),
+			"/qbtc_data/.qbtc/bitcoin_data"); err != nil {
 			return err
 		}
 	}
@@ -473,7 +487,7 @@ func writeFile(file, dir string, contents []byte) error {
 	return nil
 }
 
-func initBifrostFiles(args initArgs, outputDir, dataDir string) error {
+func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress, dataDir string) error {
 	bifrostConfig := bifrostconfig.DefaultConfig()
 	bifrostConfig.StartBlockHeight = args.bifrostStartBlockHeight
 	bifrostConfig.BitcoinConfig.Host = args.bitcoinRPCHost
@@ -486,6 +500,10 @@ func initBifrostFiles(args initArgs, outputDir, dataDir string) error {
 	bifrostConfig.KeyName = "bifrost-p2p-key"
 	bifrostConfig.ListenAddr = "0.0.0.0:30006"
 	bifrostConfig.ExternalIP = ""
+
+	bifrostConfig.QBTCHome = "/qbtc_data/.qbtc"
+	bifrostConfig.EbifrostAddress = ebifrostAddress
+	bifrostConfig.QBTCGRPCAddress = nodeGRPCAddress
 
 	bifrostConfigJSON, err := json.Marshal(bifrostConfig)
 	if err != nil {

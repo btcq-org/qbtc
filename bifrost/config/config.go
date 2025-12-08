@@ -16,6 +16,8 @@ type Config struct {
 	StartBlockHeight int64          `mapstructure:"start_block_height" json:"start_block_height"`
 	BitcoinConfig    bitcoin.Config `mapstructure:"bitcoin" json:"bitcoin"`
 	QBTCHome         string         `mapstructure:"qbtc_home" json:"qbtc_home"`
+	EbifrostAddress  string         `mapstructure:"ebifrost_address" json:"ebifrost_address"`
+	QBTCGRPCAddress  string         `mapstructure:"qbtc_grpc_address" json:"qbtc_grpc_address"`
 }
 
 type P2PConfig struct {
@@ -37,6 +39,8 @@ func DefaultConfig() *Config {
 			Password:    "password",
 			LocalDBPath: "./db",
 		},
+		EbifrostAddress: "localhost:50051",
+		QBTCGRPCAddress: "localhost:9090",
 	}
 }
 
