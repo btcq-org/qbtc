@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,11 +11,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/btcq-org/qbtc/bifrost/keystore"
+	"github.com/btcq-org/qbtc/bifrost/p2p"
 	cmtconfig "github.com/cometbft/cometbft/config"
 	types "github.com/cometbft/cometbft/types"
 	tmtime "github.com/cometbft/cometbft/types/time"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -37,6 +42,9 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
 	runtime "github.com/cosmos/cosmos-sdk/runtime"
+
+	bifrostconfig "github.com/btcq-org/qbtc/bifrost/config"
+	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
 var (
@@ -46,6 +54,15 @@ var (
 	flagOutputDir             = "output-dir"
 	flagValidatorsStakeAmount = "validators-stake-amount"
 	flagStartingIPAddress     = "starting-ip-address"
+
+	// bifrost specific arguments
+	flagBifrostStartBlockHeight = "bifrost-start-block-height"
+
+	// bitcoin specific arguments
+	flagBitcoinRPCHost     = "bitcoin-rpc-host"
+	flagBitcoinRPCPort     = "bitcoin-rpc-port"
+	flagBitcoinRPCUser     = "bitcoin-rpc-user"
+	flagBitcoinRPCPassword = "bitcoin-rpc-password"
 )
 
 const nodeDirPerm = 0o755
@@ -61,6 +78,15 @@ type initArgs struct {
 	startingIPAddress      string
 	validatorsStakesAmount map[int]sdk.Coin
 	ports                  map[int]string
+
+	// bifrost specific arguments
+	bifrostStartBlockHeight int64
+
+	// bitcoin specific arguments
+	bitcoinRPCHost     string
+	bitcoinRPCPort     int64
+	bitcoinRPCUser     string
+	bitcoinRPCPassword string
 }
 
 // NewTestnetMultiNodeCmd returns a cmd to initialize all files for tendermint testnet and application
@@ -128,6 +154,16 @@ Example:
 				}
 			}
 
+			// bifrost
+			args.bifrostStartBlockHeight, _ = cmd.Flags().GetInt64(flagBifrostStartBlockHeight)
+			if args.bifrostStartBlockHeight == 0 {
+				return fmt.Errorf("bifrost start block height is required")
+			}
+			args.bitcoinRPCHost, _ = cmd.Flags().GetString(flagBitcoinRPCHost)
+			args.bitcoinRPCPort, _ = cmd.Flags().GetInt64(flagBitcoinRPCPort)
+			args.bitcoinRPCUser, _ = cmd.Flags().GetString(flagBitcoinRPCUser)
+			args.bitcoinRPCPassword, _ = cmd.Flags().GetString(flagBitcoinRPCPassword)
+
 			return initTestnetFiles(clientCtx, cmd, config, mbm, genBalIterator, args)
 		},
 	}
@@ -139,6 +175,14 @@ Example:
 	cmd.Flags().String(flagStartingIPAddress, "localhost", "Starting IP address (192.168.0.1 results in persistent peers list ID0@192.168.0.1:46656, ID1@192.168.0.2:46656, ...)")
 	cmd.Flags().String(flags.FlagKeyringBackend, "test", "Select keyring's backend (os|file|test)")
 
+	// bifrost specific arguments
+	cmd.Flags().Int64(flagBifrostStartBlockHeight, 0, "Start block height for bifrost")
+
+	// bitcoin specific arguments
+	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host")
+	cmd.Flags().Int64(flagBitcoinRPCPort, 8332, "Bitcoin RPC port")
+	cmd.Flags().String(flagBitcoinRPCUser, "bitcoinrpc", "Bitcoin RPC user")
+	cmd.Flags().String(flagBitcoinRPCPassword, "", "Bitcoin RPC password (consider using BITCOIN_RPC_PASSWORD env var)")
 	return cmd
 }
 
@@ -159,6 +203,11 @@ func addTestnetFlagsToCmd(cmd *cobra.Command) {
 	})
 }
 
+type PeerInfo struct {
+	Validator   string
+	PeerAddress string
+}
+
 // initTestnetFiles initializes testnet files for a testnet to be run in a separate process
 func initTestnetFiles(
 	clientCtx client.Context,
@@ -176,6 +225,9 @@ func initTestnetFiles(
 
 	appConfig := srvconfig.DefaultConfig()
 	appConfig.MinGasPrices = args.minGasPrices
+	if args.minGasPrices == "" {
+		appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
+	}
 	appConfig.API.Enable = false
 	// 	appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
 	appConfig.Telemetry.EnableHostnameLabel = false
@@ -188,22 +240,58 @@ func initTestnetFiles(
 		genFiles        []string
 		persistentPeers string
 		gentxsFiles     []string
+		p2pPeers        []PeerInfo
 	)
 
 	inBuf := bufio.NewReader(cmd.InOrStdin())
+
+	nodes := make([]ValidatorNode, args.numValidators)
+	for i := range nodes {
+		nodes[i] = ValidatorNode{
+			Name:    fmt.Sprintf("node_%d", i),
+			RPCPort: args.ports[i],
+			Volume:  fmt.Sprintf("validator%d", i),
+		}
+	}
+
 	for i := 0; i < args.numValidators; i++ {
 		nodeDirName := fmt.Sprintf("%s%d", args.nodeDirPrefix, i)
 		nodeDir := filepath.Join(args.outputDir, nodeDirName)
 		gentxsDir := filepath.Join(args.outputDir, nodeDirName, "config", "gentx")
-
 		nodeConfig.SetRoot(nodeDir)
 		nodeConfig.Moniker = nodeDirName
 		nodeConfig.RPC.ListenAddress = "tcp://0.0.0.0:" + args.ports[i]
+		nodeConfig.RPC.CORSAllowedOrigins = []string{"*"}
 
 		var err error
 		if err := os.MkdirAll(filepath.Join(nodeDir, "config"), nodeDirPerm); err != nil {
 			_ = os.RemoveAll(args.outputDir)
 			return err
+		}
+
+		bifrostHome := filepath.Join(nodeDir, "bifrost")
+		// Create bifrost home directory
+		err = ensureDir(bifrostHome)
+		if err != nil {
+			_ = os.RemoveAll(args.outputDir)
+			return err
+		}
+
+		kstore, err := keystore.NewFileKeyStore(bifrostHome)
+		if err != nil {
+			return err
+		}
+		p2pKey, err := keystore.GetOrCreateKey(kstore, "bifrost-p2p-key")
+		if err != nil {
+			return fmt.Errorf("failed to get or create p2p key, err: %w", err)
+		}
+		p2pPrivKey, err := crypto.UnmarshalPrivateKey(p2pKey.Body)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal p2p key, err: %w", err)
+		}
+		id, err := p2p.ID(p2pPrivKey)
+		if err != nil {
+			return fmt.Errorf("failed to get peer id, err: %w", err)
 		}
 
 		nodeIDs[i], valPubKeys[i], err = genutil.InitializeNodeValidatorFiles(nodeConfig)
@@ -212,7 +300,7 @@ func initTestnetFiles(
 			return err
 		}
 
-		memo := fmt.Sprintf("%s@%s:"+strconv.Itoa(26656-3*i), nodeIDs[i], args.startingIPAddress)
+		memo := fmt.Sprintf("%s@node_%d:"+strconv.Itoa(26656-3*i), nodeIDs[i], i)
 
 		if persistentPeers == "" {
 			persistentPeers = memo
@@ -238,6 +326,12 @@ func initTestnetFiles(
 			_ = os.RemoveAll(args.outputDir)
 			return err
 		}
+
+		peerInfo := PeerInfo{
+			Validator:   sdk.ValAddress(addr).String(),
+			PeerAddress: id.String(),
+		}
+		p2pPeers = append(p2pPeers, peerInfo)
 
 		info := map[string]string{"secret": secret}
 
@@ -307,12 +401,27 @@ func initTestnetFiles(
 			return err
 		}
 
-		appConfig.GRPC.Address = args.startingIPAddress + ":" + strconv.Itoa(9090-2*i)
-		appConfig.API.Address = "tcp://localhost:" + strconv.Itoa(1317-i)
+		appConfig.GRPC.Address = "0.0.0.0:" + strconv.Itoa(9090-2*i)
+		appConfig.API.Address = "tcp://0.0.0.0:" + strconv.Itoa(1317-i)
 		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
+
+		bitcoinDataHome := filepath.Join(nodeDir, "bitcoin_data")
+		// Create bitcoin data home directory
+		err = ensureDir(bitcoinDataHome)
+		if err != nil {
+			_ = os.RemoveAll(args.outputDir)
+			return err
+		}
+		if err := initBifrostFiles(args,
+			bifrostHome,
+			fmt.Sprintf("node_%d:50051", i),
+			fmt.Sprintf("node_%d:%d", i, 9090-2*i),
+			"/qbtc_data/.qbtc/bitcoin_data"); err != nil {
+			return err
+		}
 	}
 
-	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators); err != nil {
+	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers); err != nil {
 		return err
 	}
 	// copy gentx file
@@ -342,13 +451,33 @@ func initTestnetFiles(
 		return err
 	}
 
+	def, err := docker(nodes, "localnet")
+	if err != nil {
+		return err
+	}
+
+	dockComposeFile := filepath.Join(args.outputDir, "docker-compose.yml")
+
+	err = writeFile(dockComposeFile, args.outputDir, []byte(def))
+	if err != nil {
+		return err
+	}
+
 	cmd.PrintErrf("Successfully initialized %d node directories\n", args.numValidators)
 	return nil
 }
 
-func writeFile(file, dir string, contents []byte) error {
+func ensureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("could not create directory %q: %w", dir, err)
+	}
+	return nil
+}
+func writeFile(file, dir string, contents []byte) error {
+
+	err := ensureDir(dir)
+	if err != nil {
+		return err
 	}
 
 	if err := os.WriteFile(file, contents, 0o644); err != nil {
@@ -358,10 +487,35 @@ func writeFile(file, dir string, contents []byte) error {
 	return nil
 }
 
+func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress, dataDir string) error {
+	bifrostConfig := bifrostconfig.DefaultConfig()
+	bifrostConfig.StartBlockHeight = args.bifrostStartBlockHeight
+	bifrostConfig.BitcoinConfig.Host = args.bitcoinRPCHost
+	bifrostConfig.BitcoinConfig.Port = args.bitcoinRPCPort
+	bifrostConfig.BitcoinConfig.RPCUser = args.bitcoinRPCUser
+	bifrostConfig.BitcoinConfig.Password = args.bitcoinRPCPassword
+	bifrostConfig.BitcoinConfig.LocalDBPath = filepath.Join(dataDir, "db")
+
+	bifrostConfig.RootPath = "/qbtc_data/.qbtc/bifrost"
+	bifrostConfig.KeyName = "bifrost-p2p-key"
+	bifrostConfig.ListenAddr = "0.0.0.0:30006"
+	bifrostConfig.ExternalIP = ""
+
+	bifrostConfig.QBTCHome = "/qbtc_data/.qbtc"
+	bifrostConfig.EbifrostAddress = ebifrostAddress
+	bifrostConfig.QBTCGRPCAddress = nodeGRPCAddress
+
+	bifrostConfigJSON, err := json.Marshal(bifrostConfig)
+	if err != nil {
+		return err
+	}
+	return writeFile(filepath.Join(outputDir, "config.json"), outputDir, bifrostConfigJSON)
+}
+
 func initGenFiles(
 	clientCtx client.Context, mbm module.BasicManager, chainID string,
 	genAccounts []authtypes.GenesisAccount, genBalances []banktypes.Balance,
-	genFiles []string, numValidators int,
+	genFiles []string, numValidators int, p2pPeers []PeerInfo,
 ) error {
 	appGenState := mbm.DefaultGenesis(clientCtx.Codec)
 
@@ -387,6 +541,18 @@ func initGenFiles(
 	}
 	appGenState[banktypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(&bankGenState)
 
+	var btcqGenesis qbtctypes.GenesisState
+	clientCtx.Codec.MustUnmarshalJSON(appGenState[qbtctypes.ModuleName], &btcqGenesis)
+
+	btcqGenesis.PeerAddresses = make([]qbtctypes.GenesisPeerAddress, len(p2pPeers))
+	for i, peer := range p2pPeers {
+		peerAddress := fmt.Sprintf("%s@%s:%s", peer.PeerAddress, fmt.Sprintf("node_%d_bifrost", i), "30006")
+		btcqGenesis.PeerAddresses[i] = qbtctypes.GenesisPeerAddress{
+			Validator:   peer.Validator,
+			PeerAddress: peerAddress,
+		}
+	}
+	appGenState[qbtctypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(&btcqGenesis)
 	appGenStateJSON, err := json.MarshalIndent(appGenState, "", "  ")
 	if err != nil {
 		return err
@@ -447,7 +613,7 @@ func collectGenFiles(
 		nodeConfig.P2P.PersistentPeers = persistentPeers
 		nodeConfig.P2P.AllowDuplicateIP = true
 		nodeConfig.P2P.ListenAddress = "tcp://0.0.0.0:" + strconv.Itoa(26656-3*i)
-		nodeConfig.RPC.ListenAddress = "tcp://127.0.0.1:" + args.ports[i]
+		nodeConfig.RPC.ListenAddress = "tcp://0.0.0.0:" + args.ports[i]
 		nodeConfig.ProxyApp = "tcp://127.0.0.1:" + strconv.Itoa(26658-3*i)
 		nodeConfig.Instrumentation.PrometheusListenAddr = ":" + strconv.Itoa(26660+i)
 		nodeConfig.Instrumentation.Prometheus = true
@@ -537,4 +703,49 @@ func generateRandomString(length int) string {
 		b[i] = charset[seededRand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+type ValidatorNode struct {
+	Name    string
+	Volume  string
+	RPCPort string
+}
+
+const dockerComposeDefinition = `
+services:{{range $validator := .Validators }}
+	{{ $validator.Name }}:
+		image: btcq-org/qbtc:{{ $.Tag }}
+		restart: always
+		ports:
+			- "{{ $validator.RPCPort }}:26657"
+		volumes:
+			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
+	{{ $validator.Name }}_bifrost:
+		image: btcq-org/qbtc:{{ $.Tag }}
+		restart: always
+		command: [ "bifrost", "--config", "/qbtc_data/.qbtc/bifrost/config.json"]
+		volumes:
+			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
+		depends_on:
+			- {{ $validator.Name }}
+{{end}}
+`
+
+func docker(validators []ValidatorNode, tag string) (string, error) {
+	def := strings.ReplaceAll(dockerComposeDefinition, "\t", "  ")
+	t, err := template.New("definition").Parse(def)
+	if err != nil {
+		return "", err
+	}
+	d := struct {
+		Validators []ValidatorNode
+		Tag        string
+	}{Validators: validators, Tag: tag}
+
+	buf := bytes.NewBufferString("")
+	err = t.Execute(buf, d)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

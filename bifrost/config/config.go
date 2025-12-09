@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/btcq-org/qbtc/bitcoin"
 	"github.com/spf13/viper"
@@ -15,6 +16,8 @@ type Config struct {
 	StartBlockHeight int64          `mapstructure:"start_block_height" json:"start_block_height"`
 	BitcoinConfig    bitcoin.Config `mapstructure:"bitcoin" json:"bitcoin"`
 	QBTCHome         string         `mapstructure:"qbtc_home" json:"qbtc_home"`
+	EbifrostAddress  string         `mapstructure:"ebifrost_address" json:"ebifrost_address"`
+	QBTCGRPCAddress  string         `mapstructure:"qbtc_grpc_address" json:"qbtc_grpc_address"`
 }
 
 type P2PConfig struct {
@@ -36,14 +39,37 @@ func DefaultConfig() *Config {
 			Password:    "password",
 			LocalDBPath: "./db",
 		},
+		EbifrostAddress: "localhost:50051",
+		QBTCGRPCAddress: "localhost:9090",
 	}
 }
 
 // GetConfig reads the config file and returns a Config struct
-func GetConfig() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".")
+func GetConfig(configPath ...string) (*Config, error) {
+	viper.Reset() // Reset viper to avoid state from previous calls
 	viper.SetConfigType("json")
+
+	// look for config in the given path
+	// if path is a directory, look for config.json in that directory
+	// if path is a file, use it directly
+	if len(configPath) == 1 {
+		path := configPath[0]
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("error accessing config path %s: %w", path, err)
+		}
+		if info.IsDir() {
+			viper.SetConfigName("config")
+			viper.AddConfigPath(path)
+		} else {
+			// If it's a file, use it directly
+			viper.SetConfigFile(path)
+		}
+	} else {
+		viper.SetConfigName("config")
+		viper.AddConfigPath(".")
+	}
+
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {

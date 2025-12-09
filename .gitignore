@@ -22,3 +22,5 @@ cmd/bifrost/bifrost
 cmd/bifrost/db
 cmd/zkprover/zk-setup
 cmd/zkprover/zkprover
+.testnets/
+.envrc

@@ -17,7 +17,14 @@ ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
 	-X github.com/cosmos/cosmos-sdk/version.Version=$(VERSION) \
 	-X github.com/cosmos/cosmos-sdk/version.Commit=$(COMMIT)
 
-BUILD_FLAGS := -ldflags '$(ldflags)'
+ifeq ($(LINK_STATICALLY),true)
+	ldflags += -linkmode=external -extldflags "-Wl,-z,muldefs -static"
+endif
+
+build_tags = netgo
+build_tags += $(BUILD_TAGS)
+
+BUILD_FLAGS := -tags "$(build_tags)" -ldflags '$(ldflags)'
 
 .PHONY: build
 
@@ -28,7 +35,8 @@ build:
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version
 	@echo "build bifrost and tools"
-	@go build ./cmd/bifrost ./cmd/utxo-indexer
+	@go build -o ./build/bifrost  ./cmd/bifrost 
+	@go build -o ./build/utxo-indexer ./cmd/utxo-indexer
 ##############
 ###  Test  ###
 ##############
@@ -163,3 +171,37 @@ govulncheck:
 	@govulncheck ./...
 
 .PHONY: govet govulncheck
+
+docker-localnet:
+	@echo "Building docker image for local development"
+	@docker build -t btcq-org/qbtc:localnet .
+
+
+
+generate-testnet:
+	@echo "Generating testnet files"
+	@if [ -z "$$BITCOIN_RPC_HOST" ]; then \
+		echo "Error: BITCOIN_RPC_HOST environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_PORT" ]; then \
+		echo "Error: BITCOIN_RPC_PORT environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_USER" ]; then \
+		echo "Error: BITCOIN_RPC_USER environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_PASSWORD" ]; then \
+		echo "Error: BITCOIN_RPC_PASSWORD environment variable is not set"; \
+		exit 1; \
+	fi
+	rm -rf .testnets
+	go run cmd/qbtcd/main.go multi-node \
+		--bifrost-start-block-height 927000 \
+		--bitcoin-rpc-host $$BITCOIN_RPC_HOST \
+		--bitcoin-rpc-port $$BITCOIN_RPC_PORT \
+		--bitcoin-rpc-user $$BITCOIN_RPC_USER \
+		--bitcoin-rpc-password $$BITCOIN_RPC_PASSWORD
+
+.PHONY: generate-testnet
