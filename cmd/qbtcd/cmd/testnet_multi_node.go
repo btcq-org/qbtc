@@ -248,9 +248,11 @@ func initTestnetFiles(
 	nodes := make([]ValidatorNode, args.numValidators)
 	for i := range nodes {
 		nodes[i] = ValidatorNode{
-			Name:    fmt.Sprintf("node_%d", i),
-			RPCPort: args.ports[i],
-			Volume:  fmt.Sprintf("validator%d", i),
+			Name:              fmt.Sprintf("node_%d", i),
+			RPCPort:           args.ports[i],
+			Volume:            fmt.Sprintf("validator%d", i),
+			BifrostPort:       strconv.Itoa(30006 - 3*i),
+			BifrostHealthPort: strconv.Itoa(30007 - 3*i),
 		}
 	}
 
@@ -706,9 +708,11 @@ func generateRandomString(length int) string {
 }
 
 type ValidatorNode struct {
-	Name    string
-	Volume  string
-	RPCPort string
+	Name              string
+	Volume            string
+	RPCPort           string
+	BifrostPort       string
+	BifrostHealthPort string
 }
 
 const dockerComposeDefinition = `
@@ -724,6 +728,9 @@ services:{{range $validator := .Validators }}
 		image: btcq-org/qbtc:{{ $.Tag }}
 		restart: always
 		command: [ "bifrost", "--config", "/qbtc_data/.qbtc/bifrost/config.json"]
+		ports:
+			- "{{ $validator.BifrostPort }}:30006"
+			- "{{ $validator.BifrostHealthPort }}:30007"
 		volumes:
 			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
 		depends_on:
