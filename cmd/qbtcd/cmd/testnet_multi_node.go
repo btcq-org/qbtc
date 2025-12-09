@@ -44,6 +44,7 @@ import (
 	runtime "github.com/cosmos/cosmos-sdk/runtime"
 
 	bifrostconfig "github.com/btcq-org/qbtc/bifrost/config"
+	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
@@ -223,7 +224,12 @@ func initTestnetFiles(
 	nodeIDs := make([]string, args.numValidators)
 	valPubKeys := make([]cryptotypes.PubKey, args.numValidators)
 
-	appConfig := srvconfig.DefaultConfig()
+	_, cfg := initAppConfig()
+	appConfig, ok := cfg.(CustomAppConfig)
+	if !ok {
+		return fmt.Errorf("failed to cast cfg to CustomAppConfig")
+	}
+
 	appConfig.MinGasPrices = args.minGasPrices
 	if args.minGasPrices == "" {
 		appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
@@ -233,6 +239,7 @@ func initTestnetFiles(
 	appConfig.Telemetry.EnableHostnameLabel = false
 	appConfig.Telemetry.Enabled = false
 	appConfig.Telemetry.PrometheusRetentionTime = 0
+	appConfig.EBifrost.Address = ":50051"
 
 	var (
 		genAccounts     []authtypes.GenesisAccount
@@ -405,6 +412,11 @@ func initTestnetFiles(
 
 		appConfig.GRPC.Address = "0.0.0.0:" + strconv.Itoa(9090-2*i)
 		appConfig.API.Address = "tcp://0.0.0.0:" + strconv.Itoa(1317-i)
+		appConfig.EBifrost.Address = ":50051"
+
+		// Regenerate the template with the updated config values
+		updatedTemplate := srvconfig.DefaultConfigTemplate + ebifrost.ConfigTemplate(appConfig.EBifrost)
+		srvconfig.SetConfigTemplate(updatedTemplate)
 		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
 
 		bitcoinDataHome := filepath.Join(nodeDir, "bitcoin_data")
