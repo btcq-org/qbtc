@@ -200,8 +200,12 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.wg.Add(1)
 	go s.processBitcoinBlocks(ctx)
-	s.registerRoutes()
-	go s.hs.ListenAndServe()
+	s.hs.Handler = s.registerRoutes()
+	go func() {
+		if err := s.hs.ListenAndServe(); err != nil {
+			s.logger.Error().Err(err).Msg("failed to start http server")
+		}
+	}()
 	return nil
 }
 

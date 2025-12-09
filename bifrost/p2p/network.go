@@ -94,9 +94,12 @@ func (n *Network) addressFactory(addrs []maddr.Multiaddr) []maddr.Multiaddr {
 // ConnectedPeers returns the list of connected peers
 func (n *Network) ConnectedPeers() []peer.AddrInfo {
 	peers := n.h.Peerstore().Peers()
-	addrInfos := make([]peer.AddrInfo, len(peers))
-	for i, peer := range peers {
-		addrInfos[i] = n.h.Peerstore().PeerInfo(peer)
+	addrInfos := make([]peer.AddrInfo, 0, len(peers))
+	for _, peer := range peers {
+		if peer == n.h.ID() {
+			continue
+		}
+		addrInfos = append(addrInfos, n.h.Peerstore().PeerInfo(peer))
 	}
 	return addrInfos
 }
