@@ -91,6 +91,19 @@ func (n *Network) addressFactory(addrs []maddr.Multiaddr) []maddr.Multiaddr {
 	return addrs
 }
 
+// ConnectedPeers returns the list of connected peers
+func (n *Network) ConnectedPeers() []peer.AddrInfo {
+	peers := n.h.Peerstore().Peers()
+	addrInfos := make([]peer.AddrInfo, 0, len(peers))
+	for _, peer := range peers {
+		if peer == n.h.ID() {
+			continue
+		}
+		addrInfos = append(addrInfos, n.h.Peerstore().PeerInfo(peer))
+	}
+	return addrInfos
+}
+
 // Start starts the p2p network
 func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	if key == nil {
@@ -133,6 +146,19 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	}
 	n.logger.Info().Msg("DHT network bootstrapped")
 	n.localDHT = dht
+
+	bootstrapPeers, err := n.qBTCNode.GetBootstrapPeers(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get bootstrap peers,err: %w", err)
+	}
+	if len(bootstrapPeers) == 0 {
+		n.logger.Warn().Msg("no bootstrap peers found")
+	}
+	err = n.BootstrapInitialPeers(bootstrapPeers)
+	if err != nil {
+		return fmt.Errorf("failed to bootstrap initial peers,err: %w", err)
+	}
+	n.logger.Info().Msg("bootstrap initial peers")
 	return nil
 }
 

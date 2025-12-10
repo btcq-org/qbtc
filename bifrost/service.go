@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,6 +46,9 @@ type Service struct {
 	ebifrost            ebifrost.LocalhostBifrostClient
 	ebifrostConn        *grpc.ClientConn
 	validatorPrivateKey crypto.PrivKey
+
+	// http server
+	hs *http.Server
 }
 
 func NewService(cfg config.Config) (*Service, error) {
@@ -124,6 +128,11 @@ func NewService(cfg config.Config) (*Service, error) {
 	valAddr := sdk.ValAddress(validatorPrivateKey.PubKey().Address())
 	log.Info().Str("validator_address", valAddr.String()).Str("validator_pub_key", validatorPrivateKey.PubKey().Address().String()).Msg("loaded validator private key")
 
+	hs := &http.Server{
+		Addr:    cfg.HTTPListenAddress,
+		Handler: nil,
+	}
+
 	// Successfully initialized - don't clean up connections as they're now owned by the service
 	cleanupQClient = false
 	cleanupEbifrostConn = false
@@ -141,6 +150,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		ebifrost:            ebifrostClient,
 		ebifrostConn:        ebifrostConn,
 		validatorPrivateKey: validatorPrivateKey,
+		hs:                  hs,
 	}, nil
 }
 
@@ -190,6 +200,12 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.wg.Add(1)
 	go s.processBitcoinBlocks(ctx)
+	s.hs.Handler = s.registerRoutes()
+	go func() {
+		if err := s.hs.ListenAndServe(); err != nil {
+			s.logger.Error().Err(err).Msg("failed to start http server")
+		}
+	}()
 	return nil
 }
 
@@ -287,6 +303,13 @@ func (s *Service) getBtcBlock(height int64) error {
 
 // Stop stops the bifrost service
 func (s *Service) Stop() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.hs.Shutdown(ctx); err != nil {
+		s.logger.Error().Err(err).Msg("failed to shutdown http server")
+	} else {
+		s.logger.Info().Msg("http server shutdown")
+	}
 	select {
 	case <-s.stopChan:
 	default:

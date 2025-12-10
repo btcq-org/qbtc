@@ -18,14 +18,15 @@ func initCometBFTConfig() *cmtcfg.Config {
 	return cfg
 }
 
+// The following code snippet is just for reference.
+type CustomAppConfig struct {
+	serverconfig.Config `mapstructure:",squash"`
+	EBifrost            ebifrost.EBifrostConfig `mapstructure:"ebifrost"`
+}
+
 // initAppConfig helps to override default appConfig template and configs.
 // return "", nil if no custom configuration is required for the application.
 func initAppConfig() (string, interface{}) {
-	// The following code snippet is just for reference.
-	type CustomAppConfig struct {
-		serverconfig.Config `mapstructure:",squash"`
-		EBifrost            ebifrost.EBifrostConfig `mapstructure:"ebifrost"`
-	}
 
 	// Optionally allow the chain developer to overwrite the SDK's default
 	// server config.
