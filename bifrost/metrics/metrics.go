@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -44,10 +45,14 @@ var (
 	}
 )
 
+var registerOnce sync.Once
+
 func NewMetrics() *Metrics {
-	for _, counter := range counters {
-		_ = prometheus.Register(counter)
-	}
+	registerOnce.Do(func() {
+		for _, counter := range counters {
+			_ = prometheus.Register(counter)
+		}
+	})
 	return &Metrics{}
 }
 

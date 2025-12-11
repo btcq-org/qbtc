@@ -267,7 +267,6 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 
 // getBtcBlock retrieves the bitcoin block at the given height
 func (s *Service) getBtcBlock(height int64) error {
-	defer s.metrics.IncrCounter(metrics.MetricNameProcessedBlocks)
 	blockHash, err := s.btcClient.GetBlockHash(height)
 	if err != nil {
 		return fmt.Errorf("failed to get block hash at height %d: %w", height, err)
@@ -307,7 +306,12 @@ func (s *Service) getBtcBlock(height int64) error {
 			Signature: sig,
 		},
 	}
-	return s.pubsub.Publish(blockGassip)
+	err = s.pubsub.Publish(blockGassip)
+	if err != nil {
+		return fmt.Errorf("failed to publish block gossip at height %d: %w", height, err)
+	}
+	s.metrics.IncrCounter(metrics.MetricNameProcessedBlocks)
+	return nil
 }
 
 // Stop stops the bifrost service
