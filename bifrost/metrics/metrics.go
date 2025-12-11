@@ -46,7 +46,7 @@ var (
 
 func NewMetrics() *Metrics {
 	for _, counter := range counters {
-		prometheus.Register(counter)
+		_ = prometheus.Register(counter)
 	}
 	return &Metrics{}
 }

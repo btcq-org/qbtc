@@ -66,6 +66,7 @@ func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode, metrics *me
 		qBTCNode:       qBTCNode,
 		localDHT:       nil,
 		logger:         log.With().Str("module", "p2p").Logger(),
+		metrics:        metrics,
 	}
 
 	if config.ExternalIP != "" {
