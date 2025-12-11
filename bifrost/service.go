@@ -14,6 +14,7 @@ import (
 
 	"github.com/btcq-org/qbtc/bifrost/config"
 	"github.com/btcq-org/qbtc/bifrost/keystore"
+	"github.com/btcq-org/qbtc/bifrost/metrics"
 	"github.com/btcq-org/qbtc/bifrost/p2p"
 	"github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/bitcoin"
@@ -49,6 +50,9 @@ type Service struct {
 
 	// http server
 	hs *http.Server
+
+	// metrics
+	metrics *metrics.Metrics
 }
 
 func NewService(cfg config.Config) (*Service, error) {
@@ -108,8 +112,8 @@ func NewService(cfg config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create p2p key, err: %w", err)
 	}
-
-	network, err := p2p.NewNetwork(config, qClient)
+	metrics := metrics.NewMetrics()
+	network, err := p2p.NewNetwork(config, qClient, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create p2p network, err: %w", err)
 	}
@@ -151,6 +155,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		ebifrostConn:        ebifrostConn,
 		validatorPrivateKey: validatorPrivateKey,
 		hs:                  hs,
+		metrics:             metrics,
 	}, nil
 }
 
@@ -189,7 +194,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start p2p network: %w", err)
 	}
 	s.logger.Info().Msg("bifrost service started")
-	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient, s.ebifrost)
+	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient, s.ebifrost, s.metrics)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}
@@ -200,7 +205,11 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.wg.Add(1)
 	go s.processBitcoinBlocks(ctx)
-	s.hs.Handler = s.registerRoutes()
+
+	// register routes and metrics
+	mux := s.registerRoutes()
+	metrics.RegisterHandlers(mux)
+	s.hs.Handler = mux
 	go func() {
 		if err := s.hs.ListenAndServe(); err != nil {
 			s.logger.Error().Err(err).Msg("failed to start http server")
@@ -257,7 +266,6 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 }
 
 // getBtcBlock retrieves the bitcoin block at the given height
-
 func (s *Service) getBtcBlock(height int64) error {
 	blockHash, err := s.btcClient.GetBlockHash(height)
 	if err != nil {
@@ -298,7 +306,12 @@ func (s *Service) getBtcBlock(height int64) error {
 			Signature: sig,
 		},
 	}
-	return s.pubsub.Publish(blockGassip)
+	err = s.pubsub.Publish(blockGassip)
+	if err != nil {
+		return fmt.Errorf("failed to publish block gossip at height %d: %w", height, err)
+	}
+	s.metrics.IncrCounter(metrics.MetricNameProcessedBlocks)
+	return nil
 }
 
 // Stop stops the bifrost service

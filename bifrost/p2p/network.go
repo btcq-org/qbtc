@@ -8,6 +8,7 @@ import (
 
 	"github.com/btcq-org/qbtc/bifrost/config"
 	"github.com/btcq-org/qbtc/bifrost/keystore"
+	"github.com/btcq-org/qbtc/bifrost/metrics"
 	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -35,9 +36,10 @@ type Network struct {
 	qBTCNode qclient.QBTCNode
 	localDHT *dht.IpfsDHT
 	logger   zerolog.Logger
+	metrics  *metrics.Metrics
 }
 
-func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) (*Network, error) {
+func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode, metrics *metrics.Metrics) (*Network, error) {
 	if config == nil {
 		return nil, ErrInvalidConfig
 	}
@@ -64,6 +66,7 @@ func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode) (*Network, 
 		qBTCNode:       qBTCNode,
 		localDHT:       nil,
 		logger:         log.With().Str("module", "p2p").Logger(),
+		metrics:        metrics,
 	}
 
 	if config.ExternalIP != "" {
