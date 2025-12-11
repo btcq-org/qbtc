@@ -260,6 +260,8 @@ func initTestnetFiles(
 			Volume:            fmt.Sprintf("validator%d", i),
 			BifrostPort:       strconv.Itoa(30006 - 3*i),
 			BifrostHealthPort: strconv.Itoa(30007 - 3*i),
+			APIPort:           strconv.Itoa(1317 - i),
+			GRPCPort:          strconv.Itoa(9090 - 2*i),
 		}
 	}
 
@@ -723,6 +725,8 @@ type ValidatorNode struct {
 	Name              string
 	Volume            string
 	RPCPort           string
+	APIPort           string
+	GRPCPort          string
 	BifrostPort       string
 	BifrostHealthPort string
 }
@@ -734,6 +738,8 @@ services:{{range $validator := .Validators }}
 		restart: always
 		ports:
 			- "{{ $validator.RPCPort }}:26657"
+			- "{{ $validator.APIPort }}:1317"
+			- "{{ $validator.GRPCPort }}:9090"
 		volumes:
 			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
 	{{ $validator.Name }}_bifrost:

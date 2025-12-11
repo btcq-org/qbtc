@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcq-org/qbtc/bifrost/metrics"
 	qclient "github.com/btcq-org/qbtc/bifrost/qclient"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -33,10 +34,11 @@ type PubSubService struct {
 	db       *leveldb.DB
 	qbtcNode qclient.QBTCNode
 	ebifrost ebifrost.LocalhostBifrostClient
+	metrics  *metrics.Metrics
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient, metrics *metrics.Metrics) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
@@ -72,6 +74,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		db:       db,
 		qbtcNode: qbtcNode,
 		ebifrost: ebifrost,
+		metrics:  metrics,
 	}, nil
 }
 
@@ -146,6 +149,7 @@ func (p *PubSubService) checkAttestations(msgBlock *types.MsgBtcBlock) error {
 	if err := p.qbtcNode.CheckAttestationsSuperMajority(checkCtx, msgBlock); err == nil {
 		sendCtx, sendCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 		defer sendCancel()
+		p.metrics.IncrCounter(metrics.MetricNameAttestedBlocks)
 		resp, err := p.ebifrost.SendBTCBlock(sendCtx, msgBlock)
 		if err != nil {
 			p.logger.Error().Err(err).Msg("failed to send block to enshrined bifrost")
