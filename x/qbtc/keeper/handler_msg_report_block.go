@@ -71,6 +71,7 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 
 // SetMsgReportBlock processes a reported Bitcoin block.
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
+	fmt.Println("SetMsgReportBlock called for block height:", msg.Height)
 	lastProcessedBlock, err := s.k.GetLastProcessedBlock(ctx)
 	if err != nil {
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)

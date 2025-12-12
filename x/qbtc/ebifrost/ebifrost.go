@@ -116,18 +116,44 @@ func (eb *EnshrinedBifrost) MarshalTx(msg sdk.Msg) ([]byte, error) {
 	return itx.Tx.Marshal()
 }
 
+func GetLatestBtcBlockHeight(items []*types.MsgBtcBlock) uint64 {
+	if len(items) == 0 {
+		return 0
+	}
+
+	heights := make([]uint64, len(items))
+	for i, item := range items {
+		heights[i] = item.Height
+	}
+
+	return slices.Max(heights)
+}
+
 // ProposalInjectTxs is intended to be called by the current proposing validator during PrepareProposal
 // and will return a list of in-quorum transactions to be included in the next block along with the total byte length of the transactions.
 func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64) ([][]byte, int64) {
 	if eb == nil {
 		return nil, 0
 	}
-
+	if ctx.BlockHeight() < 1 {
+		return nil, 0
+	}
 	var injectTxs [][]byte
 	var txBzLen int64
 
+	// get latest proposed height
+	latestHeight := ctx.BlockHeight() - 1
+	lasetBtcBlockHeight := GetLatestBtcBlockHeight(eb.btcBlockCache.recentBlockItems[latestHeight])
+
 	// process btcq blocks
 	blocks := eb.btcBlockCache.ProcessForProposal(
+		func(b *types.MsgBtcBlock, idx int) bool {
+			if lasetBtcBlockHeight == 0 {
+				lasetBtcBlockHeight = b.Height
+				return true
+			}
+			return b.Height == lasetBtcBlockHeight+uint64(idx)
+		},
 		func(b *types.MsgBtcBlock) (sdk.Msg, error) {
 			// construct a new message with the signer set to the ebifrost signer
 			block := &types.MsgBtcBlock{
@@ -155,6 +181,7 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64)
 			})
 		},
 		eb.logger,
+		lasetBtcBlockHeight,
 	)
 
 	for _, bz := range blocks {
