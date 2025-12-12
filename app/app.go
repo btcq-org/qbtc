@@ -204,7 +204,7 @@ func New(
 	eBifrostProposalHandler := qbtcabi.NewProposalHandler(
 		&app.QbtcKeeper,
 		app.EnshrinedBifrost,
-		app.interfaceRegistry,
+		app.txConfig.TxDecoder(),
 		defaultProposalHandler.PrepareProposalHandler(),
 		defaultProposalHandler.ProcessProposalHandler(),
 	)
