@@ -194,7 +194,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start p2p network: %w", err)
 	}
 	s.logger.Info().Msg("bifrost service started")
-	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), nil, s.db, s.qclient, s.ebifrost, s.metrics)
+	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), s.network.ConnectedPeers(), s.db, s.qclient, s.ebifrost, s.metrics)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}
@@ -278,7 +278,6 @@ func (s *Service) getBtcBlock(height int64) error {
 	if block == nil {
 		return nil
 	}
-	// TODO: sign and publish the block gossip message
 	s.logger.Info().Int64("block_height", height).Msg("published block gossip")
 	content, err := json.Marshal(block)
 	if err != nil {
@@ -292,7 +291,6 @@ func (s *Service) getBtcBlock(height int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to sign block content at height %d: %w", height, err)
 	}
-	s.logger.Info().Msgf("signature length for block at height %d: %d", height, len(sig))
 	// use consensus address to explicitly identify the consensus address of the validator
 	// sdk.ValAddress is reserved for the OperatorAddress
 	// eg: qbtcvalcons1...

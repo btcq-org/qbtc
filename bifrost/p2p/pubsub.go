@@ -51,6 +51,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
 		pubsub.WithDirectPeers(directPeers),
+		pubsub.WithMaxMessageSize(10 << 20), // 10 MB (default is 1MB)
 	}
 	pubsub, err := pubsub.NewGossipSub(
 		ctx,
@@ -126,7 +127,7 @@ func (p *PubSubService) handleMessage(sub *pubsub.Subscription) {
 		return
 	}
 	// Process the message
-	p.logger.Info().Msgf("received message from %s: %s,is_local: %v", msg.GetFrom(), msg.ID, msg.Local)
+	p.logger.Info().Msgf("received message from %s,is_local: %v", msg.GetFrom(), msg.Local)
 
 	var block types.BlockGossip
 	if err := proto.Unmarshal(msg.GetData(), &block); err != nil {
@@ -155,7 +156,7 @@ func (p *PubSubService) checkAttestations(msgBlock *types.MsgBtcBlock) error {
 			p.logger.Error().Err(err).Msg("failed to send block to enshrined bifrost")
 			return fmt.Errorf("failed to send block to enshrined bifrost: %w", err)
 		}
-		p.logger.Info().Msgf("sent block to enshrined bifrost: %s", resp)
+		p.logger.Info().Msgf("sent block to enshrined bifrost height: %d,resp : %s", msgBlock.Height, resp)
 	} else {
 		p.logger.Error().Err(err).Msg("consensus not reached")
 	}
@@ -236,7 +237,10 @@ func (p *PubSubService) Publish(block types.BlockGossip) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal block gossip message: %w", err)
 	}
-	if err := p.topic.Publish(context.Background(), msg); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	defer cancel()
+	p.logger.Info().Msgf("publishing block gossip message: %s, length:%d", block.GetKey(), len(msg))
+	if err := p.topic.Publish(ctx, msg); err != nil {
 		return fmt.Errorf("failed to publish message: %w", err)
 	}
 	return nil
