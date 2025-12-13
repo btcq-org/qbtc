@@ -49,6 +49,10 @@ func NewGRPCConnection(target string, insecure bool) (*grpc.ClientConn, error) {
 		conn, err := grpc.NewClient(target,
 			grpc.WithTransportCredentials(insecurecreds.NewCredentials()),
 			grpc.WithContextDialer(dialerFunc))
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(10*1024*1024),
+			grpc.MaxCallSendMsgSize(10*1024*1024),
+		)
 		if err != nil {
 			return nil, err
 		}

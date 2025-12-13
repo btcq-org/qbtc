@@ -78,7 +78,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	}
 	sdkCtx.Logger().Info("received MsgReportBlock", "height", msg.Height, "hash", msg.Hash, "lastProcessedBlock", lastProcessedBlock)
 	// check if the block height is the next block height
-	if msg.Height != lastProcessedBlock+1 && msg.Height != lastProcessedBlock && lastProcessedBlock != 0 {
+	if msg.Height != lastProcessedBlock+1 && lastProcessedBlock != 0 {
 		sdkCtx.Logger().Error("block height is not the next block height - ignore", "reportedHeight", msg.Height, "lastProcessedBlock", lastProcessedBlock)
 		return &types.MsgEmpty{}, nil
 	}
