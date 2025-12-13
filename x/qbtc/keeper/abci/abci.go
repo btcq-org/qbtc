@@ -5,10 +5,7 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmttypes "github.com/cometbft/cometbft/types"
-	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 )
 
 type ProposalHandler struct {
@@ -23,12 +20,10 @@ type ProposalHandler struct {
 func NewProposalHandler(
 	k *keeper.Keeper,
 	b *ebifrost.EnshrinedBifrost,
-	r codectypes.InterfaceRegistry,
+	decoder sdk.TxDecoder,
 	nextPrepareProposalHandler sdk.PrepareProposalHandler,
 	nextProcessProposalHandler sdk.ProcessProposalHandler,
 ) *ProposalHandler {
-	cdc := codec.NewProtoCodec(r)
-	decoder := ebifrost.TxDecoder(cdc, tx.DefaultTxDecoder(cdc))
 
 	return &ProposalHandler{
 		keeper:                 k,

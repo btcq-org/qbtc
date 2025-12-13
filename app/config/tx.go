@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -150,6 +151,30 @@ func NewBankKeeperCoinMetadataQueryFn(bk BankKeeper) textual.CoinMetadataQueryFn
 		}
 
 		return m, nil
+	}
+}
+
+// NewGRPCCoinMetadataQueryFn returns a new Textual instance where the metadata
+// queries are done via gRPC using the provided GRPC client connection. In the
+// SDK, you can pass a client.Context as the GRPC connection.
+//
+// Example:
+//
+//	clientCtx := client.GetClientContextFromCmd(cmd)
+//	txt := tx.NewTextualWithGRPCConn(clientCtx)
+//
+// This should be used in the client (root.go) of an application.
+func NewGRPCCoinMetadataQueryFn(grpcConn grpc.ClientConnInterface) textual.CoinMetadataQueryFn {
+	return func(ctx context.Context, denom string) (*bankv1beta1.Metadata, error) {
+		bankQueryClient := bankv1beta1.NewQueryClient(grpcConn)
+		res, err := bankQueryClient.DenomMetadata(ctx, &bankv1beta1.QueryDenomMetadataRequest{
+			Denom: denom,
+		})
+		if err != nil {
+			return nil, metadataExists(err)
+		}
+
+		return res.Metadata, nil
 	}
 }
 

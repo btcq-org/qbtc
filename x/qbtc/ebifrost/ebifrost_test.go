@@ -1,4 +1,4 @@
-package ebifrost
+package ebifrost_test
 
 import (
 	"testing"
