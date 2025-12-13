@@ -189,7 +189,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 				BlockContent: block.BlockContent,
 				Attestations: []*types.Attestation{block.Attestation},
 			}
-			err = p.saveMsgBtcBlock(msg)
+			err = p.saveMsgBtcBlock(msg, key)
 			if err != nil {
 				return err
 			}
@@ -206,18 +206,17 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
 
-	err = p.saveMsgBtcBlock(msgBlock)
+	err = p.saveMsgBtcBlock(msgBlock, key)
 	if err != nil {
 		return err
 	}
 	return p.checkAttestations(&msgBlock)
 }
 
-func (p *PubSubService) saveMsgBtcBlock(msgBlock types.MsgBtcBlock) error {
+func (p *PubSubService) saveMsgBtcBlock(msgBlock types.MsgBtcBlock, key string) error {
 	if p.db == nil {
 		return fmt.Errorf("leveldb instance is nil")
 	}
-	key := fmt.Sprintf("%s-%d", msgBlock.Hash, msgBlock.Height)
 	content, err := proto.Marshal(&msgBlock)
 	if err != nil {
 		return fmt.Errorf("failed to marshal MsgBtcBlock: %w", err)

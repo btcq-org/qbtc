@@ -240,7 +240,7 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
-			if s.shouldBackoffProcessing(uint64(blockHeight)) {
+			if s.shouldBackoffProcessing(ctx, uint64(blockHeight)) {
 				s.logger.Info().Int64("block_height", blockHeight).Msg("backing off processing bitcoin blocks")
 				time.Sleep(5 * time.Second)
 				continue
@@ -270,8 +270,8 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	}
 }
 
-func (s *Service) shouldBackoffProcessing(height uint64) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *Service) shouldBackoffProcessing(ctx context.Context, height uint64) bool {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	latestHeight, err := s.qclient.GetLatestBtcBlockHeight(ctx)
 	if err != nil || latestHeight == 0 {

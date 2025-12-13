@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/btcq-org/qbtc/bifrost/config"
 	"github.com/btcq-org/qbtc/bifrost/keystore"
@@ -150,7 +151,7 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	n.logger.Info().Msg("DHT network bootstrapped")
 	n.localDHT = dht
 
-	bootstrapPeers, err := n.qBTCNode.GetBootstrapPeers(ctx)
+	bootstrapPeers, err := n.waitForQBTCNodeReady(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get bootstrap peers,err: %w", err)
 	}
@@ -163,6 +164,22 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	}
 	n.logger.Info().Msg("bootstrap initial peers")
 	return nil
+}
+func (n *Network) waitForQBTCNodeReady(ctx context.Context) (bootstrapPeers []peer.AddrInfo, err error) {
+	for i := range 100 {
+		bootstrapPeers, err = n.qBTCNode.GetBootstrapPeers(ctx)
+		if err != nil {
+			n.logger.Err(err).Msgf("failed to get bootstrap peers from QBTC node, retrying... attempt %d/100", i+1)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(5 * time.Second):
+				continue
+			}
+		}
+		return bootstrapPeers, nil
+	}
+	return nil, fmt.Errorf("failed to get bootstrap peers from QBTC node after multiple attempts: %w", err)
 }
 
 // GetHost returns the p2p host
