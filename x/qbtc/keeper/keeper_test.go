@@ -27,7 +27,7 @@ import (
 
 type fixture struct {
 	ctx                   context.Context
-	keeper                keeper.Keeper
+	keeper                *keeper.Keeper
 	addressCodec          address.Codec
 	validatorAddressCodec address.Codec
 	validator             stakingtypes.Validator

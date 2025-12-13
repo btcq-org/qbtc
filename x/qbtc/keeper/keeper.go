@@ -47,9 +47,9 @@ func NewKeeper(
 	bankKeeper types.BankKeeper,
 	authKeeper types.AuthKeeper,
 	authority string,
-) Keeper {
+) *Keeper {
 	sb := collections.NewSchemaBuilder(storeService)
-	k := Keeper{
+	k := &Keeper{
 		storeService:       storeService,
 		cdc:                cdc,
 		addressCodec:       addressCodec,

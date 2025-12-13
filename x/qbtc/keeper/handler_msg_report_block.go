@@ -71,20 +71,22 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 
 // SetMsgReportBlock processes a reported Bitcoin block.
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
-	fmt.Println("SetMsgReportBlock called for block height:", msg.Height)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	lastProcessedBlock, err := s.k.GetLastProcessedBlock(ctx)
 	if err != nil {
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
 	}
+	sdkCtx.Logger().Info("received MsgReportBlock", "height", msg.Height, "hash", msg.Hash, "lastProcessedBlock", lastProcessedBlock)
 	// check if the block height is the next block height
 	if msg.Height != lastProcessedBlock+1 && msg.Height != lastProcessedBlock && lastProcessedBlock != 0 {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("block height %d is not the next block height, last processed block height: %d", msg.Height, lastProcessedBlock)
+		sdkCtx.Logger().Error("block height is not the next block height - ignore", "reportedHeight", msg.Height, "lastProcessedBlock", lastProcessedBlock)
+		return &types.MsgEmpty{}, nil
 	}
 
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
 	if err := s.ValidateMsgBtcBlockAttestation(sdkCtx, msg); err != nil {
 		return nil, err
 	}
@@ -140,8 +142,9 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	}
 
 	// store last block processed height
-	err = s.k.LastProcessedBlock.Set(sdkCtx, msg.Height)
+	err = s.k.LastProcessedBlock.Set(cacheContext, msg.Height)
 	if err != nil {
+		cacheContext.Logger().Error("failed to set last processed block height", "height", msg.Height, "error", err)
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
 	}
 	sdkCtx.Logger().Info("processed btc block", "height", msg.Height, "hash", msg.Hash)

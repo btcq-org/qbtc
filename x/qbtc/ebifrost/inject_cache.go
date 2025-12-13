@@ -259,15 +259,14 @@ func (c *InjectCache[T]) ProcessForProposal(
 	logItem func(T, log.Logger),
 	sortItems func([]T),
 	logger log.Logger,
-	latestBtcBlockHeight uint64,
 ) [][]byte {
 	var injectTxs [][]byte
 
 	items := c.Get()
 	sortItems(items)
 
-	for idx, item := range items {
-		if !canInclude(item, idx) {
+	for _, item := range items {
+		if !canInclude(item, len(injectTxs)) {
 			continue
 		}
 		msg, err := createMsg(item)

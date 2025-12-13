@@ -31,7 +31,7 @@ var (
 // AppModule implements the AppModule interface that defines the inter-dependent methods that modules need to implement
 type AppModule struct {
 	cdc            codec.Codec
-	keeper         keeper.Keeper
+	keeper         *keeper.Keeper
 	authKeeper     types.AuthKeeper
 	bankKeeper     types.BankKeeper
 	networkManager *keeper.NetworkManager
@@ -40,7 +40,7 @@ type AppModule struct {
 
 func NewAppModule(
 	cdc codec.Codec,
-	k keeper.Keeper,
+	k *keeper.Keeper,
 	authKeeper types.AuthKeeper,
 	bankKeeper types.BankKeeper,
 	dataDir string,

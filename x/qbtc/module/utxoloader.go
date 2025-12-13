@@ -125,7 +125,7 @@ func (ul *UtxoLoader) writeUtxo(writer io.Writer, utxoData []byte) error {
 	_, err = writer.Write(utxoData)
 	return err
 }
-func (ul *UtxoLoader) EnsureLoadUtxoFromChunkFile(ctx sdk.Context, chunkIndex int, k keeper.Keeper) error {
+func (ul *UtxoLoader) EnsureLoadUtxoFromChunkFile(ctx sdk.Context, chunkIndex int, k *keeper.Keeper) error {
 	chunkFile := filepath.Join(ul.DataDir, "utxo_chunks", fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
 	_, err := os.Stat(chunkFile)
 	if err != nil {
@@ -141,7 +141,7 @@ func (ul *UtxoLoader) EnsureLoadUtxoFromChunkFile(ctx sdk.Context, chunkIndex in
 	return os.Remove(chunkFile)
 }
 
-func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k keeper.Keeper, chunkFile string) error {
+func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k *keeper.Keeper, chunkFile string) error {
 	f, err := os.Open(chunkFile)
 	if err != nil {
 		return err

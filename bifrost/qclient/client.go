@@ -39,6 +39,7 @@ type QBTCNode interface {
 	GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error)
 	VerifyAttestation(ctx context.Context, block qtypes.BlockGossip) error
 	CheckAttestationsSuperMajority(ctx context.Context, msg *qtypes.MsgBtcBlock) error
+	GetLatestBtcBlockHeight(ctx context.Context) (uint64, error)
 }
 
 var _ QBTCNode = &Client{}

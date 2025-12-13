@@ -49,7 +49,7 @@ type ModuleInputs struct {
 type ModuleOutputs struct {
 	depinject.Out
 
-	QbtcKeeper keeper.Keeper
+	QbtcKeeper *keeper.Keeper
 	Module     appmodule.AppModule
 }
 

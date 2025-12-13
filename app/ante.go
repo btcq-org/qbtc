@@ -18,7 +18,7 @@ import (
 // HandlerOptions are the options required for constructing a default SDK AnteHandler.
 type HandlerOptions struct {
 	ante.HandlerOptions
-	QbtcKeeper            keeper.Keeper
+	QbtcKeeper            *keeper.Keeper
 	WasmConfig            *wasmtypes.WasmConfig
 	TXCounterStoreService corestoretypes.KVStoreService
 }

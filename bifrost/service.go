@@ -240,6 +240,11 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
+			if s.shouldBackoffProcessing(uint64(blockHeight)) {
+				s.logger.Info().Int64("block_height", blockHeight).Msg("backing off processing bitcoin blocks")
+				time.Sleep(5 * time.Second)
+				continue
+			}
 			blockHash, err := s.btcClient.GetBlockHash(blockHeight + 1)
 			if err != nil {
 				if s.btcClient.ShouldBackoff(err) {
@@ -263,6 +268,17 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			blockHeight++
 		}
 	}
+}
+
+func (s *Service) shouldBackoffProcessing(height uint64) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	latestHeight, err := s.qclient.GetLatestBtcBlockHeight(ctx)
+	if err != nil || latestHeight == 0 {
+		s.logger.Error().Err(err).Msg("failed to get latest btc block height")
+		return false
+	}
+	return height > latestHeight+10
 }
 
 // getBtcBlock retrieves the bitcoin block at the given height

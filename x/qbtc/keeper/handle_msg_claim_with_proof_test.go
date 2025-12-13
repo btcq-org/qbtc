@@ -37,7 +37,7 @@ const testChainID = "qbtc-test-1"
 // claimTestFixture contains all dependencies for claim tests
 type claimTestFixture struct {
 	ctx           sdk.Context
-	keeper        keeper.Keeper
+	keeper        *keeper.Keeper
 	stakingKeeper *qbtctestutil.MockStakingKeeper
 	bankKeeper    *qbtctestutil.MockBankKeeper
 	authKeeper    *qbtctestutil.MockAuthKeeper

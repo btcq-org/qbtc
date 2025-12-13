@@ -12,6 +12,13 @@ import (
 	maddr "github.com/multiformats/go-multiaddr"
 )
 
+func (c *Client) GetLatestBtcBlockHeight(ctx context.Context) (uint64, error) {
+	resp, err := c.qClient.LastProcessedBlock(ctx, &types.QueryLastProcessedBlockRequest{})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Height, nil
+}
 func (c *Client) GetBootstrapPeers(ctx context.Context) ([]peer.AddrInfo, error) {
 	resp, err := c.qClient.AllNodePeerAddresses(ctx, &types.QueryAllNodePeerAddressesRequest{
 		Pagination: &query.PageRequest{
