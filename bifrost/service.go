@@ -220,15 +220,27 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	defer s.wg.Done()
-	blockHeight, err := s.btcClient.GetStartBlockHeight()
+	newCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	startBlockHeight, err := s.qclient.GetLatestBtcBlockHeight(newCtx)
 	if err != nil {
-		s.logger.Error().Err(err).Msg("failed to get start block height")
-		return
+		s.logger.Error().Err(err).Msg("failed to get latest btc block height")
+		startBlockHeight = 0
+	}
+	var blockHeight int64
+	if startBlockHeight > 0 {
+		blockHeight = int64(startBlockHeight)
+	} else {
+		blockHeight, err = s.btcClient.GetStartBlockHeight()
+		if err != nil {
+			s.logger.Error().Err(err).Msg("failed to get start block height")
+			return
+		}
+		if s.cfg.StartBlockHeight > 0 && blockHeight < s.cfg.StartBlockHeight {
+			blockHeight = s.cfg.StartBlockHeight
+		}
 	}
 
-	if s.cfg.StartBlockHeight > 0 && blockHeight < s.cfg.StartBlockHeight {
-		blockHeight = s.cfg.StartBlockHeight
-	}
 	s.logger.Info().Int64("start_block_height", blockHeight).Msg("starting to process bitcoin blocks")
 
 	for {
@@ -240,6 +252,11 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
+			if s.shouldBackoffProcessing(ctx, uint64(blockHeight)) {
+				s.logger.Info().Int64("block_height", blockHeight).Msg("backing off processing bitcoin blocks")
+				time.Sleep(5 * time.Second)
+				continue
+			}
 			blockHash, err := s.btcClient.GetBlockHash(blockHeight + 1)
 			if err != nil {
 				if s.btcClient.ShouldBackoff(err) {
@@ -263,6 +280,17 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			blockHeight++
 		}
 	}
+}
+
+func (s *Service) shouldBackoffProcessing(ctx context.Context, height uint64) bool {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	latestHeight, err := s.qclient.GetLatestBtcBlockHeight(ctx)
+	if err != nil || latestHeight == 0 {
+		s.logger.Error().Err(err).Msg("failed to get latest btc block height")
+		return false
+	}
+	return height > latestHeight+10
 }
 
 // getBtcBlock retrieves the bitcoin block at the given height

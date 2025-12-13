@@ -12,11 +12,11 @@ import (
 )
 
 type NetworkManager struct {
-	k Keeper
+	k *Keeper
 }
 
 // NewNetworkManager creates a new NetworkManager instance.
-func NewNetworkManager(k Keeper) *NetworkManager {
+func NewNetworkManager(k *Keeper) *NetworkManager {
 	return &NetworkManager{k: k}
 }
 

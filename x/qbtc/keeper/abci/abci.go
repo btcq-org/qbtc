@@ -35,7 +35,16 @@ func NewProposalHandler(
 }
 
 func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
-	injectTxs, txBzLen := h.bifrost.ProposalInjectTxs(ctx, req.MaxTxBytes)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	lastProcessedBlock, err := h.keeper.LastProcessedBlock.Get(sdkCtx)
+	if err != nil {
+		sdkCtx.Logger().Error("Failed to get last processed block", "error", err)
+		lastProcessedBlock = 0
+	}
+	sdkCtx.Logger().Info("Preparing proposal", "lastProcessedBlock", lastProcessedBlock)
+	// let's only fill half of the block with ebifrost inject txs, so that we leave room for normal txs
+	maxTxBytes := req.MaxTxBytes / 2
+	injectTxs, txBzLen := h.bifrost.ProposalInjectTxs(ctx, maxTxBytes, lastProcessedBlock)
 
 	// Modify request for upstream handler with reduced max tx size
 	origMaxTxBytes := req.MaxTxBytes

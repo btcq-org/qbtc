@@ -103,7 +103,7 @@ type App struct {
 
 	// simulation manager
 	sm         *module.SimulationManager
-	QbtcKeeper qbtcmodulekeeper.Keeper
+	QbtcKeeper *qbtcmodulekeeper.Keeper
 }
 
 func init() {
@@ -202,7 +202,7 @@ func New(
 	app.EnshrinedBifrost = ebifrost.NewEnshrinedBifrost(ebifrostConfig, app.AppCodec(), logger)
 	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
 	eBifrostProposalHandler := qbtcabi.NewProposalHandler(
-		&app.QbtcKeeper,
+		app.QbtcKeeper,
 		app.EnshrinedBifrost,
 		app.TxConfig().TxDecoder(),
 		defaultProposalHandler.PrepareProposalHandler(),

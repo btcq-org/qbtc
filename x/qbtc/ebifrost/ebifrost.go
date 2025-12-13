@@ -52,7 +52,11 @@ type EnshrinedBifrost struct {
 
 // NewEnshrinedBifrost creates a new EnshrinedBifrost server.
 func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger) *EnshrinedBifrost {
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.MaxRecvMsgSize(10*1024*1024), // 10 MB
+		grpc.MaxSendMsgSize(10*1024*1024),
+	)
+
 	eb := &EnshrinedBifrost{
 		s:             s,
 		logger:        logger,
@@ -116,18 +120,48 @@ func (eb *EnshrinedBifrost) MarshalTx(msg sdk.Msg) ([]byte, error) {
 	return itx.Tx.Marshal()
 }
 
+func GetLatestBtcBlockHeight(items []*types.MsgBtcBlock) uint64 {
+	if len(items) == 0 {
+		return 0
+	}
+
+	heights := make([]uint64, len(items))
+	for i, item := range items {
+		heights[i] = item.Height
+	}
+
+	return slices.Max(heights)
+}
+
 // ProposalInjectTxs is intended to be called by the current proposing validator during PrepareProposal
 // and will return a list of in-quorum transactions to be included in the next block along with the total byte length of the transactions.
-func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64) ([][]byte, int64) {
+func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64, startBlockHeight uint64) ([][]byte, int64) {
 	if eb == nil {
 		return nil, 0
 	}
 
 	var injectTxs [][]byte
 	var txBzLen int64
+	ctx.Logger().Info("start btc block height", "height", startBlockHeight)
+	// for each btc block cached in EBifrost cache , we only removed it when QBTC already process pass the block height
+	// We do not remove it when it is include in the proposal , because the MsgReportBlock handler will ignore the block if it is not the next block height
+	// This is to prevent the block being dropped if the proposal is not committed
+	for _, item := range eb.btcBlockCache.Get() {
+		if item.Height <= startBlockHeight {
+			eb.MarkBlockAsProcessed(ctx, item)
+		}
+	}
 
 	// process btcq blocks
 	blocks := eb.btcBlockCache.ProcessForProposal(
+		func(b *types.MsgBtcBlock, idx int) bool {
+			if startBlockHeight == 0 {
+				startBlockHeight = b.Height
+				return true
+			}
+			ctx.Logger().Info("checking btc block for inclusion", "blockHeight", b.Height, "expectedHeight", startBlockHeight+uint64(idx+1), "idx", idx)
+			return b.Height == startBlockHeight+uint64(idx+1)
+		},
 		func(b *types.MsgBtcBlock) (sdk.Msg, error) {
 			// construct a new message with the signer set to the ebifrost signer
 			block := &types.MsgBtcBlock{

@@ -253,6 +253,7 @@ func (c *InjectCache[T]) BroadcastEvent(
 
 // ProcessForProposal processes items for the proposal
 func (c *InjectCache[T]) ProcessForProposal(
+	canInclude func(T, int) bool,
 	createMsg func(T) (sdk.Msg, error),
 	createTx func(sdk.Msg) ([]byte, error),
 	logItem func(T, log.Logger),
@@ -263,7 +264,11 @@ func (c *InjectCache[T]) ProcessForProposal(
 
 	items := c.Get()
 	sortItems(items)
+
 	for _, item := range items {
+		if !canInclude(item, len(injectTxs)) {
+			continue
+		}
 		msg, err := createMsg(item)
 		if err != nil {
 			logger.Error("Failed to create message", "error", err)
