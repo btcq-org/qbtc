@@ -222,7 +222,7 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	defer s.wg.Done()
 	newCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	startBlockHeight, err := s.qclient.GetLatestBtcBlockHeight(newCtx)
+	startBlockHeight, err := s.getQBTCLatestProcessBTCBlockHeight(newCtx)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("failed to get latest btc block height")
 		startBlockHeight = 0
@@ -242,7 +242,7 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	}
 
 	s.logger.Info().Int64("start_block_height", blockHeight).Msg("starting to process bitcoin blocks")
-
+	var backOffTime *time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -252,9 +252,24 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
-			if s.shouldBackoffProcessing(ctx, uint64(blockHeight)) {
-				s.logger.Info().Int64("block_height", blockHeight).Msg("backing off processing bitcoin blocks")
+			latestBlockHeight, err := s.getQBTCLatestProcessBTCBlockHeight(ctx)
+			if err != nil {
+				s.logger.Error().Err(err).Msg("failed to get latest bitcoin block height")
+			}
+			if latestBlockHeight > 0 && uint64(blockHeight) >= latestBlockHeight+10 {
 				time.Sleep(5 * time.Second)
+				if backOffTime == nil {
+					now := time.Now()
+					backOffTime = &now
+				} else {
+					// if we've been backing off for more than 1 minute, reset to latest block height
+					// assume the latest block height +1  btc block didn't reach consensus
+					if time.Since(*backOffTime) > time.Duration(s.cfg.BackoffTimeInMinutes)*time.Minute {
+						backOffTime = nil
+						blockHeight = int64(latestBlockHeight)
+						s.logger.Info().Int64("new_block_height", blockHeight).Msg("caught up to latest block height, resetting to latest")
+					}
+				}
 				continue
 			}
 			blockHash, err := s.btcClient.GetBlockHash(blockHeight + 1)
@@ -282,15 +297,10 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	}
 }
 
-func (s *Service) shouldBackoffProcessing(ctx context.Context, height uint64) bool {
+func (s *Service) getQBTCLatestProcessBTCBlockHeight(ctx context.Context) (uint64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	latestHeight, err := s.qclient.GetLatestBtcBlockHeight(ctx)
-	if err != nil || latestHeight == 0 {
-		s.logger.Error().Err(err).Msg("failed to get latest btc block height")
-		return false
-	}
-	return height > latestHeight+10
+	return s.qclient.GetLatestBtcBlockHeight(ctx)
 }
 
 // getBtcBlock retrieves the bitcoin block at the given height
