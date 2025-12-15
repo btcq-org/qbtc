@@ -261,16 +261,18 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 				if backOffTime == nil {
 					now := time.Now()
 					backOffTime = &now
+					continue
 				} else {
-					// if we've been backing off for more than 1 minute, reset to latest block height
+					// if we've been backing off for more than configured minutes, reset to latest block height
 					// assume the latest block height +1  btc block didn't reach consensus
 					if time.Since(*backOffTime) > time.Duration(s.cfg.BackoffTimeInMinutes)*time.Minute {
 						backOffTime = nil
 						blockHeight = int64(latestBlockHeight)
 						s.logger.Info().Int64("new_block_height", blockHeight).Msg("caught up to latest block height, resetting to latest")
+					} else {
+						continue
 					}
 				}
-				continue
 			}
 			blockHash, err := s.btcClient.GetBlockHash(blockHeight + 1)
 			if err != nil {
