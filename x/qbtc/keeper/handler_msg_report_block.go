@@ -76,7 +76,6 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	if err != nil {
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
 	}
-	sdkCtx.Logger().Info("received MsgReportBlock", "height", msg.Height, "hash", msg.Hash, "lastProcessedBlock", lastProcessedBlock)
 	// check if the block height is the next block height
 	if msg.Height != lastProcessedBlock+1 && lastProcessedBlock != 0 {
 		sdkCtx.Logger().Error("block height is not the next block height - ignore", "reportedHeight", msg.Height, "lastProcessedBlock", lastProcessedBlock)
@@ -292,7 +291,7 @@ func (s *msgServer) getClaimMemo(ctx sdk.Context, vOuts []btcjson.Vout) string {
 			}
 			memo, err := hex.DecodeString(fields[1])
 			if err != nil {
-				ctx.Logger().Error("failed to decode memo", "error", err)
+				ctx.Logger().Debug("failed to decode memo", "error", err)
 				continue
 			}
 			memoStr := strings.ToLower(string(memo))

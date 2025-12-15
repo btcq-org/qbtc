@@ -1,11 +1,10 @@
 package app
 
 import (
-	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/x/auth/posthandler"
 )
 
-func (app *App) setPostHandler(txConfig client.TxConfig) {
+func (app *App) setPostHandler() {
 	postHandler, err := posthandler.NewPostHandler(
 		posthandler.HandlerOptions{},
 	)

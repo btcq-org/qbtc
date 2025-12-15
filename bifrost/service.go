@@ -220,9 +220,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	defer s.wg.Done()
-	newCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	startBlockHeight, err := s.getQBTCLatestProcessBTCBlockHeight(newCtx)
+	startBlockHeight, err := s.getQBTCLatestProcessBTCBlockHeight(ctx)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("failed to get latest btc block height")
 		startBlockHeight = 0
@@ -300,9 +298,9 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 }
 
 func (s *Service) getQBTCLatestProcessBTCBlockHeight(ctx context.Context) (uint64, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return s.qclient.GetLatestBtcBlockHeight(ctx)
+	return s.qclient.GetLatestBtcBlockHeight(newCtx)
 }
 
 // getBtcBlock retrieves the bitcoin block at the given height
