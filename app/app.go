@@ -223,7 +223,7 @@ func New(
 
 	// set ante and post handlers
 	app.setAnteHandler(app.txConfig)
-	app.setPostHandler(app.txConfig)
+	app.setPostHandler()
 
 	// A custom InitChainer sets if extra pre-init-genesis logic is required.
 	// This is necessary for manually registered modules that do not support app wiring.

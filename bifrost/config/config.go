@@ -9,16 +9,17 @@ import (
 )
 
 type Config struct {
-	ListenAddr        string         `mapstructure:"listen_addr" json:"listen_addr"`
-	HTTPListenAddress string         `mapstructure:"http_listen_addr" json:"http_listen_addr"`
-	ExternalIP        string         `mapstructure:"external_ip" json:"external_ip"`
-	RootPath          string         `mapstructure:"root_path" json:"root_path"`
-	KeyName           string         `mapstructure:"key_name" json:"key_name"`
-	StartBlockHeight  int64          `mapstructure:"start_block_height" json:"start_block_height"`
-	BitcoinConfig     bitcoin.Config `mapstructure:"bitcoin" json:"bitcoin"`
-	QBTCHome          string         `mapstructure:"qbtc_home" json:"qbtc_home"`
-	EbifrostAddress   string         `mapstructure:"ebifrost_address" json:"ebifrost_address"`
-	QBTCGRPCAddress   string         `mapstructure:"qbtc_grpc_address" json:"qbtc_grpc_address"`
+	ListenAddr           string         `mapstructure:"listen_addr" json:"listen_addr"`
+	HTTPListenAddress    string         `mapstructure:"http_listen_addr" json:"http_listen_addr"`
+	ExternalIP           string         `mapstructure:"external_ip" json:"external_ip"`
+	RootPath             string         `mapstructure:"root_path" json:"root_path"`
+	KeyName              string         `mapstructure:"key_name" json:"key_name"`
+	StartBlockHeight     int64          `mapstructure:"start_block_height" json:"start_block_height"`
+	BitcoinConfig        bitcoin.Config `mapstructure:"bitcoin" json:"bitcoin"`
+	QBTCHome             string         `mapstructure:"qbtc_home" json:"qbtc_home"`
+	EbifrostAddress      string         `mapstructure:"ebifrost_address" json:"ebifrost_address"`
+	QBTCGRPCAddress      string         `mapstructure:"qbtc_grpc_address" json:"qbtc_grpc_address"`
+	BackoffTimeInMinutes int64          `mapstructure:"backoff_time_in_minutes" json:"backoff_time_in_minutes"`
 }
 
 type P2PConfig struct {
@@ -41,8 +42,9 @@ func DefaultConfig() *Config {
 			Password:    "password",
 			LocalDBPath: "./db",
 		},
-		EbifrostAddress: "localhost:50051",
-		QBTCGRPCAddress: "localhost:9090",
+		EbifrostAddress:      "localhost:50051",
+		QBTCGRPCAddress:      "localhost:9090",
+		BackoffTimeInMinutes: 1,
 	}
 }
 
