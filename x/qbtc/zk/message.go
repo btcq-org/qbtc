@@ -59,4 +59,62 @@ func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, btcqAddressH
 	return messageHash == expected
 }
 
+// ComputeClaimMessageForSchnorr computes the claim message for a Taproot (Schnorr) proof.
+// Uses the x-only public key (32 bytes) instead of Hash160.
+//
+// Message format:
+//
+//	SHA256(XOnlyPubKey || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForSchnorr(xOnlyPubKey [32]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+	data := make([]byte, 0, 32+32+8+len(ClaimMessageVersion))
+	data = append(data, xOnlyPubKey[:]...)
+	data = append(data, btcqAddressHash[:]...)
+	data = append(data, chainID[:]...)
+	data = append(data, []byte(ClaimMessageVersion)...)
+	return sha256.Sum256(data)
+}
 
+// ComputeClaimMessageForP2SH computes the claim message for a P2SH-P2WPKH proof.
+// Uses the script hash (20 bytes) as the address identifier.
+//
+// Message format:
+//
+//	SHA256(ScriptHash || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForP2SH(scriptHash [20]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+	data := make([]byte, 0, 20+32+8+len(ClaimMessageVersion))
+	data = append(data, scriptHash[:]...)
+	data = append(data, btcqAddressHash[:]...)
+	data = append(data, chainID[:]...)
+	data = append(data, []byte(ClaimMessageVersion)...)
+	return sha256.Sum256(data)
+}
+
+// ComputeClaimMessageForP2PK computes the claim message for a P2PK proof.
+// Uses the compressed public key (33 bytes) as the identifier.
+//
+// Message format:
+//
+//	SHA256(CompressedPubKey || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForP2PK(compressedPubKey [33]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+	data := make([]byte, 0, 33+32+8+len(ClaimMessageVersion))
+	data = append(data, compressedPubKey[:]...)
+	data = append(data, btcqAddressHash[:]...)
+	data = append(data, chainID[:]...)
+	data = append(data, []byte(ClaimMessageVersion)...)
+	return sha256.Sum256(data)
+}
+
+// ComputeClaimMessageForP2WSH computes the claim message for a P2WSH single-key proof.
+// Uses the witness program (32-byte SHA256 of the witness script) as the identifier.
+//
+// Message format:
+//
+//	SHA256(WitnessProgram || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForP2WSH(witnessProgram [32]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+	data := make([]byte, 0, 32+32+8+len(ClaimMessageVersion))
+	data = append(data, witnessProgram[:]...)
+	data = append(data, btcqAddressHash[:]...)
+	data = append(data, chainID[:]...)
+	data = append(data, []byte(ClaimMessageVersion)...)
+	return sha256.Sum256(data)
+}

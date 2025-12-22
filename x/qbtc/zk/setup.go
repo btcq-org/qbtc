@@ -127,7 +127,35 @@ func TestSetupOptions() SetupOptions {
 func SetupWithOptions(opts SetupOptions) (*SetupResult, error) {
 	// Create a placeholder circuit for compilation
 	circuit := NewBTCSignatureCircuitPlaceholder()
+	return SetupCircuitWithOptions(circuit, opts)
+}
 
+// SetupSchnorrWithOptions performs PLONK setup for the BTCSchnorrCircuit (Taproot).
+func SetupSchnorrWithOptions(opts SetupOptions) (*SetupResult, error) {
+	circuit := NewBTCSchnorrCircuitPlaceholder()
+	return SetupCircuitWithOptions(circuit, opts)
+}
+
+// SetupP2SHP2WPKHWithOptions performs PLONK setup for the BTCP2SHP2WPKHCircuit.
+func SetupP2SHP2WPKHWithOptions(opts SetupOptions) (*SetupResult, error) {
+	circuit := NewBTCP2SHP2WPKHCircuitPlaceholder()
+	return SetupCircuitWithOptions(circuit, opts)
+}
+
+// SetupP2PKWithOptions performs PLONK setup for the BTCP2PKCircuit.
+func SetupP2PKWithOptions(opts SetupOptions) (*SetupResult, error) {
+	circuit := NewBTCP2PKCircuitPlaceholder()
+	return SetupCircuitWithOptions(circuit, opts)
+}
+
+// SetupP2WSHSingleKeyWithOptions performs PLONK setup for the BTCP2WSHSingleKeyCircuit.
+func SetupP2WSHSingleKeyWithOptions(opts SetupOptions) (*SetupResult, error) {
+	circuit := NewBTCP2WSHSingleKeyCircuitPlaceholder()
+	return SetupCircuitWithOptions(circuit, opts)
+}
+
+// SetupCircuitWithOptions performs PLONK setup for any circuit.
+func SetupCircuitWithOptions(circuit frontend.Circuit, opts SetupOptions) (*SetupResult, error) {
 	// Compile the circuit to SCS (Sparse Constraint System for PLONK)
 	cs, err := frontend.Compile(ecc.BN254.ScalarField(), scs.NewBuilder, circuit)
 	if err != nil {
@@ -467,7 +495,7 @@ type ProofParams struct {
 
 // GenerateProof generates a PLONK proof that proves ownership of a Bitcoin address
 // using an ECDSA signature. The signature and public key are private inputs.
-func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
+func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 	// Create witness assignment
 	assignment := &BTCSignatureCircuit{}
 
@@ -534,7 +562,10 @@ func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
 	}
-	return proofBuf.Bytes(), nil
+	return &Proof{
+		ProofData:    proofBuf.Bytes(),
+		PublicInputs: publicBuf.Bytes(),
+	}, nil
 }
 
 // bigIntToLimbs converts a big.Int to 4 limbs of 64 bits each for emulated field elements
@@ -569,12 +600,322 @@ func HashBTCQAddress(btcqAddress string) [32]byte {
 	return sha256.Sum256([]byte(btcqAddress))
 }
 
+// SchnorrProver handles proof generation for Taproot claims using Schnorr signatures.
+type SchnorrProver struct {
+	cs constraint.ConstraintSystem
+	pk plonk.ProvingKey
+}
+
+// NewSchnorrProver creates a new Schnorr prover
+func NewSchnorrProver(cs constraint.ConstraintSystem, pk plonk.ProvingKey) *SchnorrProver {
+	return &SchnorrProver{cs: cs, pk: pk}
+}
+
+// SchnorrProverFromSetup creates a Schnorr prover from setup result
+func SchnorrProverFromSetup(setup *SetupResult) *SchnorrProver {
+	return NewSchnorrProver(setup.ConstraintSystem, setup.ProvingKey)
+}
+
+// GenerateProof generates a PLONK proof for a Taproot Schnorr signature claim
+func (p *SchnorrProver) GenerateProof(params SchnorrProofParams) (*Proof, error) {
+	assignment := &BTCSchnorrCircuit{}
+
+	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
+	assignment.SignatureS.Limbs = bigIntToLimbs(params.SignatureS)
+	assignment.PublicKeyX.Limbs = bigIntToLimbs(params.PublicKeyX)
+	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
+
+	for i := 0; i < 32; i++ {
+		assignment.MessageHash[i] = params.MessageHash[i]
+		assignment.XOnlyPubKey[i] = params.XOnlyPubKey[i]
+		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+	}
+	for i := 0; i < 8; i++ {
+		assignment.ChainID[i] = params.ChainID[i]
+	}
+
+	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create witness: %w", err)
+	}
+
+	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate proof: %w", err)
+	}
+
+	var proofBuf bytes.Buffer
+	_, err = proof.WriteTo(&proofBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize proof: %w", err)
+	}
+
+	publicWitness, err := witness.Public()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public witness: %w", err)
+	}
+
+	var publicBuf bytes.Buffer
+	_, err = publicWitness.WriteTo(&publicBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
+	}
+
+	return &Proof{
+		ProofData:    proofBuf.Bytes(),
+		PublicInputs: publicBuf.Bytes(),
+	}, nil
+}
+
+// P2SHP2WPKHProver handles proof generation for P2SH-wrapped P2WPKH claims.
+type P2SHP2WPKHProver struct {
+	cs constraint.ConstraintSystem
+	pk plonk.ProvingKey
+}
+
+// NewP2SHP2WPKHProver creates a new P2SH-P2WPKH prover
+func NewP2SHP2WPKHProver(cs constraint.ConstraintSystem, pk plonk.ProvingKey) *P2SHP2WPKHProver {
+	return &P2SHP2WPKHProver{cs: cs, pk: pk}
+}
+
+// P2SHP2WPKHProverFromSetup creates a P2SH-P2WPKH prover from setup result
+func P2SHP2WPKHProverFromSetup(setup *SetupResult) *P2SHP2WPKHProver {
+	return NewP2SHP2WPKHProver(setup.ConstraintSystem, setup.ProvingKey)
+}
+
+// GenerateProof generates a PLONK proof for a P2SH-P2WPKH claim
+func (p *P2SHP2WPKHProver) GenerateProof(params P2SHP2WPKHProofParams) (*Proof, error) {
+	assignment := &BTCP2SHP2WPKHCircuit{}
+
+	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
+	assignment.SignatureS.Limbs = bigIntToLimbs(params.SignatureS)
+	assignment.PublicKeyX.Limbs = bigIntToLimbs(params.PublicKeyX)
+	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
+
+	for i := 0; i < 32; i++ {
+		assignment.MessageHash[i] = params.MessageHash[i]
+		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+	}
+	for i := 0; i < 20; i++ {
+		assignment.ScriptHash[i] = params.ScriptHash[i]
+	}
+	for i := 0; i < 8; i++ {
+		assignment.ChainID[i] = params.ChainID[i]
+	}
+
+	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create witness: %w", err)
+	}
+
+	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate proof: %w", err)
+	}
+
+	var proofBuf bytes.Buffer
+	_, err = proof.WriteTo(&proofBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize proof: %w", err)
+	}
+
+	publicWitness, err := witness.Public()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public witness: %w", err)
+	}
+
+	var publicBuf bytes.Buffer
+	_, err = publicWitness.WriteTo(&publicBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
+	}
+
+	return &Proof{
+		ProofData:    proofBuf.Bytes(),
+		PublicInputs: publicBuf.Bytes(),
+	}, nil
+}
+
+// P2PKProver handles proof generation for P2PK claims.
+type P2PKProver struct {
+	cs constraint.ConstraintSystem
+	pk plonk.ProvingKey
+}
+
+// NewP2PKProver creates a new P2PK prover
+func NewP2PKProver(cs constraint.ConstraintSystem, pk plonk.ProvingKey) *P2PKProver {
+	return &P2PKProver{cs: cs, pk: pk}
+}
+
+// P2PKProverFromSetup creates a P2PK prover from setup result
+func P2PKProverFromSetup(setup *SetupResult) *P2PKProver {
+	return NewP2PKProver(setup.ConstraintSystem, setup.ProvingKey)
+}
+
+// GenerateProof generates a PLONK proof for a P2PK claim
+func (p *P2PKProver) GenerateProof(params P2PKProofParams) (*Proof, error) {
+	assignment := &BTCP2PKCircuit{}
+
+	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
+	assignment.SignatureS.Limbs = bigIntToLimbs(params.SignatureS)
+	assignment.PublicKeyX.Limbs = bigIntToLimbs(params.PublicKeyX)
+	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
+
+	for i := 0; i < 32; i++ {
+		assignment.MessageHash[i] = params.MessageHash[i]
+		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+	}
+	for i := 0; i < 33; i++ {
+		assignment.CompressedPubKey[i] = params.CompressedPubKey[i]
+	}
+	for i := 0; i < 8; i++ {
+		assignment.ChainID[i] = params.ChainID[i]
+	}
+
+	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create witness: %w", err)
+	}
+
+	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate proof: %w", err)
+	}
+
+	var proofBuf bytes.Buffer
+	_, err = proof.WriteTo(&proofBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize proof: %w", err)
+	}
+
+	publicWitness, err := witness.Public()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public witness: %w", err)
+	}
+
+	var publicBuf bytes.Buffer
+	_, err = publicWitness.WriteTo(&publicBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
+	}
+
+	return &Proof{
+		ProofData:    proofBuf.Bytes(),
+		PublicInputs: publicBuf.Bytes(),
+	}, nil
+}
+
+// P2WSHSingleKeyProver handles proof generation for P2WSH single-key claims.
+type P2WSHSingleKeyProver struct {
+	cs constraint.ConstraintSystem
+	pk plonk.ProvingKey
+}
+
+// NewP2WSHSingleKeyProver creates a new P2WSH single-key prover
+func NewP2WSHSingleKeyProver(cs constraint.ConstraintSystem, pk plonk.ProvingKey) *P2WSHSingleKeyProver {
+	return &P2WSHSingleKeyProver{cs: cs, pk: pk}
+}
+
+// P2WSHSingleKeyProverFromSetup creates a P2WSH single-key prover from setup result
+func P2WSHSingleKeyProverFromSetup(setup *SetupResult) *P2WSHSingleKeyProver {
+	return NewP2WSHSingleKeyProver(setup.ConstraintSystem, setup.ProvingKey)
+}
+
+// GenerateProof generates a PLONK proof for a P2WSH single-key claim
+func (p *P2WSHSingleKeyProver) GenerateProof(params P2WSHSingleKeyProofParams) (*Proof, error) {
+	assignment := &BTCP2WSHSingleKeyCircuit{}
+
+	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
+	assignment.SignatureS.Limbs = bigIntToLimbs(params.SignatureS)
+	assignment.PublicKeyX.Limbs = bigIntToLimbs(params.PublicKeyX)
+	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
+
+	for i := 0; i < 32; i++ {
+		assignment.MessageHash[i] = params.MessageHash[i]
+		assignment.WitnessProgram[i] = params.WitnessProgram[i]
+		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+	}
+	for i := 0; i < 8; i++ {
+		assignment.ChainID[i] = params.ChainID[i]
+	}
+
+	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create witness: %w", err)
+	}
+
+	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate proof: %w", err)
+	}
+
+	var proofBuf bytes.Buffer
+	_, err = proof.WriteTo(&proofBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize proof: %w", err)
+	}
+
+	publicWitness, err := witness.Public()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public witness: %w", err)
+	}
+
+	var publicBuf bytes.Buffer
+	_, err = publicWitness.WriteTo(&publicBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
+	}
+
+	return &Proof{
+		ProofData:    proofBuf.Bytes(),
+		PublicInputs: publicBuf.Bytes(),
+	}, nil
+}
+
 // VerificationParams contains parameters needed for proof verification
 type VerificationParams struct {
 	MessageHash     [32]byte // The message that was signed
 	AddressHash     [20]byte // Hash160 of BTC pubkey
-	QBTCAddressHash [32]byte // H(claimer_address)
+	BTCQAddressHash [32]byte // H(claimer_address) - note: named BTCQ to match test conventions
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)
+}
+
+// Proof represents a serialized PLONK proof with its public inputs
+type Proof struct {
+	ProofData    []byte // Serialized PLONK proof
+	PublicInputs []byte // Serialized public inputs
+}
+
+// ToProtoZKProof serializes the proof to a format suitable for protobuf transmission
+func (p *Proof) ToProtoZKProof() []byte {
+	// Format: [4-byte proof length][proof data][public inputs]
+	result := make([]byte, 4+len(p.ProofData)+len(p.PublicInputs))
+	// Length as big-endian
+	result[0] = byte(len(p.ProofData) >> 24)
+	result[1] = byte(len(p.ProofData) >> 16)
+	result[2] = byte(len(p.ProofData) >> 8)
+	result[3] = byte(len(p.ProofData))
+	copy(result[4:], p.ProofData)
+	copy(result[4+len(p.ProofData):], p.PublicInputs)
+	return result
+}
+
+// ProofFromProtoZKProof deserializes a proof from protobuf format
+func ProofFromProtoZKProof(data []byte) (*Proof, error) {
+	if len(data) < 4 {
+		return nil, fmt.Errorf("proof data too short")
+	}
+	proofLen := int(data[0])<<24 | int(data[1])<<16 | int(data[2])<<8 | int(data[3])
+	if proofLen < MinProofDataLen || proofLen > MaxProofDataLen {
+		return nil, fmt.Errorf("invalid proof length: %d", proofLen)
+	}
+	if len(data) < 4+proofLen {
+		return nil, fmt.Errorf("proof data truncated")
+	}
+	return &Proof{
+		ProofData:    data[4 : 4+proofLen],
+		PublicInputs: data[4+proofLen:],
+	}, nil
 }
 
 // ComputeChainIDHash computes the chain ID hash from a chain ID string.
