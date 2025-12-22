@@ -52,8 +52,9 @@ func TestComputeClaimMessage_FormatCorrectness(t *testing.T) {
 
 	result := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
 
-	// Verify by manually computing expected hash
+	// Verify by manually computing expected hash (including type prefix)
 	var expected []byte
+	expected = append(expected, []byte(TypePrefixECDSA)...) // "ecdsa:"
 	expected = append(expected, addressHash[:]...)
 	expected = append(expected, btcqAddressHash[:]...)
 	expected = append(expected, chainIDHash[:]...)

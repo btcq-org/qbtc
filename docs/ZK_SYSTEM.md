@@ -1,7 +1,7 @@
 # ZK Proof System Technical Specification
 
-**Version**: 1.0  
-**Last Updated**: November 2025 
+**Version**: 2.0  
+**Last Updated**: December 2025 
 **Status**: Ready for Security Audit
 
 ---
@@ -19,6 +19,7 @@
 9. [Security Analysis](#9-security-analysis)
 10. [Implementation Details](#10-implementation-details)
 11. [File Reference](#11-file-reference)
+12. [Supported Bitcoin Script Types](#12-supported-bitcoin-script-types)
 
 ---
 
@@ -29,11 +30,25 @@
 The qbtc ZK proof system enables users to claim Bitcoin UTXOs on the qbtc chain by proving ownership of a Bitcoin address **without revealing**:
 - The private key
 - The public key  
-- The ECDSA signature
+- The signature (ECDSA or Schnorr)
 
-This is achieved through a PLONK zero-knowledge proof that demonstrates knowledge of a valid ECDSA signature for a specific message, where the public key hashes to the claimed Bitcoin address.
+This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge of a valid signature for a specific message, where the public key corresponds to the claimed Bitcoin address.
 
-### 1.2 Design Goals
+### 1.2 Supported Bitcoin Address Types
+
+| Address Type | Prefix | Circuit | Status |
+|--------------|--------|---------|--------|
+| **P2PKH** | `1...` | ECDSA | ✅ Supported |
+| **P2WPKH** | `bc1q...` (short) | ECDSA | ✅ Supported |
+| **P2TR (Taproot)** | `bc1p...` | Schnorr | ✅ Supported |
+| **P2SH-P2WPKH** | `3...` | ECDSA | ✅ Supported |
+| **P2PK** | (raw script) | ECDSA | ✅ Supported |
+| **P2WSH (single-key)** | `bc1q...` (long) | ECDSA | ✅ Supported |
+| **P2WSH (multisig)** | `bc1q...` (long) | - | ❌ Not Supported |
+| **P2SH (arbitrary)** | `3...` | - | ❌ Not Supported |
+| **P2TR (script-path)** | `bc1p...` | - | ❌ Not Supported |
+
+### 1.3 Design Goals
 
 | Goal | Implementation |
 |------|----------------|
@@ -42,16 +57,17 @@ This is achieved through a PLONK zero-knowledge proof that demonstrates knowledg
 | **Front-running Protection** | Proof bound to destination address |
 | **Replay Protection** | Chain ID and version string in signed message |
 | **Double-spend Prevention** | UTXO marked as claimed after successful verification |
+| **Multi-Script Support** | Dedicated circuits for each major script type |
 
-### 1.3 Key Parameters
+### 1.4 Key Parameters
 
 | Parameter | Value |
 |-----------|-------|
 | Proof System | PLONK with KZG commitments |
 | Pairing Curve | BN254 (alt_bn128) |
-| Signature Curve | secp256k1 |
-| Hash Functions | SHA-256, RIPEMD-160 |
-| Trusted Setup | Hermez/Polygon Powers of Tau (2²⁰) |
+| Signature Curves | secp256k1 (ECDSA), secp256k1 (Schnorr/BIP-340) |
+| Hash Functions | SHA-256, RIPEMD-160, BIP-340 Tagged Hash |
+| Trusted Setup | Hermez/Polygon Powers of Tau (2²¹) |
 | Proof Size | ~1 KB |
 | Verification Time | ~2-5 ms |
 
@@ -163,11 +179,23 @@ Signature is valid iff `R'.x mod n = r`
 
 ## 4. Circuit Design
 
-### 4.1 Circuit Structure
+The ZK system implements multiple specialized circuits for different Bitcoin script types. Each circuit is optimized for its specific verification requirements.
+
+### 4.1 Circuit Overview
+
+| Circuit | File | Script Types | Signature |
+|---------|------|--------------|-----------|
+| `BTCSignatureCircuit` | `circuit_signature.go` | P2PKH, P2WPKH | ECDSA |
+| `BTCSchnorrCircuit` | `circuit_schnorr.go` | P2TR (key-path) | Schnorr/BIP-340 |
+| `BTCP2SHP2WPKHCircuit` | `circuit_p2sh_p2wpkh.go` | P2SH-P2WPKH | ECDSA |
+| `BTCP2PKCircuit` | `circuit_p2pk.go` | P2PK (legacy) | ECDSA |
+| `BTCP2WSHSingleKeyCircuit` | `circuit_p2wsh_single_key.go` | P2WSH (single-key) | ECDSA |
+
+### 4.2 ECDSA Circuit (P2PKH/P2WPKH)
 
 **File**: `x/qbtc/zk/circuit_signature.go`
 
-The `BTCSignatureCircuit` contains:
+The `BTCSignatureCircuit` handles standard Bitcoin addresses:
 
 **Private Inputs** (hidden in proof):
 | Field | Type | Description |
@@ -185,21 +213,119 @@ The `BTCSignatureCircuit` contains:
 | `BTCQAddressHash` | 32 bytes | SHA256 of destination qbtc address |
 | `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
 
-### 4.2 Circuit Constraints
+**Constraints**:
+1. ECDSA signature verification (gnark standard gadget)
+2. Public key compression to SEC1 format
+3. Hash160(compressed_pubkey) == AddressHash
 
-The `Define()` method enforces three constraint groups:
+### 4.3 Schnorr Circuit (P2TR/Taproot)
 
-#### Constraint Group 1: ECDSA Signature Verification
+**File**: `x/qbtc/zk/circuit_schnorr.go`
 
-The circuit constructs the public key and signature from private inputs, converts the message hash to a scalar, and calls gnark's ECDSA verification gadget.
+The `BTCSchnorrCircuit` handles Taproot key-path spending with BIP-340 Schnorr signatures:
 
-**What this proves**: The prover knows a valid ECDSA signature `(r, s)` for `MessageHash` under the public key `(PublicKeyX, PublicKeyY)`.
+**Private Inputs**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `SignatureR` | Secp256k1Fr | Nonce point R x-coordinate |
+| `SignatureS` | Secp256k1Fr | s scalar |
+| `PublicKeyX` | Secp256k1Fp | Public key X coordinate |
+| `PublicKeyY` | Secp256k1Fp | Public key Y (must have even parity) |
+
+**Public Inputs**:
+| Field | Size | Description |
+|-------|------|-------------|
+| `MessageHash` | 32 bytes | SHA256 of the claim message |
+| `XOnlyPubKey` | 32 bytes | x-only public key (= Taproot address) |
+| `BTCQAddressHash` | 32 bytes | SHA256 of destination qbtc address |
+| `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
+
+**Constraints**:
+1. PublicKeyX matches XOnlyPubKey
+2. Compute BIP-340 challenge: e = tagged_hash("BIP0340/challenge", R.x || P.x || m)
+3. Verify Schnorr equation: s·G = R + e·P
+4. PublicKeyY has even parity (BIP-340 requirement)
+
+### 4.4 P2SH-P2WPKH Circuit
+
+**File**: `x/qbtc/zk/circuit_p2sh_p2wpkh.go`
+
+The `BTCP2SHP2WPKHCircuit` handles P2SH-wrapped SegWit addresses (addresses starting with "3"):
+
+**Public Inputs**:
+| Field | Size | Description |
+|-------|------|-------------|
+| `MessageHash` | 32 bytes | SHA256 of the claim message |
+| `ScriptHash` | 20 bytes | Hash160 of the redeem script |
+| `BTCQAddressHash` | 32 bytes | SHA256 of destination qbtc address |
+| `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
+
+**Constraints**:
+1. ECDSA signature verification
+2. Compute pubkeyHash = Hash160(compressed_pubkey)
+3. Build redeemScript = OP_0 || 0x14 || pubkeyHash
+4. Hash160(redeemScript) == ScriptHash
+
+### 4.5 P2PK Circuit (Legacy)
+
+**File**: `x/qbtc/zk/circuit_p2pk.go`
+
+The `BTCP2PKCircuit` handles legacy P2PK outputs where the raw public key is in the script:
+
+**Public Inputs**:
+| Field | Size | Description |
+|-------|------|-------------|
+| `MessageHash` | 32 bytes | SHA256 of the claim message |
+| `CompressedPubKey` | 33 bytes | Raw compressed public key from script |
+| `BTCQAddressHash` | 32 bytes | SHA256 of destination qbtc address |
+| `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
+
+**Constraints**:
+1. ECDSA signature verification
+2. Compress public key (from private circuit input)
+3. compressed_pubkey == CompressedPubKey
+
+### 4.6 P2WSH Single-Key Circuit
+
+**File**: `x/qbtc/zk/circuit_p2wsh_single_key.go`
+
+The `BTCP2WSHSingleKeyCircuit` handles P2WSH addresses with single-key witness scripts:
+
+**Public Inputs**:
+| Field | Size | Description |
+|-------|------|-------------|
+| `MessageHash` | 32 bytes | SHA256 of the claim message |
+| `WitnessProgram` | 32 bytes | SHA256 of the witness script |
+| `BTCQAddressHash` | 32 bytes | SHA256 of destination qbtc address |
+| `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
+
+**Constraints**:
+1. ECDSA signature verification
+2. Compress public key
+3. Build witnessScript = 0x21 || compressed_pubkey || OP_CHECKSIG
+4. SHA256(witnessScript) == WitnessProgram
+
+### 4.7 Circuit Constraints Detail
+
+Each circuit's `Define()` method enforces constraint groups:
+
+#### Constraint Group 1: Signature Verification
+
+For ECDSA circuits, gnark's standard `ecdsa.Verify` gadget is used.
+For Schnorr, a custom implementation verifies: s·G = R + e·P
+
+**What this proves**: The prover knows a valid signature for `MessageHash` under the claimed public key.
 
 #### Constraint Group 2: Public Key to Address Binding
 
-The circuit compresses the public key to 33 bytes (SEC1 format), computes Hash160 = RIPEMD160(SHA256(compressed_pubkey)), and asserts each byte equals the corresponding byte in `AddressHash`.
+Each circuit type has specific binding logic:
+- **P2PKH/P2WPKH**: Hash160(compressed_pubkey) == AddressHash
+- **P2TR**: PublicKeyX == XOnlyPubKey (with even Y parity)
+- **P2SH-P2WPKH**: Hash160(redeemScript) == ScriptHash
+- **P2PK**: compressed_pubkey == CompressedPubKey
+- **P2WSH**: SHA256(witnessScript) == WitnessProgram
 
-**What this proves**: The public key, when compressed and hashed, equals the claimed `AddressHash`.
+**What this proves**: The public key corresponds to the claimed Bitcoin address/script.
 
 #### Constraint Group 3: Message Binding (Verified by Verifier)
 
@@ -511,11 +637,17 @@ Approximate constraint breakdown:
 
 | File | Purpose |
 |------|---------|
-| `x/qbtc/zk/circuit_signature.go` | Circuit definition and constraints |
+| `x/qbtc/zk/circuit_signature.go` | ECDSA circuit (P2PKH/P2WPKH) |
+| `x/qbtc/zk/circuit_schnorr.go` | Schnorr circuit (P2TR/Taproot) |
+| `x/qbtc/zk/circuit_p2sh_p2wpkh.go` | P2SH-P2WPKH circuit |
+| `x/qbtc/zk/circuit_p2pk.go` | P2PK circuit (legacy) |
+| `x/qbtc/zk/circuit_p2wsh_single_key.go` | P2WSH single-key circuit |
 | `x/qbtc/zk/hash.go` | SHA-256 and RIPEMD-160 in-circuit |
+| `x/qbtc/zk/tagged_hash.go` | BIP-340 tagged hash implementation |
 | `x/qbtc/zk/message.go` | Claim message construction |
-| `x/qbtc/zk/setup.go` | PLONK setup and prover |
+| `x/qbtc/zk/setup.go` | PLONK setup and provers |
 | `x/qbtc/zk/verifier.go` | Global verifier and verification |
+| `x/qbtc/zk/multi_verifier.go` | Multi-circuit routing verifier |
 | `x/qbtc/zk/btc.go` | Bitcoin address utilities |
 
 ### 11.2 Integration
@@ -531,8 +663,10 @@ Approximate constraint breakdown:
 
 | File | Coverage |
 |------|----------|
-| `x/qbtc/zk/circuit_signature_test.go` | Circuit end-to-end tests |
+| `x/qbtc/zk/circuit_signature_test.go` | ECDSA circuit end-to-end tests |
 | `x/qbtc/zk/integration_test.go` | Full claim flow simulation |
+| `x/qbtc/zk/multi_script_test.go` | Multi-script type coverage tests |
+| `x/qbtc/zk/security_audit_test.go` | Security property verification |
 | `x/qbtc/keeper/handle_msg_claim_with_proof_test.go` | Handler integration tests |
 
 ### 11.4 Protocol Buffers
@@ -562,4 +696,128 @@ Approximate constraint breakdown:
 For testing, use the provided emulator:
 ```bash
 tss-emulator --port :8080 --private-key <32-byte-hex>
+```
+
+---
+
+## 12. Supported Bitcoin Script Types
+
+### 12.1 Full Support
+
+#### P2PKH (Pay-to-Public-Key-Hash)
+- **Address format**: `1...` (Base58Check, mainnet)
+- **Script**: `OP_DUP OP_HASH160 <pubkeyHash> OP_EQUALVERIFY OP_CHECKSIG`
+- **Circuit**: `BTCSignatureCircuit`
+- **Binding**: Hash160(compressed_pubkey) == AddressHash
+
+#### P2WPKH (Pay-to-Witness-Public-Key-Hash)
+- **Address format**: `bc1q...` (Bech32, 42 characters)
+- **Script**: `OP_0 <20-byte-pubkeyHash>`
+- **Circuit**: `BTCSignatureCircuit`
+- **Binding**: Hash160(compressed_pubkey) == AddressHash
+
+#### P2TR (Pay-to-Taproot) - Key Path Only
+- **Address format**: `bc1p...` (Bech32m, 62 characters)
+- **Script**: `OP_1 <32-byte-x-only-pubkey>`
+- **Circuit**: `BTCSchnorrCircuit`
+- **Signature**: BIP-340 Schnorr
+- **Binding**: PublicKeyX == XOnlyPubKey (even Y parity)
+
+#### P2SH-P2WPKH (Wrapped SegWit)
+- **Address format**: `3...` (Base58Check)
+- **Script**: `OP_HASH160 <scriptHash> OP_EQUAL`
+- **RedeemScript**: `OP_0 <20-byte-pubkeyHash>`
+- **Circuit**: `BTCP2SHP2WPKHCircuit`
+- **Binding**: Hash160(redeemScript) == ScriptHash
+
+#### P2PK (Pay-to-Public-Key)
+- **Address format**: None (raw script)
+- **Script**: `<pubkey> OP_CHECKSIG`
+- **Circuit**: `BTCP2PKCircuit`
+- **Binding**: compressed_pubkey == CompressedPubKey
+
+#### P2WSH (Pay-to-Witness-Script-Hash) - Single Key
+- **Address format**: `bc1q...` (Bech32, 62 characters)
+- **Script**: `OP_0 <32-byte-witnessProgram>`
+- **WitnessScript**: `<pubkey> OP_CHECKSIG`
+- **Circuit**: `BTCP2WSHSingleKeyCircuit`
+- **Binding**: SHA256(witnessScript) == WitnessProgram
+
+### 12.2 Not Supported
+
+#### P2WSH Multisig
+- **Reason**: Requires embedding Bitcoin script interpreter in ZK circuit
+- **Complexity**: Variable number of signatures and threshold logic
+- **Alternative**: Individual key holders can claim their share separately
+
+#### P2TR Script Path
+- **Reason**: Requires MAST (Merkleized Abstract Syntax Trees) verification
+- **Complexity**: Arbitrary script execution in ZK circuit
+- **Alternative**: Use key-path spending if possible
+
+#### Generic P2SH
+- **Reason**: Arbitrary redeem scripts impossible to verify generically
+- **Supported subset**: Only P2SH-P2WPKH (most common use case)
+
+### 12.3 Address Type Detection
+
+The system automatically detects address types:
+
+```go
+func DetectAddressType(address string) AddressType {
+    // P2PKH: starts with "1"
+    // P2SH:  starts with "3"
+    // P2WPKH: starts with "bc1q", 42 chars
+    // P2WSH: starts with "bc1q", 62 chars
+    // P2TR: starts with "bc1p"
+}
+```
+
+### 12.4 Multi-Verifier Routing
+
+The `MultiVerifier` automatically routes proofs to the correct circuit verifier:
+
+```go
+type CircuitType int
+const (
+    CircuitTypeECDSA        CircuitType = iota  // P2PKH, P2WPKH
+    CircuitTypeSchnorr                           // P2TR
+    CircuitTypeP2SHP2WPKH                        // P2SH-P2WPKH
+    CircuitTypeP2PK                              // P2PK
+    CircuitTypeP2WSHSingleKey                    // P2WSH single-key
+)
+```
+
+---
+
+## 13. Security Audit Results
+
+### 13.1 Properties Verified
+
+| Property | Status | Test |
+|----------|--------|------|
+| **Soundness** | ✅ Verified | Invalid proofs rejected |
+| **Zero-Knowledge** | ✅ Verified | Signatures/keys remain private |
+| **Address Binding** | ✅ Verified | Proof bound to Bitcoin address |
+| **Destination Binding** | ✅ Verified | Front-running protection |
+| **Chain Binding** | ✅ Verified | Cross-chain replay protection |
+| **Verifier Immutability** | ✅ Verified | VK replacement attacks blocked |
+
+### 13.2 Attack Scenarios Tested
+
+| Attack | Result |
+|--------|--------|
+| Claim someone else's address | ❌ BLOCKED - constraint fails |
+| Invalid signature | ❌ BLOCKED - verification fails |
+| Front-running proof interception | ❌ BLOCKED - proof bound to destination |
+| Cross-chain replay | ❌ BLOCKED - chain ID mismatch |
+| VK replacement | ❌ BLOCKED - verifier immutable |
+
+### 13.3 Test Coverage
+
+```
+x/qbtc/zk/security_audit_test.go     - Security property tests
+x/qbtc/zk/multi_script_test.go       - Script type coverage tests
+x/qbtc/zk/circuit_signature_test.go  - ECDSA circuit tests
+x/qbtc/zk/integration_test.go        - Full flow tests
 ```
