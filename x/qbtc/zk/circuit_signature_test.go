@@ -427,4 +427,3 @@ func TestMessageVersioning(t *testing.T) {
 
 	require.Equal(t, expected, msg, "message should match expected format")
 }
-

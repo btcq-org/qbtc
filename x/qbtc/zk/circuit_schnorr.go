@@ -22,8 +22,10 @@ import (
 // This circuit supports P2TR (Pay-to-Taproot) key-path spending.
 type BTCSchnorrCircuit struct {
 	// Private inputs (hidden in the proof)
-	// SignatureR is the x-coordinate of the nonce point R (32 bytes as scalar)
-	SignatureR emulated.Element[Secp256k1Fr] `gnark:",secret"`
+	// SignatureR is the x-coordinate of the nonce point R (32 bytes)
+	// Per BIP-340, this is an x-coordinate (base field element), not a scalar.
+	// Using Secp256k1Fp ensures values in the full range [0, p) are valid.
+	SignatureR emulated.Element[Secp256k1Fp] `gnark:",secret"`
 	// SignatureS is the s scalar of the Schnorr signature
 	SignatureS emulated.Element[Secp256k1Fr] `gnark:",secret"`
 	// PublicKeyX is the x-coordinate of the public key (x-only, 32 bytes)
@@ -79,8 +81,8 @@ func (c *BTCSchnorrCircuit) Define(api frontend.API) error {
 	// Step 2: Compute the BIP-340 challenge
 	// ========================================
 	// e = tagged_hash("BIP0340/challenge", R.x || P.x || m)
-	// We use the signature R value (which is an x-coordinate) directly
-	rXBytes := c.scalarToBytes32(api, scalarField, &c.SignatureR)
+	// SignatureR is the x-coordinate of R (base field element)
+	rXBytes := c.elementToBytes32(api, baseField, &c.SignatureR)
 	challenge := computeBIP340ChallengeCircuit(api, rXBytes, pubKeyXBytes, c.MessageHash)
 
 	// Convert challenge bytes to scalar
@@ -114,22 +116,9 @@ func (c *BTCSchnorrCircuit) Define(api frontend.API) error {
 	rPrime := curve.Add(sG, ePNeg)
 
 	// Verify R'.x == SignatureR
-	// Convert R'.x to bits for comparison
-	rPrimeXBits := baseField.ToBits(&rPrime.X)
-
-	// Convert SignatureR to bits for comparison
-	sigRBits := scalarField.ToBits(&c.SignatureR)
-
-	// Compare all 256 bits. Note on field sizes:
-	// - secp256k1 base field p ≈ 2^256 - 2^32 - 977
-	// - secp256k1 scalar field n ≈ 2^256 - 432420386565659656852420866394968145599
-	// For valid BIP-340 signatures, the probability of R.x being in [n, p) is ~2^-227,
-	// which is negligible. The bit comparison is safe for all practical signatures.
-	for i := 0; i < 256; i++ {
-		if i < len(rPrimeXBits) && i < len(sigRBits) {
-			api.AssertIsEqual(rPrimeXBits[i], sigRBits[i])
-		}
-	}
+	// Both are base field elements (Secp256k1Fp), so we compare directly
+	// This is cryptographically correct per BIP-340: R.x can be any valid x-coordinate
+	baseField.AssertIsEqual(&rPrime.X, &c.SignatureR)
 
 	// BIP-340 also requires R to have even y-coordinate
 	rPrimeYBits := baseField.ToBits(&rPrime.Y)
@@ -190,33 +179,6 @@ func (c *BTCSchnorrCircuit) elementToBytes32(
 	api frontend.API,
 	field *emulated.Field[Secp256k1Fp],
 	elem *emulated.Element[Secp256k1Fp],
-) [32]frontend.Variable {
-	var result [32]frontend.Variable
-
-	// Get bits from the element (little-endian)
-	bits := field.ToBits(elem)
-
-	// Pack into bytes (big-endian byte order)
-	for byteIdx := 0; byteIdx < 32; byteIdx++ {
-		var byteVal frontend.Variable = 0
-		for bitIdx := 0; bitIdx < 8; bitIdx++ {
-			srcBitIdx := (31-byteIdx)*8 + bitIdx
-			if srcBitIdx < len(bits) {
-				bit := bits[srcBitIdx]
-				byteVal = api.Add(byteVal, api.Mul(bit, 1<<bitIdx))
-			}
-		}
-		result[byteIdx] = byteVal
-	}
-
-	return result
-}
-
-// scalarToBytes32 converts a scalar field element to 32 bytes (big-endian)
-func (c *BTCSchnorrCircuit) scalarToBytes32(
-	api frontend.API,
-	field *emulated.Field[Secp256k1Fr],
-	elem *emulated.Element[Secp256k1Fr],
 ) [32]frontend.Variable {
 	var result [32]frontend.Variable
 
