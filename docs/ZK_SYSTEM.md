@@ -282,7 +282,7 @@ The `BTCP2PKCircuit` handles legacy P2PK outputs where the raw public key is in 
 
 **Constraints**:
 1. ECDSA signature verification
-2. Compress private public key
+2. Compress public key (from private circuit input)
 3. compressed_pubkey == CompressedPubKey
 
 ### 4.6 P2WSH Single-Key Circuit

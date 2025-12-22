@@ -901,6 +901,7 @@ func (p *Proof) ToProtoZKProof() []byte {
 }
 
 // ProofFromProtoZKProof deserializes a proof from protobuf format
+// Returns defensive copies to prevent memory aliasing issues
 func ProofFromProtoZKProof(data []byte) (*Proof, error) {
 	if len(data) < 4 {
 		return nil, fmt.Errorf("proof data too short")
@@ -912,9 +913,17 @@ func ProofFromProtoZKProof(data []byte) (*Proof, error) {
 	if len(data) < 4+proofLen {
 		return nil, fmt.Errorf("proof data truncated")
 	}
+
+	// Defensive copy to prevent memory aliasing
+	proofData := make([]byte, proofLen)
+	copy(proofData, data[4:4+proofLen])
+
+	publicInputs := make([]byte, len(data)-(4+proofLen))
+	copy(publicInputs, data[4+proofLen:])
+
 	return &Proof{
-		ProofData:    data[4 : 4+proofLen],
-		PublicInputs: data[4+proofLen:],
+		ProofData:    proofData,
+		PublicInputs: publicInputs,
 	}, nil
 }
 

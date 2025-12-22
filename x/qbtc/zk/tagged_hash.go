@@ -120,9 +120,9 @@ func ComputeBIP340Challenge(rX, pX, message [32]byte) [32]byte {
 
 // ComputeTapTweakHash computes the taproot tweak hash.
 // tweak = tagged_hash("TapTweak", P.x || merkle_root)
-// If merkle_root is nil (key-path only), uses just P.x
+// If merkle_root is empty (key-path only), uses just P.x
 func ComputeTapTweakHash(internalKeyX [32]byte, merkleRoot []byte) [32]byte {
-	if merkleRoot == nil || len(merkleRoot) == 0 {
+	if len(merkleRoot) == 0 {
 		return TaggedHash(TagTapTweak, internalKeyX[:])
 	}
 	return TaggedHash(TagTapTweak, internalKeyX[:], merkleRoot)

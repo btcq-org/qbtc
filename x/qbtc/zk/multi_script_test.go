@@ -183,11 +183,11 @@ func TestClaimMessageFormats(t *testing.T) {
 		msg := ComputeClaimMessageForP2SH(scriptHash, btcqAddressHash, chainIDHash)
 		require.Len(t, msg, 32)
 
-		// Same size as ECDSA but should be different due to different script hash
+		// Same size as ECDSA but different due to type prefix (prevents cross-type replay)
 		addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 		ecdsaMsg := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
-		// These happen to be the same since we use the same 20-byte input
-		require.Equal(t, msg, ecdsaMsg)
+		// These are now different due to type prefix ("ecdsa:" vs "p2sh:")
+		require.NotEqual(t, msg, ecdsaMsg, "P2SH and ECDSA messages should differ due to type prefix")
 	})
 
 	t.Run("P2PK claim message", func(t *testing.T) {

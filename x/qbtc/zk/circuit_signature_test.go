@@ -412,11 +412,13 @@ func TestMessageVersioning(t *testing.T) {
 	// The current version
 	require.Equal(t, "qbtc-claim-v1", ClaimMessageVersion)
 
-	// Message should include the version
+	// Message should include the version and type prefix
 	msg := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
 
-	// Manually compute expected hash
-	data := make([]byte, 0, 20+32+8+len(ClaimMessageVersion))
+	// Manually compute expected hash (including type prefix)
+	prefix := []byte(TypePrefixECDSA)
+	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
+	data = append(data, prefix...)
 	data = append(data, addressHash[:]...)
 	data = append(data, btcqAddressHash[:]...)
 	data = append(data, chainIDHash[:]...)

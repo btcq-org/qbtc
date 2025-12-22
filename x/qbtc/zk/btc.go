@@ -8,6 +8,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
 )
 
 // AddressType represents the type of Bitcoin address/script
@@ -244,18 +245,22 @@ func VerifyP2SHP2WPKH(p2shAddress string, pubkeyHash160 [20]byte) error {
 	return nil
 }
 
-// PublicKeyToTaprootAddress computes the Taproot address from a public key
-// This uses key-path only (no script tree) - the internal key IS the output key
-// Note: For proper Taproot with scripts, the output key = internal_key + H(internal_key)*G
+// PublicKeyToTaprootAddress computes the Taproot address from a public key.
+// Per BIP-341, even for key-path-only spending (no script tree), the output key
+// must be tweaked: Q = P + int(hashTapTweak(bytes(P)))G
+// This ensures the address commits to an unspendable script path.
 func PublicKeyToTaprootAddress(pubKey *btcec.PublicKey) (string, [32]byte, error) {
 	var xOnly [32]byte
 
-	// Get x-only public key (32 bytes)
-	// For key-path only spending without scripts, we just use the x-coordinate
-	serialized := pubKey.SerializeCompressed()
+	// Apply BIP-341 taproot tweak for key-path only (no script tree)
+	// This computes: output_key = internal_key + H(internal_key)*G
+	outputKey := txscript.ComputeTaprootKeyNoScript(pubKey)
+
+	// Get x-only output key (32 bytes)
+	serialized := outputKey.SerializeCompressed()
 	copy(xOnly[:], serialized[1:33])
 
-	// Create Taproot address
+	// Create Taproot address from the tweaked output key
 	addr, err := btcutil.NewAddressTaproot(xOnly[:], &chaincfg.MainNetParams)
 	if err != nil {
 		return "", xOnly, fmt.Errorf("failed to create Taproot address: %w", err)

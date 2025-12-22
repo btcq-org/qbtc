@@ -57,6 +57,8 @@ func CircuitTypeForAddressType(addrType AddressType) (CircuitType, error) {
 		return CircuitTypeP2SHP2WPKH, nil
 	case AddressTypeP2PK:
 		return CircuitTypeP2PK, nil
+	case AddressTypeP2WSH:
+		return CircuitTypeP2WSHSingleKey, nil
 	default:
 		return CircuitTypeECDSA, fmt.Errorf("unsupported address type: %s", addrType)
 	}
@@ -107,7 +109,7 @@ func (mv *MultiVerifier) VerifyECDSAProof(proof *Proof, params VerificationParam
 	mv.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("ECDSA circuit not registered")
+		return fmt.Errorf("ecdsa circuit not registered")
 	}
 	return verifier.VerifyProof(proof, params)
 }
@@ -119,7 +121,7 @@ func (mv *MultiVerifier) VerifySchnorrProof(proof *Proof, params SchnorrVerifica
 	mv.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("Schnorr circuit not registered")
+		return fmt.Errorf("schnorr circuit not registered")
 	}
 
 	if proof == nil || proof.ProofData == nil {
@@ -165,7 +167,7 @@ func (mv *MultiVerifier) VerifyP2SHP2WPKHProof(proof *Proof, params P2SHP2WPKHVe
 	mv.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("P2SH-P2WPKH circuit not registered")
+		return fmt.Errorf("p2sh-p2wpkh circuit not registered")
 	}
 
 	if proof == nil || proof.ProofData == nil {
@@ -213,7 +215,7 @@ func (mv *MultiVerifier) VerifyP2PKProof(proof *Proof, params P2PKVerificationPa
 	mv.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("P2PK circuit not registered")
+		return fmt.Errorf("p2pk circuit not registered")
 	}
 
 	if proof == nil || proof.ProofData == nil {
@@ -261,7 +263,7 @@ func (mv *MultiVerifier) VerifyP2WSHSingleKeyProof(proof *Proof, params P2WSHSin
 	mv.mu.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("P2WSH-SingleKey circuit not registered")
+		return fmt.Errorf("p2wsh-singlekey circuit not registered")
 	}
 
 	if proof == nil || proof.ProofData == nil {

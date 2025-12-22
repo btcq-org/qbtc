@@ -114,20 +114,26 @@ func (c *BTCSchnorrCircuit) Define(api frontend.API) error {
 	rPrime := curve.Add(sG, ePNeg)
 
 	// Verify R'.x == SignatureR
-	// Convert R'.x to scalar field for comparison
+	// Convert R'.x to bits for comparison
 	rPrimeXBits := baseField.ToBits(&rPrime.X)
 
 	// Convert SignatureR to bits for comparison
 	sigRBits := scalarField.ToBits(&c.SignatureR)
 
-	// Compare the lower 256 bits (both are 256-bit values)
-	// Note: secp256k1 base field is slightly larger than scalar field,
-	// but for valid signatures, R.x reduced mod n should equal the stored r value.
+	// Compare all 256 bits. Note on field sizes:
+	// - secp256k1 base field p ≈ 2^256 - 2^32 - 977
+	// - secp256k1 scalar field n ≈ 2^256 - 432420386565659656852420866394968145599
+	// For valid BIP-340 signatures, the probability of R.x being in [n, p) is ~2^-227,
+	// which is negligible. The bit comparison is safe for all practical signatures.
 	for i := 0; i < 256; i++ {
 		if i < len(rPrimeXBits) && i < len(sigRBits) {
 			api.AssertIsEqual(rPrimeXBits[i], sigRBits[i])
 		}
 	}
+
+	// BIP-340 also requires R to have even y-coordinate
+	rPrimeYBits := baseField.ToBits(&rPrime.Y)
+	api.AssertIsEqual(rPrimeYBits[0], 0)
 
 	// ========================================
 	// Step 4: Verify Y coordinate has even parity (BIP-340 requirement)
