@@ -218,10 +218,16 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	params := zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		QBTCAddressHash: btcqAddressHash,
+		BTCQAddressHash: btcqAddressHash,
 		ChainID:         chainIDHash,
 	}
 
+	// Deserialize the proof
+	proof, err := zk.ProofFromProtoZKProof(proofBytes)
+	if err != nil {
+		return fmt.Errorf("failed to deserialize proof: %w", err)
+	}
+
 	// Verify the proof using the global verifier
-	return zk.VerifyProofGlobal(proofBytes, params)
+	return zk.VerifyProofGlobal(proof, params)
 }

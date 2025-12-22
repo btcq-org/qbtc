@@ -293,14 +293,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Proof generation failed: %v", err)
 	}
-	fmt.Printf("  ✓ Proof generated (%d bytes)\n", len(proof))
+	fmt.Printf("  ✓ Proof generated (%d bytes)\n", len(proof.ProofData))
 
 	// Step 6: Verify proof
 	fmt.Println("\nStep 6: Verifying ZK proof...")
 	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		QBTCAddressHash: btcqAddressHash,
+		BTCQAddressHash: btcqAddressHash,
 		ChainID:         chainIDHash,
 	})
 	if err != nil {
