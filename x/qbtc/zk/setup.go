@@ -489,7 +489,7 @@ type ProofParams struct {
 	// Public inputs
 	MessageHash     [32]byte // The signed message hash
 	AddressHash     [20]byte // Hash160 of the public key
-	BTCQAddressHash [32]byte // H(claimer_address)
+	QBTCAddressHash [32]byte // H(claimer_address)
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)
 }
 
@@ -521,9 +521,9 @@ func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 		assignment.AddressHash[i] = params.AddressHash[i]
 	}
 
-	// Set the BTCQ address hash (public input)
+	// Set the QBTC address hash (public input)
 	for i := 0; i < 32; i++ {
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 
 	// Set the chain ID (public input)
@@ -595,9 +595,9 @@ func bigIntToLimbs(n *big.Int) []frontend.Variable {
 	return limbs
 }
 
-// HashBTCQAddress hashes a BTCQ address string to get the binding commitment
-func HashBTCQAddress(btcqAddress string) [32]byte {
-	return sha256.Sum256([]byte(btcqAddress))
+// HashQBTCAddress hashes a QBTC address string to get the binding commitment
+func HashQBTCAddress(qbtcAddress string) [32]byte {
+	return sha256.Sum256([]byte(qbtcAddress))
 }
 
 // SchnorrProver handles proof generation for Taproot claims using Schnorr signatures.
@@ -628,7 +628,7 @@ func (p *SchnorrProver) GenerateProof(params SchnorrProofParams) (*Proof, error)
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
 		assignment.XOnlyPubKey[i] = params.XOnlyPubKey[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]
@@ -694,7 +694,7 @@ func (p *P2SHP2WPKHProver) GenerateProof(params P2SHP2WPKHProofParams) (*Proof, 
 
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 20; i++ {
 		assignment.ScriptHash[i] = params.ScriptHash[i]
@@ -763,7 +763,7 @@ func (p *P2PKProver) GenerateProof(params P2PKProofParams) (*Proof, error) {
 
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 33; i++ {
 		assignment.CompressedPubKey[i] = params.CompressedPubKey[i]
@@ -833,7 +833,7 @@ func (p *P2WSHSingleKeyProver) GenerateProof(params P2WSHSingleKeyProofParams) (
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
 		assignment.WitnessProgram[i] = params.WitnessProgram[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]
@@ -876,7 +876,7 @@ func (p *P2WSHSingleKeyProver) GenerateProof(params P2WSHSingleKeyProofParams) (
 type VerificationParams struct {
 	MessageHash     [32]byte // The message that was signed
 	AddressHash     [20]byte // Hash160 of BTC pubkey
-	BTCQAddressHash [32]byte // H(claimer_address) - note: named BTCQ to match test conventions
+	QBTCAddressHash [32]byte // H(claimer_address)
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)
 }
 

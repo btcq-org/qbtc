@@ -163,7 +163,7 @@ Use --test flag only for development/testing with an unsafe test SRS.`,
 func proveCmd() *cobra.Command {
 	var (
 		tssURL         string
-		btcqAddress    string
+		qbtcAddress    string
 		chainID        string
 		addressHashHex string
 		setupDir       string
@@ -186,8 +186,8 @@ The proof proves ownership without revealing the signature or public key.`,
 			if tssURL == "" {
 				return fmt.Errorf("--tss-url is required")
 			}
-			if btcqAddress == "" {
-				return fmt.Errorf("--btcq-address is required")
+			if qbtcAddress == "" {
+				return fmt.Errorf("--qbtc-address is required")
 			}
 			if chainID == "" {
 				return fmt.Errorf("--chain-id is required")
@@ -203,13 +203,13 @@ The proof proves ownership without revealing the signature or public key.`,
 			}
 
 			// Compute btcq address hash for binding
-			btcqAddressHash := zk.HashBTCQAddress(btcqAddress)
+			qbtcAddressHash := zk.HashQBTCAddress(qbtcAddress)
 
 			// Compute chain ID hash
 			chainIDHash := zk.ComputeChainIDHash(chainID)
 
 			// Compute the claim message that TSS needs to sign
-			messageHash := zk.ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+			messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 			fmt.Printf("Message to sign: %s\n", hex.EncodeToString(messageHash[:]))
 
 			// Request signature from TSS
@@ -289,7 +289,7 @@ The proof proves ownership without revealing the signature or public key.`,
 				PublicKeyY:      pubKeyY,
 				MessageHash:     messageHash,
 				AddressHash:     addressHash,
-				BTCQAddressHash: btcqAddressHash,
+				QBTCAddressHash: qbtcAddressHash,
 				ChainID:         chainIDHash,
 			})
 			if err != nil {
@@ -298,11 +298,11 @@ The proof proves ownership without revealing the signature or public key.`,
 
 			// Create the output
 			output := ProofOutput{
-				BTCAddressHash: hex.EncodeToString(addressHash[:]),
-				BTCQAddress:    btcqAddress,
-				ChainID:        chainID,
-				MessageHash:    hex.EncodeToString(messageHash[:]),
-				ProofData:      hex.EncodeToString(proof.ToProtoZKProof()),
+				QBTCAddressHash: hex.EncodeToString(addressHash[:]),
+				QBTCAddress:     qbtcAddress,
+				ChainID:         chainID,
+				MessageHash:     hex.EncodeToString(messageHash[:]),
+				ProofData:       hex.EncodeToString(proof.ToProtoZKProof()),
 			}
 
 			// Serialize to JSON
@@ -329,7 +329,7 @@ The proof proves ownership without revealing the signature or public key.`,
 	}
 
 	cmd.Flags().StringVar(&tssURL, "tss-url", "", "URL of the TSS signer API (required, e.g., http://localhost:8080)")
-	cmd.Flags().StringVar(&btcqAddress, "btcq-address", "", "Your qbtc chain address (required)")
+	cmd.Flags().StringVar(&qbtcAddress, "qbtc-address", "", "Your qbtc chain address (required)")
 	cmd.Flags().StringVar(&chainID, "chain-id", "", "Chain ID for the proof (required, e.g., 'qbtc-1')")
 	cmd.Flags().StringVar(&addressHashHex, "address-hash", "", "Hash160 of your Bitcoin address in hex (required)")
 	cmd.Flags().StringVar(&setupDir, "setup-dir", "./zk-setup", "Directory containing setup files")
@@ -367,11 +367,11 @@ func addressCmd() *cobra.Command {
 
 // ProofOutput is the JSON output structure for a generated proof
 type ProofOutput struct {
-	BTCAddressHash string `json:"btc_address_hash"`
-	BTCQAddress    string `json:"btcq_address"`
-	ChainID        string `json:"chain_id"`
-	MessageHash    string `json:"message_hash"`
-	ProofData      string `json:"proof_data"`
+	QBTCAddressHash string `json:"qbtc_address_hash"`
+	QBTCAddress     string `json:"qbtc_address"`
+	ChainID         string `json:"chain_id"`
+	MessageHash     string `json:"message_hash"`
+	ProofData       string `json:"proof_data"`
 }
 
 // TSSSignRequest is the request body for the TSS /sign endpoint

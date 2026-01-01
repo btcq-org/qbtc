@@ -32,12 +32,12 @@ type BTCSignatureCircuit struct {
 
 	// Public inputs (visible to verifier)
 	// MessageHash is the hash of the message that was signed (32 bytes)
-	// This should be SHA256(AddressHash || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+	// This should be SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
 	MessageHash [32]frontend.Variable `gnark:",public"`
 	// AddressHash is the Hash160 (RIPEMD160(SHA256(pubkey))) of the Bitcoin public key
 	AddressHash [20]frontend.Variable `gnark:",public"`
-	// BTCQAddressHash is the SHA256 hash of the destination address on qbtc
-	BTCQAddressHash [32]frontend.Variable `gnark:",public"`
+	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
+	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
 	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
 	ChainID [8]frontend.Variable `gnark:",public"`
 }
@@ -105,7 +105,7 @@ func (c *BTCSignatureCircuit) Define(api frontend.API) error {
 	// Step 3: Verify message binding
 	// ========================================
 	// The message hash is a public input that the verifier will check
-	// matches SHA256(AddressHash || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+	// matches SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
 	// This is done outside the circuit by the verifier
 
 	return nil

@@ -37,8 +37,8 @@ type BTCP2WSHSingleKeyCircuit struct {
 	// WitnessProgram is the SHA256 of the witness script (32 bytes)
 	// This is what's encoded in the bc1q... address (62 chars for P2WSH)
 	WitnessProgram [32]frontend.Variable `gnark:",public"`
-	// BTCQAddressHash is the SHA256 hash of the destination address on qbtc
-	BTCQAddressHash [32]frontend.Variable `gnark:",public"`
+	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
+	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
 	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
 	ChainID [8]frontend.Variable `gnark:",public"`
 }
@@ -188,7 +188,7 @@ type P2WSHSingleKeyProofParams struct {
 
 	MessageHash     [32]byte
 	WitnessProgram  [32]byte // SHA256 of the witness script
-	BTCQAddressHash [32]byte
+	QBTCAddressHash [32]byte
 	ChainID         [8]byte
 }
 
@@ -196,6 +196,6 @@ type P2WSHSingleKeyProofParams struct {
 type P2WSHSingleKeyVerificationParams struct {
 	MessageHash     [32]byte
 	WitnessProgram  [32]byte // SHA256 of the witness script
-	BTCQAddressHash [32]byte
+	QBTCAddressHash [32]byte
 	ChainID         [8]byte
 }

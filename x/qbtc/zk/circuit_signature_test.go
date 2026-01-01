@@ -36,7 +36,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 	privateKeyBytes, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000003039") // 12345 padded
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
 
-	btcqAddress := "qbtc1testaddress123"
+	qbtcAddress := "qbtc1testaddress123"
 	chainID := "qbtc-test-1"
 
 	// Compute address hash from public key
@@ -45,11 +45,11 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 	require.NoError(t, err, "should compute address hash")
 
 	// Compute binding values
-	btcqAddressHash := HashBTCQAddress(btcqAddress)
+	qbtcAddressHash := HashQBTCAddress(qbtcAddress)
 	chainIDHash := ComputeChainIDHash(chainID)
 
 	// Compute the claim message (this is what TSS would sign)
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 	t.Logf("Message to sign: %s", hex.EncodeToString(messageHash[:]))
 
 	// Sign the message (simulating TSS output)
@@ -82,7 +82,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 			PublicKeyY:      pubKey.Y(),
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err, "proof generation should succeed")
@@ -92,7 +92,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 		err = verifier.VerifyProof(proof, VerificationParams{
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err, "valid proof should verify")
@@ -107,7 +107,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 			PublicKeyY:      pubKey.Y(),
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 		err = verifier.VerifyProof(proof, VerificationParams{
 			MessageHash:     wrongMessageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.Error(t, err, "proof with wrong message hash should fail")
@@ -133,7 +133,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 			PublicKeyY:      pubKey.Y(),
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 		err = verifier.VerifyProof(proof, VerificationParams{
 			MessageHash:     messageHash,
 			AddressHash:     wrongAddressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.Error(t, err, "proof with wrong address hash should fail")
@@ -158,18 +158,18 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 			PublicKeyY:      pubKey.Y(),
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err)
 
 		// Attacker tries to redirect to their address
-		attackerHash := HashBTCQAddress("qbtc1attacker")
+		attackerHash := HashQBTCAddress("qbtc1attacker")
 
 		err = verifier.VerifyProof(proof, VerificationParams{
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: attackerHash,
+			QBTCAddressHash: attackerHash,
 			ChainID:         chainIDHash,
 		})
 		require.Error(t, err, "front-running attack should fail")
@@ -183,7 +183,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 			PublicKeyY:      pubKey.Y(),
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 		err = verifier.VerifyProof(proof, VerificationParams{
 			MessageHash:     messageHash,
 			AddressHash:     addressHash,
-			BTCQAddressHash: btcqAddressHash,
+			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         wrongChainIDHash,
 		})
 		require.Error(t, err, "cross-chain replay should fail")
@@ -203,51 +203,51 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 // TestComputeClaimMessage tests the deterministic message format.
 func TestComputeClaimMessage(t *testing.T) {
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqAddressHash := sha256.Sum256([]byte("qbtc1test"))
+	qbtcAddressHash := sha256.Sum256([]byte("qbtc1test"))
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 
 	// Compute message
-	msg1 := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	msg1 := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	// Should be deterministic
-	msg2 := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	msg2 := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 	require.Equal(t, msg1, msg2, "message should be deterministic")
 
 	// Different inputs should produce different messages
 	differentAddressHash := addressHash
 	differentAddressHash[0] = 0xFF
-	msg3 := ComputeClaimMessage(differentAddressHash, btcqAddressHash, chainIDHash)
+	msg3 := ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 	require.NotEqual(t, msg1, msg3, "different address should produce different message")
 
-	differentBtcqHash := HashBTCQAddress("qbtc1different")
+	differentBtcqHash := HashQBTCAddress("qbtc1different")
 	msg4 := ComputeClaimMessage(addressHash, differentBtcqHash, chainIDHash)
 	require.NotEqual(t, msg1, msg4, "different btcq address should produce different message")
 
 	differentChainID := ComputeChainIDHash("other-chain")
-	msg5 := ComputeClaimMessage(addressHash, btcqAddressHash, differentChainID)
+	msg5 := ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainID)
 	require.NotEqual(t, msg1, msg5, "different chain ID should produce different message")
 }
 
 // TestVerifyClaimMessage tests message verification.
 func TestVerifyClaimMessage(t *testing.T) {
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqAddressHash := HashBTCQAddress("qbtc1test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	// Valid verification
-	require.True(t, VerifyClaimMessage(messageHash, addressHash, btcqAddressHash, chainIDHash))
+	require.True(t, VerifyClaimMessage(messageHash, addressHash, qbtcAddressHash, chainIDHash))
 
 	// Wrong message hash
 	wrongMessageHash := messageHash
 	wrongMessageHash[0] ^= 0xFF
-	require.False(t, VerifyClaimMessage(wrongMessageHash, addressHash, btcqAddressHash, chainIDHash))
+	require.False(t, VerifyClaimMessage(wrongMessageHash, addressHash, qbtcAddressHash, chainIDHash))
 
 	// Wrong parameters
 	wrongAddressHash := addressHash
 	wrongAddressHash[0] ^= 0xFF
-	require.False(t, VerifyClaimMessage(messageHash, wrongAddressHash, btcqAddressHash, chainIDHash))
+	require.False(t, VerifyClaimMessage(messageHash, wrongAddressHash, qbtcAddressHash, chainIDHash))
 }
 
 // TestSignatureVerifierImmutability tests that the global signature verifier cannot be re-registered.
@@ -295,9 +295,9 @@ func TestSignatureProofSerialization(t *testing.T) {
 	addressHash, err := PublicKeyToAddressHash(compressedPubKey)
 	require.NoError(t, err)
 
-	btcqAddressHash := HashBTCQAddress("qbtc1test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1test")
 	chainIDHash := ComputeChainIDHash("test-chain")
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	sig := btcecdsa.Sign(privKey, messageHash[:])
 	sigBytes := sig.Serialize()
@@ -319,7 +319,7 @@ func TestSignatureProofSerialization(t *testing.T) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err)
@@ -364,9 +364,9 @@ func TestSignatureVerifierGlobalFlow(t *testing.T) {
 
 	compressedPubKey := pubKey.SerializeCompressed()
 	addressHash, _ := PublicKeyToAddressHash(compressedPubKey)
-	btcqAddressHash := HashBTCQAddress("qbtc1global_test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1global_test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	sig := btcecdsa.Sign(privKey, messageHash[:])
 	sigBytes := sig.Serialize()
@@ -388,7 +388,7 @@ func TestSignatureVerifierGlobalFlow(t *testing.T) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err)
@@ -397,7 +397,7 @@ func TestSignatureVerifierGlobalFlow(t *testing.T) {
 	err = VerifyProofGlobal(proof, VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "global verification should succeed")
@@ -406,21 +406,21 @@ func TestSignatureVerifierGlobalFlow(t *testing.T) {
 // TestMessageVersioning ensures the version string is included in the message.
 func TestMessageVersioning(t *testing.T) {
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqAddressHash := HashBTCQAddress("qbtc1test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 
 	// The current version
 	require.Equal(t, "qbtc-claim-v1", ClaimMessageVersion)
 
 	// Message should include the version and type prefix
-	msg := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	msg := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	// Manually compute expected hash (including type prefix)
 	prefix := []byte(TypePrefixECDSA)
 	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, addressHash[:]...)
-	data = append(data, btcqAddressHash[:]...)
+	data = append(data, qbtcAddressHash[:]...)
 	data = append(data, chainIDHash[:]...)
 	data = append(data, []byte(ClaimMessageVersion)...)
 	expected := sha256.Sum256(data)

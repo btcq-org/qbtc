@@ -31,8 +31,8 @@ type BTCP2SHP2WPKHCircuit struct {
 	MessageHash [32]frontend.Variable `gnark:",public"`
 	// ScriptHash is the Hash160 of the P2SH redeem script (this IS the P2SH address payload)
 	ScriptHash [20]frontend.Variable `gnark:",public"`
-	// BTCQAddressHash is the SHA256 hash of the destination address on qbtc
-	BTCQAddressHash [32]frontend.Variable `gnark:",public"`
+	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
+	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
 	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
 	ChainID [8]frontend.Variable `gnark:",public"`
 }
@@ -190,7 +190,7 @@ type P2SHP2WPKHProofParams struct {
 
 	MessageHash     [32]byte
 	ScriptHash      [20]byte // Hash160 of the redeem script (P2SH address payload)
-	BTCQAddressHash [32]byte
+	QBTCAddressHash [32]byte
 	ChainID         [8]byte
 }
 
@@ -198,6 +198,6 @@ type P2SHP2WPKHProofParams struct {
 type P2SHP2WPKHVerificationParams struct {
 	MessageHash     [32]byte
 	ScriptHash      [20]byte // Hash160 of the redeem script
-	BTCQAddressHash [32]byte
+	QBTCAddressHash [32]byte
 	ChainID         [8]byte
 }
