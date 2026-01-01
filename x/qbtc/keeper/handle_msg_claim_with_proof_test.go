@@ -182,7 +182,7 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	})
 	require.NoError(t, err, "proof generation should succeed")
 
-	return proof, publicInput{
+	return proof.ToProtoZKProof(), publicInput{
 		MessageHash:     messageHash,
 		AddressHash:     f.addressHash,
 		BTCQAddressHash: btcqAddressHash,
