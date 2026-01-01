@@ -1,3 +1,5 @@
+//go:build testing
+
 // Package main provides integration tests for the DKLS TSS + ZK proof system.
 // These tests demonstrate the complete flow from distributed key generation
 // through threshold signing and zero-knowledge proof verification.
