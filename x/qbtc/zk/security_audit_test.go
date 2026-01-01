@@ -184,14 +184,14 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 
 	// Attacker intercepts the proof and tries to redirect to their address
 	attackerDestination := "qbtc1attacker"
-	attackerBtcqHash := HashQBTCAddress(attackerDestination)
-	attackerMessageHash := ComputeClaimMessage(addressHash, attackerBtcqHash, chainIDHash)
+	attackerQBTCAddressHash := HashQBTCAddress(attackerDestination)
+	attackerMessageHash := ComputeClaimMessage(addressHash, attackerQBTCAddressHash, chainIDHash)
 
 	// Verification should fail - the proof is bound to the original destination
 	err = verifier.VerifyProof(proof, VerificationParams{
 		MessageHash:     attackerMessageHash,
 		AddressHash:     addressHash,
-		QBTCAddressHash: attackerBtcqHash, // Attacker's destination
+		QBTCAddressHash: attackerQBTCAddressHash, // Attacker's destination
 		ChainID:         chainIDHash,
 	})
 	require.Error(t, err, "front-running attack should fail")
@@ -334,11 +334,11 @@ func TestEdgeCase_LargeInputs(t *testing.T) {
 func TestDeterminism_SameInputsSameOutput(t *testing.T) {
 	// Message computation should be deterministic
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqHash := HashQBTCAddress("qbtc1test")
+	qbtcHash := HashQBTCAddress("qbtc1test")
 	chainHash := ComputeChainIDHash("qbtc-1")
 
-	msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
-	msg2 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+	msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
+	msg2 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 
 	require.Equal(t, msg1, msg2, "message computation should be deterministic")
 
@@ -525,29 +525,29 @@ func TestAudit_NoSecretInputLeakage(t *testing.T) {
 // TestAudit_MessageBindingComplete verifies all binding components are included.
 func TestAudit_MessageBindingComplete(t *testing.T) {
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqHash := HashQBTCAddress("qbtc1test")
+	qbtcHash := HashQBTCAddress("qbtc1test")
 	chainHash := ComputeChainIDHash("qbtc-1")
 
 	// Each component change should produce different message
 	t.Run("address binding", func(t *testing.T) {
-		msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+		msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 		diffAddr := addressHash
 		diffAddr[0] ^= 0xFF
-		msg2 := ComputeClaimMessage(diffAddr, btcqHash, chainHash)
+		msg2 := ComputeClaimMessage(diffAddr, qbtcHash, chainHash)
 		require.NotEqual(t, msg1, msg2, "different address should produce different message")
 	})
 
 	t.Run("destination binding", func(t *testing.T) {
-		msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+		msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 		diffBtcq := HashQBTCAddress("qbtc1different")
 		msg2 := ComputeClaimMessage(addressHash, diffBtcq, chainHash)
 		require.NotEqual(t, msg1, msg2, "different destination should produce different message")
 	})
 
 	t.Run("chain binding", func(t *testing.T) {
-		msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+		msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 		diffChain := ComputeChainIDHash("other-chain")
-		msg2 := ComputeClaimMessage(addressHash, btcqHash, diffChain)
+		msg2 := ComputeClaimMessage(addressHash, qbtcHash, diffChain)
 		require.NotEqual(t, msg1, msg2, "different chain should produce different message")
 	})
 

@@ -219,9 +219,9 @@ func TestComputeClaimMessage(t *testing.T) {
 	msg3 := ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 	require.NotEqual(t, msg1, msg3, "different address should produce different message")
 
-	differentBtcqHash := HashQBTCAddress("qbtc1different")
-	msg4 := ComputeClaimMessage(addressHash, differentBtcqHash, chainIDHash)
-	require.NotEqual(t, msg1, msg4, "different btcq address should produce different message")
+	differentQBTCAddressHash := HashQBTCAddress("qbtc1different")
+	msg4 := ComputeClaimMessage(addressHash, differentQBTCAddressHash, chainIDHash)
+	require.NotEqual(t, msg1, msg4, "different qbtc address should produce different message")
 
 	differentChainID := ComputeChainIDHash("other-chain")
 	msg5 := ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainID)
