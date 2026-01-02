@@ -181,8 +181,9 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
+	require.NotEmpty(t, proof)
 
-	return proof.ToProtoZKProof(), publicInput{
+	return proof, publicInput{
 		MessageHash:     messageHash,
 		AddressHash:     f.addressHash,
 		QBTCAddressHash: qbtcAddressHash,

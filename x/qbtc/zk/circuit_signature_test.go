@@ -86,7 +86,7 @@ func TestSignatureCircuit_EndToEnd(t *testing.T) {
 			ChainID:         chainIDHash,
 		})
 		require.NoError(t, err, "proof generation should succeed")
-		require.NotEmpty(t, proof.ProofData, "proof data should not be empty")
+		require.NotEmpty(t, proof, "proof data should not be empty")
 
 		// Verify proof
 		err = verifier.VerifyProof(proof, VerificationParams{
@@ -325,14 +325,12 @@ func TestSignatureProofSerialization(t *testing.T) {
 	require.NoError(t, err)
 
 	// Serialize
-	protoBytes := proof.ToProtoZKProof()
-	require.NotEmpty(t, protoBytes)
+	require.NotEmpty(t, proof)
 
 	// Deserialize
-	proof2, err := ProofFromProtoZKProof(protoBytes)
+	proof2, err := ProofFromProtoZKProof(proof)
 	require.NoError(t, err)
-	require.Equal(t, proof.ProofData, proof2.ProofData)
-	require.Equal(t, proof.PublicInputs, proof2.PublicInputs)
+	require.Equal(t, proof, proof2.ProofData)
 }
 
 // TestSignatureVerifierGlobalFlow tests the global verifier registration and usage.

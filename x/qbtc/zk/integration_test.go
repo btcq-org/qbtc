@@ -104,17 +104,17 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 
 	// Step 4: Serialize proof for transmission (as in tx)
 	t.Log("Step 4: Serializing proof for tx...")
-	protoBytes := proof.ToProtoZKProof()
-	require.NotEmpty(t, protoBytes)
+	require.NotEmpty(t, proof)
 
 	// Step 5: Deserialize proof (as done by handler)
 	t.Log("Step 5: Deserializing proof from tx...")
-	deserializedProof, err := ProofFromProtoZKProof(protoBytes)
+	deserializedProof, err := ProofFromProtoZKProof(proof)
 	require.NoError(t, err, "proof deserialization should succeed")
+	require.NotNil(t, deserializedProof)
 
 	// Step 6: Verify proof using global verifier (as done by handler)
 	t.Log("Step 6: Verifying proof...")
-	err = VerifyProofGlobal(deserializedProof, VerificationParams{
+	err = VerifyProofGlobal(proof, VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
 		QBTCAddressHash: qbtcAddressHash,
@@ -132,7 +132,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		// Recompute message hash with attacker's address
 		attackerMessageHash := ComputeClaimMessage(addressHash, attackerAddressHash, chainIDHash)
 
-		err := VerifyProofGlobal(deserializedProof, VerificationParams{
+		err := VerifyProofGlobal(proof, VerificationParams{
 			MessageHash:     attackerMessageHash,
 			AddressHash:     addressHash,
 			QBTCAddressHash: attackerAddressHash, // Different claimer
@@ -146,7 +146,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		differentChainHash := ComputeChainIDHash("other-chain-1")
 		differentMessageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainHash)
 
-		err := VerifyProofGlobal(deserializedProof, VerificationParams{
+		err := VerifyProofGlobal(proof, VerificationParams{
 			MessageHash:     differentMessageHash,
 			AddressHash:     addressHash,
 			QBTCAddressHash: qbtcAddressHash,
@@ -161,7 +161,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		differentAddressHash[0] ^= 0xFF
 		differentMessageHash := ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 
-		err := VerifyProofGlobal(deserializedProof, VerificationParams{
+		err := VerifyProofGlobal(proof, VerificationParams{
 			MessageHash:     differentMessageHash,
 			AddressHash:     differentAddressHash, // Different BTC address
 			QBTCAddressHash: qbtcAddressHash,
@@ -190,7 +190,7 @@ func TestVerifierNotInitialized(t *testing.T) {
 		PublicInputs: make([]byte, 100),
 	}
 
-	err = VerifyProofGlobal(dummyProof, VerificationParams{})
+	err = VerifyProofGlobal(dummyProof.ProofData, VerificationParams{})
 	require.Error(t, err, "VerifyProofGlobal should fail when verifier not initialized")
 	require.Contains(t, err.Error(), "not initialized")
 }

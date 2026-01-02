@@ -495,7 +495,7 @@ type ProofParams struct {
 
 // GenerateProof generates a PLONK proof that proves ownership of a Bitcoin address
 // using an ECDSA signature. The signature and public key are private inputs.
-func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
+func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 	// Create witness assignment
 	assignment := &BTCSignatureCircuit{}
 
@@ -562,10 +562,7 @@ func (p *Prover) GenerateProof(params ProofParams) (*Proof, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
 	}
-	return &Proof{
-		ProofData:    proofBuf.Bytes(),
-		PublicInputs: publicBuf.Bytes(),
-	}, nil
+	return proofBuf.Bytes(), nil
 }
 
 // bigIntToLimbs converts a big.Int to 4 limbs of 64 bits each for emulated field elements
