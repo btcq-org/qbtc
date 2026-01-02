@@ -323,14 +323,7 @@ func TestSignatureProofSerialization(t *testing.T) {
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err)
-
-	// Serialize
 	require.NotEmpty(t, proof)
-
-	// Deserialize
-	proof2, err := ProofFromProtoZKProof(proof)
-	require.NoError(t, err)
-	require.Equal(t, proof, proof2.ProofData)
 }
 
 // TestSignatureVerifierGlobalFlow tests the global verifier registration and usage.

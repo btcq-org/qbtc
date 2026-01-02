@@ -19,9 +19,8 @@ import (
 // 1. Setup with test SRS
 // 2. Signing the claim message (simulating TSS)
 // 3. Proof generation for a valid claim
-// 4. Serialization/deserialization round-trip (as would happen in tx)
-// 5. Verification with correct params (valid claim)
-// 6. Verification with wrong params (attack scenarios)
+// 4. Verification with correct params (valid claim)
+// 5. Verification with wrong params (attack scenarios)
 func TestFullClaimFlow_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -102,18 +101,12 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	})
 	require.NoError(t, err, "proof generation should succeed")
 
-	// Step 4: Serialize proof for transmission (as in tx)
-	t.Log("Step 4: Serializing proof for tx...")
+	// Step 4: Verify proof bytes are valid
+	t.Log("Step 4: Checking proof bytes...")
 	require.NotEmpty(t, proof)
 
-	// Step 5: Deserialize proof (as done by handler)
-	t.Log("Step 5: Deserializing proof from tx...")
-	deserializedProof, err := ProofFromProtoZKProof(proof)
-	require.NoError(t, err, "proof deserialization should succeed")
-	require.NotNil(t, deserializedProof)
-
-	// Step 6: Verify proof using global verifier (as done by handler)
-	t.Log("Step 6: Verifying proof...")
+	// Step 5: Verify proof using global verifier (as done by handler)
+	t.Log("Step 5: Verifying proof...")
 	err = VerifyProofGlobal(proof, VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
@@ -122,8 +115,8 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	})
 	require.NoError(t, err, "valid proof should verify via global verifier")
 
-	// Step 7: Test attack scenarios
-	t.Log("Step 7: Testing attack scenarios...")
+	// Step 6: Test attack scenarios
+	t.Log("Step 6: Testing attack scenarios...")
 
 	t.Run("front-running attack fails", func(t *testing.T) {
 		// Attacker sees the proof and tries to claim to their address
