@@ -222,12 +222,6 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 		ChainID:         chainIDHash,
 	}
 
-	// Deserialize the proof
-	proof, err := zk.ProofFromProtoZKProof(proofBytes)
-	if err != nil {
-		return fmt.Errorf("failed to deserialize proof: %w", err)
-	}
-
 	// Verify the proof using the global verifier
-	return zk.VerifyProofGlobal(proof, params)
+	return zk.VerifyProofGlobal(proofBytes, params)
 }

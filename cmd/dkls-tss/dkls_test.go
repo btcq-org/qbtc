@@ -187,23 +187,23 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
-	t.Logf("  Proof size: %d bytes", len(proof.ProofData))
+	t.Logf("  Proof size: %d bytes", len(proof))
 
 	// ========================================
 	// Step 6: Serialize/Deserialize Proof (TX Round-trip)
 	// ========================================
 	t.Log("Step 6: Testing proof serialization round-trip...")
-	protoBytes := proof.ToProtoZKProof()
-	require.NotEmpty(t, protoBytes)
+	require.NotEmpty(t, proof)
 
-	deserializedProof, err := zk.ProofFromProtoZKProof(protoBytes)
+	deserializedProof, err := zk.ProofFromProtoZKProof(proof)
+	require.NotNil(t, deserializedProof)
 	require.NoError(t, err, "proof deserialization should succeed")
 
 	// ========================================
 	// Step 7: Verify Proof
 	// ========================================
 	t.Log("Step 7: Verifying ZK proof...")
-	err = zk.VerifyProofGlobal(deserializedProof, zk.VerificationParams{
+	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
 		QBTCAddressHash: qbtcAddressHash,
@@ -223,7 +223,7 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		attackerAddressHash := zk.HashQBTCAddress(attackerAddress)
 		attackerMessageHash := zk.ComputeClaimMessage(addressHash, attackerAddressHash, chainIDHash)
 
-		err := zk.VerifyProofGlobal(deserializedProof, zk.VerificationParams{
+		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
 			MessageHash:     attackerMessageHash,
 			AddressHash:     addressHash,
 			QBTCAddressHash: attackerAddressHash,
@@ -237,7 +237,7 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		differentChainHash := zk.ComputeChainIDHash("evil-chain-1")
 		differentMessageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainHash)
 
-		err := zk.VerifyProofGlobal(deserializedProof, zk.VerificationParams{
+		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
 			MessageHash:     differentMessageHash,
 			AddressHash:     addressHash,
 			QBTCAddressHash: qbtcAddressHash,
@@ -252,7 +252,7 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		differentAddressHash[0] ^= 0xFF // Flip some bits
 		differentMessageHash := zk.ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 
-		err := zk.VerifyProofGlobal(deserializedProof, zk.VerificationParams{
+		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
 			MessageHash:     differentMessageHash,
 			AddressHash:     differentAddressHash,
 			QBTCAddressHash: qbtcAddressHash,

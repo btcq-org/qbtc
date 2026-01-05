@@ -302,7 +302,7 @@ The proof proves ownership without revealing the signature or public key.`,
 				QBTCAddress:     qbtcAddress,
 				ChainID:         chainID,
 				MessageHash:     hex.EncodeToString(messageHash[:]),
-				ProofData:       hex.EncodeToString(proof.ToProtoZKProof()),
+				ProofData:       hex.EncodeToString(proof),
 			}
 
 			// Serialize to JSON

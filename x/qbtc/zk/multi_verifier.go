@@ -103,7 +103,7 @@ func (mv *MultiVerifier) HasCircuit(circuitType CircuitType) bool {
 }
 
 // VerifyECDSAProof verifies a P2PKH/P2WPKH proof
-func (mv *MultiVerifier) VerifyECDSAProof(proof *Proof, params VerificationParams) error {
+func (mv *MultiVerifier) VerifyECDSAProof(proof []byte, params VerificationParams) error {
 	mv.mu.RLock()
 	verifier, ok := mv.verifiers[CircuitTypeECDSA]
 	mv.mu.RUnlock()
@@ -115,7 +115,7 @@ func (mv *MultiVerifier) VerifyECDSAProof(proof *Proof, params VerificationParam
 }
 
 // VerifySchnorrProof verifies a Taproot proof
-func (mv *MultiVerifier) VerifySchnorrProof(proof *Proof, params SchnorrVerificationParams) error {
+func (mv *MultiVerifier) VerifySchnorrProof(proof []byte, params SchnorrVerificationParams) error {
 	mv.mu.RLock()
 	verifier, ok := mv.verifiers[CircuitTypeSchnorr]
 	mv.mu.RUnlock()
@@ -124,8 +124,8 @@ func (mv *MultiVerifier) VerifySchnorrProof(proof *Proof, params SchnorrVerifica
 		return fmt.Errorf("schnorr circuit not registered")
 	}
 
-	if proof == nil || proof.ProofData == nil {
-		return fmt.Errorf("proof cannot be nil")
+	if len(proof) == 0 {
+		return fmt.Errorf("proof cannot be empty")
 	}
 
 	// Verify the message hash matches expected
@@ -136,7 +136,7 @@ func (mv *MultiVerifier) VerifySchnorrProof(proof *Proof, params SchnorrVerifica
 
 	// Deserialize the proof
 	plonkProof := plonk.NewProof(ecc.BN254)
-	_, err := plonkProof.ReadFrom(bytes.NewReader(proof.ProofData))
+	_, err := plonkProof.ReadFrom(bytes.NewReader(proof))
 	if err != nil {
 		return fmt.Errorf("failed to deserialize proof: %w", err)
 	}

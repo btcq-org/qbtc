@@ -19,9 +19,8 @@ import (
 // 1. Setup with test SRS
 // 2. Signing the claim message (simulating TSS)
 // 3. Proof generation for a valid claim
-// 4. Serialization/deserialization round-trip (as would happen in tx)
-// 5. Verification with correct params (valid claim)
-// 6. Verification with wrong params (attack scenarios)
+// 4. Verification with correct params (valid claim)
+// 5. Verification with wrong params (attack scenarios)
 func TestFullClaimFlow_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -102,19 +101,13 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	})
 	require.NoError(t, err, "proof generation should succeed")
 
-	// Step 4: Serialize proof for transmission (as in tx)
-	t.Log("Step 4: Serializing proof for tx...")
-	protoBytes := proof.ToProtoZKProof()
-	require.NotEmpty(t, protoBytes)
+	// Step 4: Verify proof bytes are valid
+	t.Log("Step 4: Checking proof bytes...")
+	require.NotEmpty(t, proof)
 
-	// Step 5: Deserialize proof (as done by handler)
-	t.Log("Step 5: Deserializing proof from tx...")
-	deserializedProof, err := ProofFromProtoZKProof(protoBytes)
-	require.NoError(t, err, "proof deserialization should succeed")
-
-	// Step 6: Verify proof using global verifier (as done by handler)
-	t.Log("Step 6: Verifying proof...")
-	err = VerifyProofGlobal(deserializedProof, VerificationParams{
+	// Step 5: Verify proof using global verifier (as done by handler)
+	t.Log("Step 5: Verifying proof...")
+	err = VerifyProofGlobal(proof, VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
 		QBTCAddressHash: qbtcAddressHash,
@@ -122,8 +115,8 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	})
 	require.NoError(t, err, "valid proof should verify via global verifier")
 
-	// Step 7: Test attack scenarios
-	t.Log("Step 7: Testing attack scenarios...")
+	// Step 6: Test attack scenarios
+	t.Log("Step 6: Testing attack scenarios...")
 
 	t.Run("front-running attack fails", func(t *testing.T) {
 		// Attacker sees the proof and tries to claim to their address
@@ -132,7 +125,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		// Recompute message hash with attacker's address
 		attackerMessageHash := ComputeClaimMessage(addressHash, attackerAddressHash, chainIDHash)
 
-		err := VerifyProofGlobal(deserializedProof, VerificationParams{
+		err := VerifyProofGlobal(proof, VerificationParams{
 			MessageHash:     attackerMessageHash,
 			AddressHash:     addressHash,
 			QBTCAddressHash: attackerAddressHash, // Different claimer
@@ -146,7 +139,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		differentChainHash := ComputeChainIDHash("other-chain-1")
 		differentMessageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainHash)
 
-		err := VerifyProofGlobal(deserializedProof, VerificationParams{
+		err := VerifyProofGlobal(proof, VerificationParams{
 			MessageHash:     differentMessageHash,
 			AddressHash:     addressHash,
 			QBTCAddressHash: qbtcAddressHash,
@@ -161,7 +154,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		differentAddressHash[0] ^= 0xFF
 		differentMessageHash := ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 
-		err := VerifyProofGlobal(deserializedProof, VerificationParams{
+		err := VerifyProofGlobal(proof, VerificationParams{
 			MessageHash:     differentMessageHash,
 			AddressHash:     differentAddressHash, // Different BTC address
 			QBTCAddressHash: qbtcAddressHash,
@@ -190,7 +183,7 @@ func TestVerifierNotInitialized(t *testing.T) {
 		PublicInputs: make([]byte, 100),
 	}
 
-	err = VerifyProofGlobal(dummyProof, VerificationParams{})
+	err = VerifyProofGlobal(dummyProof.ProofData, VerificationParams{})
 	require.Error(t, err, "VerifyProofGlobal should fail when verifier not initialized")
 	require.Contains(t, err.Error(), "not initialized")
 }

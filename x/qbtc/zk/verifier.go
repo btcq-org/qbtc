@@ -34,8 +34,8 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 // It checks that:
 // 1. The proof is valid
 // 2. The message hash matches the expected value (computed from the claim parameters)
-func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
-	if proof == nil || proof.ProofData == nil {
+func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
+	if len(proof) == 0 {
 		return fmt.Errorf("proof cannot be nil")
 	}
 
@@ -47,7 +47,7 @@ func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 
 	// Deserialize the proof
 	plonkProof := plonk.NewProof(ecc.BN254)
-	_, err := plonkProof.ReadFrom(bytes.NewReader(proof.ProofData))
+	_, err := plonkProof.ReadFrom(bytes.NewReader(proof))
 	if err != nil {
 		return fmt.Errorf("failed to deserialize proof: %w", err)
 	}
@@ -180,7 +180,7 @@ func IsVerifierInitialized() bool {
 
 // VerifyProofGlobal verifies a proof using the global verifier.
 // Returns an error if the verifier is not initialized.
-func VerifyProofGlobal(proof *Proof, params VerificationParams) error {
+func VerifyProofGlobal(proof []byte, params VerificationParams) error {
 	verifier, err := GetVerifier()
 	if err != nil {
 		return err
