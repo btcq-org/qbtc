@@ -153,39 +153,39 @@ func TestTaggedHash(t *testing.T) {
 
 // TestClaimMessageFormats tests the claim message computation for different address types
 func TestClaimMessageFormats(t *testing.T) {
-	btcqAddressHash := HashBTCQAddress("qbtc1test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 
 	t.Run("ECDSA claim message (P2PKH/P2WPKH)", func(t *testing.T) {
 		addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-		msg := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+		msg := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 		require.Len(t, msg, 32)
 
 		// Verify determinism
-		msg2 := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+		msg2 := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 		require.Equal(t, msg, msg2)
 	})
 
 	t.Run("Schnorr claim message (Taproot)", func(t *testing.T) {
 		xOnlyPubKey := [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 			17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-		msg := ComputeClaimMessageForSchnorr(xOnlyPubKey, btcqAddressHash, chainIDHash)
+		msg := ComputeClaimMessageForSchnorr(xOnlyPubKey, qbtcAddressHash, chainIDHash)
 		require.Len(t, msg, 32)
 
 		// Verify it's different from ECDSA format (different identifier size)
 		addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-		ecdsaMsg := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+		ecdsaMsg := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 		require.NotEqual(t, msg, ecdsaMsg)
 	})
 
 	t.Run("P2SH claim message", func(t *testing.T) {
 		scriptHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-		msg := ComputeClaimMessageForP2SH(scriptHash, btcqAddressHash, chainIDHash)
+		msg := ComputeClaimMessageForP2SH(scriptHash, qbtcAddressHash, chainIDHash)
 		require.Len(t, msg, 32)
 
 		// Same size as ECDSA but different due to type prefix (prevents cross-type replay)
 		addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-		ecdsaMsg := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+		ecdsaMsg := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 		// These are now different due to type prefix ("ecdsa:" vs "p2sh:")
 		require.NotEqual(t, msg, ecdsaMsg, "P2SH and ECDSA messages should differ due to type prefix")
 	})
@@ -193,13 +193,13 @@ func TestClaimMessageFormats(t *testing.T) {
 	t.Run("P2PK claim message", func(t *testing.T) {
 		compressedPubKey := [33]byte{0x02, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 			17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-		msg := ComputeClaimMessageForP2PK(compressedPubKey, btcqAddressHash, chainIDHash)
+		msg := ComputeClaimMessageForP2PK(compressedPubKey, qbtcAddressHash, chainIDHash)
 		require.Len(t, msg, 32)
 
 		// Different from Schnorr (33 vs 32 bytes identifier)
 		xOnlyPubKey := [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 			17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-		schnorrMsg := ComputeClaimMessageForSchnorr(xOnlyPubKey, btcqAddressHash, chainIDHash)
+		schnorrMsg := ComputeClaimMessageForSchnorr(xOnlyPubKey, qbtcAddressHash, chainIDHash)
 		require.NotEqual(t, msg, schnorrMsg)
 	})
 }
@@ -320,17 +320,17 @@ func TestP2WSHSingleKeyWitnessProgram(t *testing.T) {
 func TestP2WSHClaimMessage(t *testing.T) {
 	witnessProgram := [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-	btcqAddressHash := HashBTCQAddress("qbtc1test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 
 	t.Run("compute claim message", func(t *testing.T) {
-		msg := ComputeClaimMessageForP2WSH(witnessProgram, btcqAddressHash, chainIDHash)
+		msg := ComputeClaimMessageForP2WSH(witnessProgram, qbtcAddressHash, chainIDHash)
 		require.Len(t, msg, 32)
 	})
 
 	t.Run("claim message is deterministic", func(t *testing.T) {
-		msg1 := ComputeClaimMessageForP2WSH(witnessProgram, btcqAddressHash, chainIDHash)
-		msg2 := ComputeClaimMessageForP2WSH(witnessProgram, btcqAddressHash, chainIDHash)
+		msg1 := ComputeClaimMessageForP2WSH(witnessProgram, qbtcAddressHash, chainIDHash)
+		msg2 := ComputeClaimMessageForP2WSH(witnessProgram, qbtcAddressHash, chainIDHash)
 		require.Equal(t, msg1, msg2)
 	})
 
@@ -338,8 +338,8 @@ func TestP2WSHClaimMessage(t *testing.T) {
 		otherWP := witnessProgram
 		otherWP[0] = 0xFF
 
-		msg1 := ComputeClaimMessageForP2WSH(witnessProgram, btcqAddressHash, chainIDHash)
-		msg2 := ComputeClaimMessageForP2WSH(otherWP, btcqAddressHash, chainIDHash)
+		msg1 := ComputeClaimMessageForP2WSH(witnessProgram, qbtcAddressHash, chainIDHash)
+		msg2 := ComputeClaimMessageForP2WSH(otherWP, qbtcAddressHash, chainIDHash)
 		require.NotEqual(t, msg1, msg2)
 	})
 }

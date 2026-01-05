@@ -23,21 +23,21 @@ const (
 //
 // The message format is:
 //
-//	SHA256("ecdsa:" || AddressHash || BTCQAddressHash || ChainID || "qbtc-claim-v1")
+//	SHA256("ecdsa:" || AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
 //
 // This binds the signature to:
 //   - The script type (prevents cross-type replay)
 //   - The Bitcoin address being claimed (AddressHash)
-//   - The destination qbtc address (BTCQAddressHash)
+//   - The destination qbtc address (QBTCAddressHash)
 //   - The chain ID (prevents cross-chain replay)
 //   - A version string (prevents cross-version replay)
-func ComputeClaimMessage(addressHash [20]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+func ComputeClaimMessage(addressHash [20]byte, qbtcAddressHash [32]byte, chainID [8]byte) [32]byte {
 	// Concatenate all components with type prefix
 	prefix := []byte(TypePrefixECDSA)
 	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, addressHash[:]...)
-	data = append(data, btcqAddressHash[:]...)
+	data = append(data, qbtcAddressHash[:]...)
 	data = append(data, chainID[:]...)
 	data = append(data, []byte(ClaimMessageVersion)...)
 
@@ -47,7 +47,7 @@ func ComputeClaimMessage(addressHash [20]byte, btcqAddressHash [32]byte, chainID
 
 // ComputeClaimMessageFromStrings is a convenience function that computes the
 // claim message from string inputs. It's useful for CLI tools.
-func ComputeClaimMessageFromStrings(addressHashHex string, btcqAddress string, chainID string) ([32]byte, error) {
+func ComputeClaimMessageFromStrings(addressHashHex string, qbtcAddress string, chainID string) ([32]byte, error) {
 	var result [32]byte
 
 	// Parse address hash
@@ -57,18 +57,18 @@ func ComputeClaimMessageFromStrings(addressHashHex string, btcqAddress string, c
 	}
 
 	// Hash the btcq address
-	btcqAddressHash := HashBTCQAddress(btcqAddress)
+	qbtcAddressHash := HashQBTCAddress(qbtcAddress)
 
 	// Hash the chain ID
 	chainIDHash := ComputeChainIDHash(chainID)
 
-	return ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash), nil
+	return ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash), nil
 }
 
 // VerifyClaimMessage checks that a message hash matches the expected claim message.
 // This is used by the verifier to ensure the proof is bound to the correct parameters.
-func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, btcqAddressHash [32]byte, chainID [8]byte) bool {
-	expected := ComputeClaimMessage(addressHash, btcqAddressHash, chainID)
+func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, qbtcAddressHash [32]byte, chainID [8]byte) bool {
+	expected := ComputeClaimMessage(addressHash, qbtcAddressHash, chainID)
 	return messageHash == expected
 }
 
@@ -77,13 +77,13 @@ func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, btcqAddressH
 //
 // Message format:
 //
-//	SHA256("schnorr:" || XOnlyPubKey || BTCQAddressHash || ChainID || "qbtc-claim-v1")
-func ComputeClaimMessageForSchnorr(xOnlyPubKey [32]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+//	SHA256("schnorr:" || XOnlyPubKey || QBTCAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForSchnorr(xOnlyPubKey [32]byte, qbtcAddressHash [32]byte, chainID [8]byte) [32]byte {
 	prefix := []byte(TypePrefixSchnorr)
 	data := make([]byte, 0, len(prefix)+32+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, xOnlyPubKey[:]...)
-	data = append(data, btcqAddressHash[:]...)
+	data = append(data, qbtcAddressHash[:]...)
 	data = append(data, chainID[:]...)
 	data = append(data, []byte(ClaimMessageVersion)...)
 	return sha256.Sum256(data)
@@ -94,13 +94,13 @@ func ComputeClaimMessageForSchnorr(xOnlyPubKey [32]byte, btcqAddressHash [32]byt
 //
 // Message format:
 //
-//	SHA256("p2sh:" || ScriptHash || BTCQAddressHash || ChainID || "qbtc-claim-v1")
-func ComputeClaimMessageForP2SH(scriptHash [20]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+//	SHA256("p2sh:" || ScriptHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForP2SH(scriptHash [20]byte, qbtcAddressHash [32]byte, chainID [8]byte) [32]byte {
 	prefix := []byte(TypePrefixP2SH)
 	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, scriptHash[:]...)
-	data = append(data, btcqAddressHash[:]...)
+	data = append(data, qbtcAddressHash[:]...)
 	data = append(data, chainID[:]...)
 	data = append(data, []byte(ClaimMessageVersion)...)
 	return sha256.Sum256(data)
@@ -111,13 +111,13 @@ func ComputeClaimMessageForP2SH(scriptHash [20]byte, btcqAddressHash [32]byte, c
 //
 // Message format:
 //
-//	SHA256("p2pk:" || CompressedPubKey || BTCQAddressHash || ChainID || "qbtc-claim-v1")
-func ComputeClaimMessageForP2PK(compressedPubKey [33]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+//	SHA256("p2pk:" || CompressedPubKey || QBTCAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForP2PK(compressedPubKey [33]byte, qbtcAddressHash [32]byte, chainID [8]byte) [32]byte {
 	prefix := []byte(TypePrefixP2PK)
 	data := make([]byte, 0, len(prefix)+33+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, compressedPubKey[:]...)
-	data = append(data, btcqAddressHash[:]...)
+	data = append(data, qbtcAddressHash[:]...)
 	data = append(data, chainID[:]...)
 	data = append(data, []byte(ClaimMessageVersion)...)
 	return sha256.Sum256(data)
@@ -128,13 +128,13 @@ func ComputeClaimMessageForP2PK(compressedPubKey [33]byte, btcqAddressHash [32]b
 //
 // Message format:
 //
-//	SHA256("p2wsh:" || WitnessProgram || BTCQAddressHash || ChainID || "qbtc-claim-v1")
-func ComputeClaimMessageForP2WSH(witnessProgram [32]byte, btcqAddressHash [32]byte, chainID [8]byte) [32]byte {
+//	SHA256("p2wsh:" || WitnessProgram || QBTCAddressHash || ChainID || "qbtc-claim-v1")
+func ComputeClaimMessageForP2WSH(witnessProgram [32]byte, qbtcAddressHash [32]byte, chainID [8]byte) [32]byte {
 	prefix := []byte(TypePrefixP2WSH)
 	data := make([]byte, 0, len(prefix)+32+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, witnessProgram[:]...)
-	data = append(data, btcqAddressHash[:]...)
+	data = append(data, qbtcAddressHash[:]...)
 	data = append(data, chainID[:]...)
 	data = append(data, []byte(ClaimMessageVersion)...)
 	return sha256.Sum256(data)

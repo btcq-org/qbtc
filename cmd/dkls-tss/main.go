@@ -221,13 +221,13 @@ func main() {
 	fmt.Println("\nStep 3: Preparing claim parameters...")
 	claimerAddress := "qbtc1dklstss_demo_claimer"
 	chainID := "qbtc-mainnet-1"
-	btcqAddressHash := zk.HashBTCQAddress(claimerAddress)
+	qbtcAddressHash := zk.HashQBTCAddress(claimerAddress)
 	chainIDHash := zk.ComputeChainIDHash(chainID)
 	fmt.Printf("  ✓ Claimer address: %s\n", claimerAddress)
 	fmt.Printf("  ✓ Chain ID: %s\n", chainID)
 
 	// Compute the claim message (this is what TSS signs)
-	messageHash := zk.ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 	fmt.Printf("  ✓ Message hash to sign: %x\n", messageHash)
 
 	// Step 4: Sign with TSS
@@ -287,7 +287,7 @@ func main() {
 		PublicKeyY:      pubKeyY,
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	if err != nil {
@@ -300,7 +300,7 @@ func main() {
 	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	if err != nil {

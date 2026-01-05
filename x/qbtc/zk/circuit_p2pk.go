@@ -32,8 +32,8 @@ type BTCP2PKCircuit struct {
 	MessageHash [32]frontend.Variable `gnark:",public"`
 	// CompressedPubKey is the 33-byte compressed public key from the P2PK script
 	CompressedPubKey [33]frontend.Variable `gnark:",public"`
-	// BTCQAddressHash is the SHA256 hash of the destination address on qbtc
-	BTCQAddressHash [32]frontend.Variable `gnark:",public"`
+	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
+	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
 	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
 	ChainID [8]frontend.Variable `gnark:",public"`
 }
@@ -168,7 +168,7 @@ type P2PKProofParams struct {
 
 	MessageHash      [32]byte
 	CompressedPubKey [33]byte // The compressed public key from the P2PK script
-	BTCQAddressHash  [32]byte
+	QBTCAddressHash  [32]byte
 	ChainID          [8]byte
 }
 
@@ -176,6 +176,6 @@ type P2PKProofParams struct {
 type P2PKVerificationParams struct {
 	MessageHash      [32]byte
 	CompressedPubKey [33]byte // The compressed public key
-	BTCQAddressHash  [32]byte
+	QBTCAddressHash  [32]byte
 	ChainID          [8]byte
 }

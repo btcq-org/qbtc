@@ -129,7 +129,7 @@ func (mv *MultiVerifier) VerifySchnorrProof(proof *Proof, params SchnorrVerifica
 	}
 
 	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessageForSchnorr(params.XOnlyPubKey, params.BTCQAddressHash, params.ChainID)
+	expectedMessage := ComputeClaimMessageForSchnorr(params.XOnlyPubKey, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
@@ -146,7 +146,7 @@ func (mv *MultiVerifier) VerifySchnorrProof(proof *Proof, params SchnorrVerifica
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
 		assignment.XOnlyPubKey[i] = params.XOnlyPubKey[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]
@@ -175,7 +175,7 @@ func (mv *MultiVerifier) VerifyP2SHP2WPKHProof(proof *Proof, params P2SHP2WPKHVe
 	}
 
 	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessageForP2SH(params.ScriptHash, params.BTCQAddressHash, params.ChainID)
+	expectedMessage := ComputeClaimMessageForP2SH(params.ScriptHash, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
@@ -191,7 +191,7 @@ func (mv *MultiVerifier) VerifyP2SHP2WPKHProof(proof *Proof, params P2SHP2WPKHVe
 	assignment := &BTCP2SHP2WPKHCircuit{}
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 20; i++ {
 		assignment.ScriptHash[i] = params.ScriptHash[i]
@@ -223,7 +223,7 @@ func (mv *MultiVerifier) VerifyP2PKProof(proof *Proof, params P2PKVerificationPa
 	}
 
 	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessageForP2PK(params.CompressedPubKey, params.BTCQAddressHash, params.ChainID)
+	expectedMessage := ComputeClaimMessageForP2PK(params.CompressedPubKey, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
@@ -239,7 +239,7 @@ func (mv *MultiVerifier) VerifyP2PKProof(proof *Proof, params P2PKVerificationPa
 	assignment := &BTCP2PKCircuit{}
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 33; i++ {
 		assignment.CompressedPubKey[i] = params.CompressedPubKey[i]
@@ -271,7 +271,7 @@ func (mv *MultiVerifier) VerifyP2WSHSingleKeyProof(proof *Proof, params P2WSHSin
 	}
 
 	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessageForP2WSH(params.WitnessProgram, params.BTCQAddressHash, params.ChainID)
+	expectedMessage := ComputeClaimMessageForP2WSH(params.WitnessProgram, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
@@ -288,7 +288,7 @@ func (mv *MultiVerifier) VerifyP2WSHSingleKeyProof(proof *Proof, params P2WSHSin
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
 		assignment.WitnessProgram[i] = params.WitnessProgram[i]
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]

@@ -40,7 +40,7 @@ func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 	}
 
 	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessage(params.AddressHash, params.BTCQAddressHash, params.ChainID)
+	expectedMessage := ComputeClaimMessage(params.AddressHash, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
 	}
@@ -65,9 +65,9 @@ func (v *Verifier) VerifyProof(proof *Proof, params VerificationParams) error {
 		assignment.AddressHash[i] = params.AddressHash[i]
 	}
 
-	// Set BTCQ address hash
+	// Set QBTC address hash
 	for i := range 32 {
-		assignment.BTCQAddressHash[i] = params.BTCQAddressHash[i]
+		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
 	}
 
 	// Set chain ID

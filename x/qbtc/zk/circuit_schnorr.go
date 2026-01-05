@@ -38,8 +38,8 @@ type BTCSchnorrCircuit struct {
 	MessageHash [32]frontend.Variable `gnark:",public"`
 	// XOnlyPubKey is the 32-byte x-only public key (this IS the Taproot address)
 	XOnlyPubKey [32]frontend.Variable `gnark:",public"`
-	// BTCQAddressHash is the SHA256 hash of the destination address on qbtc
-	BTCQAddressHash [32]frontend.Variable `gnark:",public"`
+	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
+	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
 	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
 	ChainID [8]frontend.Variable `gnark:",public"`
 }
@@ -220,7 +220,7 @@ type SchnorrProofParams struct {
 	// Public inputs
 	MessageHash     [32]byte // The signed message hash
 	XOnlyPubKey     [32]byte // The 32-byte x-only public key (Taproot address)
-	BTCQAddressHash [32]byte // H(claimer_address)
+	QBTCAddressHash [32]byte // H(claimer_address)
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)
 }
 
@@ -228,6 +228,6 @@ type SchnorrProofParams struct {
 type SchnorrVerificationParams struct {
 	MessageHash     [32]byte // The message that was signed
 	XOnlyPubKey     [32]byte // The Taproot address (x-only pubkey)
-	BTCQAddressHash [32]byte // H(claimer_address)
+	QBTCAddressHash [32]byte // H(claimer_address)
 	ChainID         [8]byte  // First 8 bytes of H(chain_id)
 }

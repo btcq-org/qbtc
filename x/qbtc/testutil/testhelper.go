@@ -41,7 +41,7 @@ func GetRandomBech32ConsensusPublicKey() string {
 	return bech32PubKey
 }
 
-func GetRandomBTCQAddress() string {
+func GetRandomQBTCAddress() string {
 	name := common.RandHexString(10)
 	prefix := common.AccountAddressPrefix
 	str, _ := bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte(name)))

@@ -107,7 +107,7 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	)
 
 	// Create claimer address
-	claimerAddr := qbtctestutil.GetRandomBTCQAddress()
+	claimerAddr := qbtctestutil.GetRandomQBTCAddress()
 
 	privateKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err, "should create new private key")
@@ -132,18 +132,18 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 type publicInput struct {
 	MessageHash     [32]byte
 	AddressHash     [20]byte
-	BTCQAddressHash [32]byte
+	QBTCAddressHash [32]byte
 }
 
 // generateProof generates a ZK proof for the test fixture's claimer
 func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	t.Helper()
 
-	btcqAddressHash := zk.HashBTCQAddress(f.claimerAddr)
+	qbtcAddressHash := zk.HashQBTCAddress(f.claimerAddr)
 	chainIDHash := zk.ComputeChainIDHash(testChainID)
 
 	// Compute the claim message that needs to be signed
-	messageHash := zk.ComputeClaimMessage(f.addressHash, btcqAddressHash, chainIDHash)
+	messageHash := zk.ComputeClaimMessage(f.addressHash, qbtcAddressHash, chainIDHash)
 
 	// Sign the message with ECDSA (simulating what TSS would do)
 	sig := ecdsa.Sign(f.btcPrivKey, messageHash[:])
@@ -177,7 +177,7 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
 		AddressHash:     f.addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
@@ -185,7 +185,7 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	return proof.ToProtoZKProof(), publicInput{
 		MessageHash:     messageHash,
 		AddressHash:     f.addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 	}
 }
 
@@ -454,7 +454,7 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 				Proof:           hex.EncodeToString(proofData),
 				MessageHash:     hex.EncodeToString(publicInput.MessageHash[:]),
 				AddressHash:     hex.EncodeToString(publicInput.AddressHash[:]),
-				QbtcAddressHash: hex.EncodeToString(publicInput.BTCQAddressHash[:]),
+				QbtcAddressHash: hex.EncodeToString(publicInput.QBTCAddressHash[:]),
 			}
 
 			// Execute
@@ -499,7 +499,7 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	}
 	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "9999000000000000000000000000000000000000000000000000000000000001-0", utxo))
 
-	qbtcAddr := zk.HashBTCQAddress(f.claimerAddr)
+	qbtcAddr := zk.HashQBTCAddress(f.claimerAddr)
 	// Create claim with invalid proof data (random bytes)
 	msg := &types.MsgClaimWithProof{
 		Claimer: f.claimerAddr,

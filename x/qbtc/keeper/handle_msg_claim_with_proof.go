@@ -205,20 +205,20 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	}
 
 	// Compute the btcq address hash for binding (prevents front-running)
-	btcqAddressHash := zk.HashBTCQAddress(msg.Claimer)
+	qbtcAddressHash := zk.HashQBTCAddress(msg.Claimer)
 
 	// Compute chain ID hash from the chain ID (prevents cross-chain replay)
 	chainID := sdkCtx.ChainID()
 	chainIDHash := zk.ComputeChainIDHash(chainID)
 
 	// Compute expected message hash that should have been signed
-	messageHash := zk.ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	// Build verification params
 	params := zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	}
 

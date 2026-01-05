@@ -43,11 +43,11 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 	attackerKey, _ := btcec.NewPrivateKey()
 
 	// Attacker tries to sign with their key but claim the legitimate address
-	btcqAddressHash := HashBTCQAddress("qbtc1attacker")
+	qbtcAddressHash := HashQBTCAddress("qbtc1attacker")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 
 	// Compute message for the legitimate address
-	messageHash := ComputeClaimMessage(legitimateAddressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(legitimateAddressHash, qbtcAddressHash, chainIDHash)
 
 	// Attacker signs with their key
 	sig := btcecdsa.Sign(attackerKey, messageHash[:])
@@ -62,7 +62,7 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 		PublicKeyY:      attackerKey.PubKey().Y(),
 		MessageHash:     messageHash,
 		AddressHash:     legitimateAddressHash, // Claiming someone else's address!
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	// SECURITY VALIDATION: Proof generation MUST fail because the pubkey doesn't hash to addressHash
@@ -73,7 +73,7 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 	// The attacker CAN generate a valid proof for their OWN address
 	// but they need to sign the correct message for their address
 	attackerAddressHash, _ := PublicKeyToAddressHash(attackerKey.PubKey().SerializeCompressed())
-	attackerMessageHash := ComputeClaimMessage(attackerAddressHash, btcqAddressHash, chainIDHash)
+	attackerMessageHash := ComputeClaimMessage(attackerAddressHash, qbtcAddressHash, chainIDHash)
 
 	// Attacker signs the correct message for their own address
 	attackerSig := btcecdsa.Sign(attackerKey, attackerMessageHash[:])
@@ -87,7 +87,7 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 		PublicKeyY:      attackerKey.PubKey().Y(),
 		MessageHash:     attackerMessageHash,
 		AddressHash:     attackerAddressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "attacker should be able to prove their own address")
@@ -96,7 +96,7 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 	err = verifier.VerifyProof(proof, VerificationParams{
 		MessageHash:     messageHash,           // Original message (for legitimate address)
 		AddressHash:     legitimateAddressHash, // Legitimate address
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.Error(t, err, "verification should fail - proof is bound to attacker's address, not legitimate address")
@@ -117,9 +117,9 @@ func TestSoundness_InvalidSignature(t *testing.T) {
 	privateKey, _ := btcec.NewPrivateKey()
 	pubKey := privateKey.PubKey()
 	addressHash, _ := PublicKeyToAddressHash(pubKey.SerializeCompressed())
-	btcqAddressHash := HashBTCQAddress("qbtc1test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	// Create an invalid signature (random values)
 	invalidR := new(big.Int).SetBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
@@ -135,7 +135,7 @@ func TestSoundness_InvalidSignature(t *testing.T) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.Error(t, err, "proof generation should fail with invalid signature")
@@ -163,9 +163,9 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 	pubKey := privateKey.PubKey()
 	addressHash, _ := PublicKeyToAddressHash(pubKey.SerializeCompressed())
 	legitimateDestination := "qbtc1legitimate_user"
-	btcqAddressHash := HashBTCQAddress(legitimateDestination)
+	qbtcAddressHash := HashQBTCAddress(legitimateDestination)
 	chainIDHash := ComputeChainIDHash("qbtc-1")
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	sig := btcecdsa.Sign(privateKey, messageHash[:])
 	r, s := parseDERSignature(t, sig.Serialize())
@@ -177,21 +177,21 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err)
 
 	// Attacker intercepts the proof and tries to redirect to their address
 	attackerDestination := "qbtc1attacker"
-	attackerBtcqHash := HashBTCQAddress(attackerDestination)
-	attackerMessageHash := ComputeClaimMessage(addressHash, attackerBtcqHash, chainIDHash)
+	attackerQBTCAddressHash := HashQBTCAddress(attackerDestination)
+	attackerMessageHash := ComputeClaimMessage(addressHash, attackerQBTCAddressHash, chainIDHash)
 
 	// Verification should fail - the proof is bound to the original destination
 	err = verifier.VerifyProof(proof, VerificationParams{
 		MessageHash:     attackerMessageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: attackerBtcqHash, // Attacker's destination
+		QBTCAddressHash: attackerQBTCAddressHash, // Attacker's destination
 		ChainID:         chainIDHash,
 	})
 	require.Error(t, err, "front-running attack should fail")
@@ -200,7 +200,7 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 	err = verifier.VerifyProof(proof, VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "legitimate verification should succeed")
@@ -222,11 +222,11 @@ func TestBinding_CrossChainReplayProtection(t *testing.T) {
 	privateKey, _ := btcec.NewPrivateKey()
 	pubKey := privateKey.PubKey()
 	addressHash, _ := PublicKeyToAddressHash(pubKey.SerializeCompressed())
-	btcqAddressHash := HashBTCQAddress("qbtc1user")
+	qbtcAddressHash := HashQBTCAddress("qbtc1user")
 
 	// Create proof for chain A
 	chainAHash := ComputeChainIDHash("qbtc-mainnet-1")
-	messageHashA := ComputeClaimMessage(addressHash, btcqAddressHash, chainAHash)
+	messageHashA := ComputeClaimMessage(addressHash, qbtcAddressHash, chainAHash)
 
 	sig := btcecdsa.Sign(privateKey, messageHashA[:])
 	r, s := parseDERSignature(t, sig.Serialize())
@@ -238,19 +238,19 @@ func TestBinding_CrossChainReplayProtection(t *testing.T) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHashA,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainAHash,
 	})
 	require.NoError(t, err)
 
 	// Try to replay on chain B
 	chainBHash := ComputeChainIDHash("qbtc-testnet-1")
-	messageHashB := ComputeClaimMessage(addressHash, btcqAddressHash, chainBHash)
+	messageHashB := ComputeClaimMessage(addressHash, qbtcAddressHash, chainBHash)
 
 	err = verifier.VerifyProof(proofA, VerificationParams{
 		MessageHash:     messageHashB,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainBHash, // Different chain!
 	})
 	require.Error(t, err, "cross-chain replay should fail")
@@ -298,8 +298,8 @@ func TestVerifier_ImmutabilityAfterInit(t *testing.T) {
 // TestEdgeCase_ZeroValues tests handling of edge case inputs.
 func TestEdgeCase_ZeroValues(t *testing.T) {
 	t.Run("empty address hash", func(t *testing.T) {
-		btcqAddressHash := HashBTCQAddress("")
-		require.NotEqual(t, [32]byte{}, btcqAddressHash, "empty string should still hash")
+		qbtcAddressHash := HashQBTCAddress("")
+		require.NotEqual(t, [32]byte{}, qbtcAddressHash, "empty string should still hash")
 	})
 
 	t.Run("nil proof rejection", func(t *testing.T) {
@@ -334,11 +334,11 @@ func TestEdgeCase_LargeInputs(t *testing.T) {
 func TestDeterminism_SameInputsSameOutput(t *testing.T) {
 	// Message computation should be deterministic
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqHash := HashBTCQAddress("qbtc1test")
+	qbtcHash := HashQBTCAddress("qbtc1test")
 	chainHash := ComputeChainIDHash("qbtc-1")
 
-	msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
-	msg2 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+	msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
+	msg2 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 
 	require.Equal(t, msg1, msg2, "message computation should be deterministic")
 
@@ -376,9 +376,9 @@ func TestCompleteness_ValidProofAccepted(t *testing.T) {
 	addressHash, err := PublicKeyToAddressHash(pubKey.SerializeCompressed())
 	require.NoError(t, err)
 
-	btcqAddressHash := HashBTCQAddress("qbtc1completeness_test")
+	qbtcAddressHash := HashQBTCAddress("qbtc1completeness_test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
-	messageHash := ComputeClaimMessage(addressHash, btcqAddressHash, chainIDHash)
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	sig := btcecdsa.Sign(privateKey, messageHash[:])
 	r, s := parseDERSignature(t, sig.Serialize())
@@ -390,7 +390,7 @@ func TestCompleteness_ValidProofAccepted(t *testing.T) {
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "proof generation should succeed for valid inputs")
@@ -398,7 +398,7 @@ func TestCompleteness_ValidProofAccepted(t *testing.T) {
 	err = verifier.VerifyProof(proof, VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
-		BTCQAddressHash: btcqAddressHash,
+		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "valid proof should be accepted")
@@ -512,7 +512,7 @@ func TestAudit_NoSecretInputLeakage(t *testing.T) {
 
 	t.Run("ECDSA circuit secrets", func(t *testing.T) {
 		// SignatureR, SignatureS, PublicKeyX, PublicKeyY should all be secret
-		// MessageHash, AddressHash, BTCQAddressHash, ChainID should be public
+		// MessageHash, AddressHash, QBTCAddressHash, ChainID should be public
 		// This is enforced by gnark tags in the struct definition
 		t.Log("ECDSA circuit has proper secret/public separation")
 	})
@@ -525,29 +525,29 @@ func TestAudit_NoSecretInputLeakage(t *testing.T) {
 // TestAudit_MessageBindingComplete verifies all binding components are included.
 func TestAudit_MessageBindingComplete(t *testing.T) {
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	btcqHash := HashBTCQAddress("qbtc1test")
+	qbtcHash := HashQBTCAddress("qbtc1test")
 	chainHash := ComputeChainIDHash("qbtc-1")
 
 	// Each component change should produce different message
 	t.Run("address binding", func(t *testing.T) {
-		msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+		msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 		diffAddr := addressHash
 		diffAddr[0] ^= 0xFF
-		msg2 := ComputeClaimMessage(diffAddr, btcqHash, chainHash)
+		msg2 := ComputeClaimMessage(diffAddr, qbtcHash, chainHash)
 		require.NotEqual(t, msg1, msg2, "different address should produce different message")
 	})
 
 	t.Run("destination binding", func(t *testing.T) {
-		msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
-		diffBtcq := HashBTCQAddress("qbtc1different")
+		msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
+		diffBtcq := HashQBTCAddress("qbtc1different")
 		msg2 := ComputeClaimMessage(addressHash, diffBtcq, chainHash)
 		require.NotEqual(t, msg1, msg2, "different destination should produce different message")
 	})
 
 	t.Run("chain binding", func(t *testing.T) {
-		msg1 := ComputeClaimMessage(addressHash, btcqHash, chainHash)
+		msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 		diffChain := ComputeChainIDHash("other-chain")
-		msg2 := ComputeClaimMessage(addressHash, btcqHash, diffChain)
+		msg2 := ComputeClaimMessage(addressHash, qbtcHash, diffChain)
 		require.NotEqual(t, msg1, msg2, "different chain should produce different message")
 	})
 
@@ -587,7 +587,7 @@ func TestAudit_ProofSizeLimits(t *testing.T) {
 //
 // 2. BINDING:
 //    - Proof bound to Bitcoin address (via Hash160)
-//    - Proof bound to destination address (BTCQAddressHash)
+//    - Proof bound to destination address (QBTCAddressHash)
 //    - Proof bound to chain ID (cross-chain replay protection)
 //    - Proof bound to version string
 //
