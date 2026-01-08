@@ -15,7 +15,7 @@ jobs:
             goarch: amd64
           - os: macos-latest
             goos: darwin
-            goarch: amd64
+            goarch: arm64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
