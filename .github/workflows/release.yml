@@ -3,9 +3,6 @@ name: Release
 on:
   release:
     types: [created]
-  push:
-    branches:
-      - add-release-build
 jobs:
   build:
     strategy:
@@ -16,9 +13,6 @@ jobs:
             goarch: amd64
           - os: macos-latest
             goos: darwin
-            goarch: amd64
-          - os: windows-latest
-            goos: windows
             goarch: amd64
     runs-on: ${{ matrix.os }}
     steps:
@@ -36,8 +30,7 @@ jobs:
       - name: Rename binary
         shell: bash
         run: |
-          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; else EXT=""; fi
-          mv build/qbtcd build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}$EXT
+          mv build/qbtcd build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:

@@ -1,6 +1,7 @@
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT := $(shell git log -1 --format='%H')
 APPNAME := qbtc
+REQUIRE_GO_VERSION = 1.25
 
 # do not override user values
 ifeq (,$(VERSION))
@@ -207,5 +208,27 @@ generate-testnet:
 		--bitcoin-rpc-port $$BITCOIN_RPC_PORT \
 		--bitcoin-rpc-user $$BITCOIN_RPC_USER \
 		--bitcoin-rpc-password $$BITCOIN_RPC_PASSWORD
+
+
+###############################################################################
+###                                Release                                  ###
+###############################################################################
+GO_VERSION := $(shell cat go.mod | grep -E 'go [0-9].[0-9]+' | cut -d ' ' -f 2)
+GORELEASER_IMAGE := ghcr.io/goreleaser/goreleaser-cross:v$(REQUIRE_GO_VERSION)
+DOCKER := $(shell which docker)
+# uses goreleaser to create static binaries for darwin on local machine
+goreleaser-build-local:
+	docker run \
+		--rm \
+		-v `pwd`:/go/src/qbtc \
+		-w /go/src/qbtc \
+		$(GORELEASER_IMAGE) \
+		release \
+		--snapshot \
+		--clean \
+		--skip=publish \
+		--release-notes ./RELEASE_NOTES.md \
+		--timeout 90m \
+		--verbose
 
 .PHONY: generate-testnet
