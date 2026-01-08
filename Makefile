@@ -35,8 +35,8 @@ build:
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version
 	@echo "build bifrost and tools"
-	@go build -o ./build/bifrost  ./cmd/bifrost 
-	@go build -o ./build/utxo-indexer ./cmd/utxo-indexer
+	@go build $(BUILD_FLAGS) -o ./build/bifrost  ./cmd/bifrost 
+	@go build $(BUILD_FLAGS) -o ./build/utxo-indexer ./cmd/utxo-indexer
 ##############
 ###  Test  ###
 ##############
