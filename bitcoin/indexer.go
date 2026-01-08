@@ -226,7 +226,6 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 		}
 		idx++
 		if idx%1000 == 0 {
-			i.logger.Info().Int("length", len(data)).Msg("utxo length")
 			writer.Flush()
 			i.logger.Info().Int("count", idx).Msg("exported utxos")
 		}
