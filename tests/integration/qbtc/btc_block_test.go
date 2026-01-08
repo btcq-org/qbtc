@@ -275,3 +275,40 @@ func (s *BtcBlockTestSuite) TestBtcBlock_DuplicateAttestations() {
 		s.T().Log("Duplicate attestations test - validators may not be properly bonded")
 	}
 }
+
+// TestBtcBlock_RejectedByAnteHandler tests that MsgBtcBlock cannot be submitted
+// as a regular transaction and is rejected by the ante handler.
+// These messages can only be submitted through the enshrined system (injected transactions).
+func (s *BtcBlockTestSuite) TestBtcBlock_RejectedByAnteHandler() {
+	// Create a minimal MsgBtcBlock message for testing
+	// We don't need valid block content since the ante handler rejects it before processing
+	blockContent := []byte("test block content")
+	attestations := s.createAttestationsFromValidators(blockContent)
+	signerAddr := s.testAccounts[0].String()
+
+	msg := &qbtctypes.MsgBtcBlock{
+		Height:       0,
+		Hash:         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+		BlockContent: blockContent,
+		Attestations: attestations,
+		Signer:       signerAddr,
+	}
+
+	// Try to submit as a regular transaction (not through enshrined system)
+	// This should be rejected by the ante handler before the message is even processed
+	result, err := s.ExecuteMsg(msg, s.testAccounts[0], s.testPrivKeys[0])
+
+	// The transaction should fail during ante handler checks
+	// The ante handler rejects MsgBtcBlock when not submitted as an injected transaction
+	// The error may be in the result or returned as an error
+	if err != nil {
+		// If ExecuteMsg returns an error, that's the rejection
+		s.Require().Error(err, "transaction should be rejected by ante handler")
+	} else {
+		// Otherwise, check the result - it should indicate failure
+		s.Require().NotNil(result, "result should not be nil")
+		s.Require().False(result.IsOK(), "transaction result should indicate failure")
+		s.Require().Contains(result.Log, "msg only allowed via proposal inject tx",
+			"error message should indicate message is only allowed via inject tx")
+	}
+}
