@@ -1,0 +1,54 @@
+---
+version: 2
+project_name: qbtc
+env:
+  - CGO_ENABLED=1
+builds:
+  - id: qbtcd-darwin-arm64
+    goos: 
+    - darwin
+    goarch: 
+    - arm64
+    env:
+      - CC=oa64-clang
+      - CGO_LDFLAGS=-L/lib
+    binary: qbtcd-darwin-arm64
+    tags:
+      - netgo
+      - ledger
+    flags:
+      - -trimpath
+      - -mod=readonly
+    main: ./cmd/qbtcd
+    ldflags:
+      - -s -w
+      - -X github.com/cosmos/cosmos-sdk/version.Name=qbtc
+      - -X github.com/cosmos/cosmos-sdk/version.AppName=qbtcd
+      - -X github.com/cosmos/cosmos-sdk/version.Version=v{{ .Version }}
+      - -X github.com/cosmos/cosmos-sdk/version.Commit={{ .Commit }}
+      - -X github.com/cosmos/cosmos-sdk/version.BuildTags=netgo,ledger
+
+  # - id: "qbtcd-linux-amd64"
+  #   goos:
+  #   - linux
+  #   goarch: 
+  #   - amd64
+  #   env:
+  #   - CC=/opt/musl-cross/bin/x86_64-linux-musl-gcc
+  #   - LD=/opt/musl-cross/bin/x86_64-linux-musl-ld
+  #   - CGO_LDFLAGS=-L/lib
+  #   binary: qbtcd-linux-amd64
+  #   tags:
+  #     - netgo
+  #     - ledger
+  #   flags:
+  #     - -trimpath
+  #     - -mod=readonly
+  #   main: ./cmd/qbtcd
+  #   ldflags:
+  #     - -s -w
+  #     - -X github.com/cosmos/cosmos-sdk/version.Name=qbtc
+  #     - -X github.com/cosmos/cosmos-sdk/version.AppName=qbtcd
+  #     - -X github.com/cosmos/cosmos-sdk/version.Version=v{{ .Version }}
+  #     - -X github.com/cosmos/cosmos-sdk/version.Commit={{ .Commit }}
+  #     - -X github.com/cosmos/cosmos-sdk/version.BuildTags=netgo,ledger
