@@ -6,6 +6,15 @@ on:
       - go.sum
       - Makefile
       - .github/workflows/build.yml
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+      - go.mod
+      - go.sum
+      - Makefile
+      - .github/workflows/build.yml
 
 jobs:
   lint:
@@ -59,4 +68,9 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: go.sum
       - name: Test
-        run: make test
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            make test-all
+          else
+            make test
+          fi
