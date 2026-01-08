@@ -330,11 +330,10 @@ func genesisStateWithValSet(
 	balances ...banktypes.Balance,
 ) (GenesisState, error) {
 	// Set validators in staking genesis
-	stakingGenesisPtr := stakingtypes.GetGenesisStateFromAppState(cdc, genesisState)
-	if stakingGenesisPtr == nil {
-		stakingGenesisPtr = stakingtypes.DefaultGenesisState()
+	stakingGenesis := stakingtypes.GetGenesisStateFromAppState(cdc, genesisState)
+	if stakingGenesis == nil {
+		stakingGenesis = stakingtypes.DefaultGenesisState()
 	}
-	stakingGenesis := stakingGenesisPtr
 
 	// Get bond denom from staking genesis params
 	bondDenom := stakingGenesis.Params.BondDenom
