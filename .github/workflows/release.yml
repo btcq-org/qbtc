@@ -33,9 +33,10 @@ jobs:
         shell: bash
         run: |
           mv build/qbtcd build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}
+          mv build/bifrost build/bifrost-${{ matrix.goos }}-${{ matrix.goarch }}
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}*
+          files: build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}* build/bifrost-${{ matrix.goos }}-${{ matrix.goarch }}*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
