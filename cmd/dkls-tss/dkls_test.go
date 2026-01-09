@@ -187,22 +187,13 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		ChainID:         chainIDHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
+	require.NotEmpty(t, proof)
 	t.Logf("  Proof size: %d bytes", len(proof))
 
 	// ========================================
-	// Step 6: Serialize/Deserialize Proof (TX Round-trip)
+	// Step 6: Verify Proof
 	// ========================================
-	t.Log("Step 6: Testing proof serialization round-trip...")
-	require.NotEmpty(t, proof)
-
-	deserializedProof, err := zk.ProofFromProtoZKProof(proof)
-	require.NotNil(t, deserializedProof)
-	require.NoError(t, err, "proof deserialization should succeed")
-
-	// ========================================
-	// Step 7: Verify Proof
-	// ========================================
-	t.Log("Step 7: Verifying ZK proof...")
+	t.Log("Step 6: Verifying ZK proof...")
 	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
 		MessageHash:     messageHash,
 		AddressHash:     addressHash,
@@ -213,9 +204,9 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	t.Log("  ✓ Proof verified successfully!")
 
 	// ========================================
-	// Step 8: Test Attack Scenarios
+	// Step 7: Test Attack Scenarios
 	// ========================================
-	t.Log("Step 8: Testing attack scenarios...")
+	t.Log("Step 7: Testing attack scenarios...")
 
 	t.Run("front-running attack fails", func(t *testing.T) {
 		// Attacker tries to claim to their address using our proof

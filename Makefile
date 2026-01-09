@@ -64,9 +64,14 @@ bench:
 	@echo Running unit tests with benchmarking...
 	@go test -mod=readonly -v -timeout 30m -bench=. ./...
 
+test-all:
+	@echo Running unit tests...
+	@export LD_LIBRARY_PATH=$$(go list -m -f '{{.Dir}}' github.com/vultisig/go-wrappers)/includes/linux:$$LD_LIBRARY_PATH && \
+	go test -mod=readonly -tags=testing -v -timeout 30m ./...
+
 test: govet test-unit
 
-.PHONY: test test-unit test-race test-cover bench
+.PHONY: test test-all test-unit test-race test-cover bench
 
 #################
 ###  Install  ###
