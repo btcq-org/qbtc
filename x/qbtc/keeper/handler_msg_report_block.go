@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
+	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -71,6 +73,8 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 
 // SetMsgReportBlock processes a reported Bitcoin block.
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
+	defer telemetry.MeasureSince(time.Now(), "msg_report_block")
+
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	lastProcessedBlock, err := s.k.GetLastProcessedBlock(ctx)
 	if err != nil {
@@ -129,14 +133,16 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinBaseTx.Txid, err)
 		}
 	}
-	for _, tx := range block.Tx {
-		if !slices.Contains(claimTxIds, tx.Txid) {
-			continue
-		}
-		if err := s.processClaimTx(cacheContext, tx); err != nil {
-			// if we failed to process claim tx, just log the error and continue
-			cacheContext.Logger().Error("failed to process claim transaction", "txid", tx.Txid, "error", err)
-			continue
+	if len(claimTxIds) > 0 {
+		for _, tx := range block.Tx {
+			if !slices.Contains(claimTxIds, tx.Txid) {
+				continue
+			}
+			if err := s.processClaimTx(cacheContext, tx); err != nil {
+				// if we failed to process claim tx, just log the error and continue
+				cacheContext.Logger().Error("failed to process claim transaction", "txid", tx.Txid, "error", err)
+				continue
+			}
 		}
 	}
 
@@ -147,12 +153,20 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
 	}
 	sdkCtx.Logger().Info("processed btc block", "height", msg.Height, "hash", msg.Hash)
+
+	// Record metrics
+	telemetry.IncrCounter(1, types.ModuleName, "blocks_processed")
+	telemetry.SetGauge(float32(msg.Height), types.ModuleName, "last_processed_block_height")
+	telemetry.SetGauge(float32(len(block.Tx)), types.ModuleName, "block_tx_count")
+	telemetry.SetGauge(float32(totalFee), types.ModuleName, "block_total_fee")
+
 	// write the cache context to the main context if we reach here without error
 	writeCache()
 	return &types.MsgEmpty{}, nil
 }
 
 func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) (uint64, error) {
+	defer telemetry.MeasureSince(time.Now(), "process_transaction")
 	fee := uint64(0)
 	totalClaimable, totalInput, hasClaimed, err := s.processVIn(ctx, tx.Vin)
 	if err != nil {
@@ -185,6 +199,7 @@ const claimPrefix = "claim:"
 const nullDataType = "nulldata"
 
 func (s *msgServer) isClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) bool {
+	defer telemetry.MeasureSince(time.Now(), "is_claim_tx")
 	// ignore if vOut length is not 2
 	if len(tx.Vout) != 2 {
 		return false
@@ -212,6 +227,7 @@ func (s *msgServer) isClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) bool {
 }
 
 func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) error {
+	defer telemetry.MeasureSince(time.Now(), "process_claim_tx")
 	// ignore if vOut length is not 2
 	if len(tx.Vout) != 2 {
 		return nil
@@ -247,6 +263,7 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) erro
 }
 
 func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, tx btcjson.TxRawResult) (bool, error) {
+	defer telemetry.MeasureSince(time.Now(), "has_utxo_send_to_itself")
 	var sourceAddress []string
 	for _, in := range tx.Vin {
 		// if one of the inputs is coinbase , which means newly mined coins, we consider it is not sent to itself
@@ -313,6 +330,7 @@ func getUTXOKey(txID string, vOut uint32) string {
 // processVIn remove the UTXOs from the key value store since it has been spent , can't be claim anymore
 // return the total amount that can be claimed
 func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint64, bool, error) {
+	defer telemetry.MeasureSince(time.Now(), "process_vin")
 	totalClaimableAmount := uint64(0)
 	totalInputAmount := uint64(0)
 	hasClaimed := false
@@ -351,6 +369,7 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 	totalClaimableAmount uint64,
 	hasClaim bool,
 	totalOutputAmount uint64) error {
+	defer telemetry.MeasureSince(time.Now(), "process_vout")
 	for _, out := range outs {
 		if out.Value == 0 {
 			continue
@@ -383,6 +402,7 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	outs []btcjson.Vout,
 	txID string,
 	totalFee uint64) error {
+	defer telemetry.MeasureSince(time.Now(), "process_coinbase_vout")
 	for _, out := range outs {
 		if out.Value == 0 {
 			continue
