@@ -25,3 +25,5 @@ cmd/zkprover/zkprover
 .testnets/
 .envrc
 dist/
+zk-setup/
+zk-cache/

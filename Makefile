@@ -237,3 +237,19 @@ goreleaser-build-local:
 		--verbose
 
 .PHONY: generate-testnet
+
+
+###################
+###  ZK Setup   ###
+###################
+
+build-prover:
+	go build -o ./build/zkprover ./cmd/zkprover
+
+build-proof-service:
+	go build -o ./build/proof-service ./cmd/proof-service
+
+setup-prover:
+	./build/zkprover setup --output ./zk-setup
+
+.PHONY: build-prover build-proof-service setup-prover
