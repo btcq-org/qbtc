@@ -1,0 +1,7 @@
+{
+  "http_listen_addr": "0.0.0.0:8090",
+  "setup_dir": "./zk-setup",
+  "chain_id": "qbtc-1",
+  "request_timeout_sec": 300,
+  "log_level": "info"
+}

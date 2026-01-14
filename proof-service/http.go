@@ -18,13 +18,12 @@ type ProveRequest struct {
 	SignatureS string `json:"signature_s"`
 
 	// PublicKey is the compressed public key (66 hex chars, 33 bytes).
-	// Must be a valid secp256k1 compressed public key (02/03 prefix).
 	PublicKey string `json:"public_key"`
 
-	// UTXOs are the UTXOs to claim
+	// UTXOs are the UTXOs to claim.
 	UTXOs []types.UTXORef `json:"utxos"`
 
-	// ClaimerAddress is the QBTC claimer address
+	// ClaimerAddress is the QBTC claimer address.
 	ClaimerAddress string `json:"claimer_address"`
 
 	// ChainID for message binding (e.g., "qbtc-1").
@@ -47,10 +46,10 @@ type ProveResponse struct {
 	// QBTCAddressHash is the hex-encoded QBTC address hash (64 chars, 32 bytes).
 	QBTCAddressHash string `json:"qbtc_address_hash"`
 
-	// UTXOs are the UTXOs included in the request (echoed back for confirmation).
+	// UTXOs are the UTXOs included in the request (echoed back).
 	UTXOs []types.UTXORef `json:"utxos"`
 
-	// ClaimerAddress is the claimer address (echoed back for confirmation).
+	// ClaimerAddress is the claimer address (echoed back).
 	ClaimerAddress string `json:"claimer_address"`
 }
 

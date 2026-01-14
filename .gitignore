@@ -9,6 +9,7 @@ release/
 *.ign
 btcqd
 build/
+bin/
 qbtcd
 debug_container.svg
 .golangci.bck.yml

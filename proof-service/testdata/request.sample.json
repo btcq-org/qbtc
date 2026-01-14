@@ -1,0 +1,13 @@
+{
+    "signature_r": "32e00cae8721c1ccaa49b459ad902d1b77b9b30e1cc6eb4cb8c37af9dffc592c",
+    "signature_s": "6e72bc2fe58bbc92ee35504604d3cc5a598c4402a7a7e2a8875d981fdab90db7",
+    "public_key": "0299c126da20397558f23658764c3a7c583db7ff706e93981cc170e27ca8336201",
+    "utxos": [
+        {
+            "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+            "vout": 1
+        }
+    ],
+    "claimer_address": "qbtc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpz7s0q",
+    "chain_id": "qbtc-1"
+}
