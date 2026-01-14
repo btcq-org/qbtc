@@ -151,6 +151,9 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	n.logger.Info().Msg("DHT network bootstrapped")
 	n.localDHT = dht
 
+	// Print local peer addresses for other nodes to connect
+	n.printLocalPeerAddresses()
+
 	bootstrapPeers, err := n.waitForQBTCNodeReady(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get bootstrap peers,err: %w", err)
@@ -165,6 +168,21 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	n.logger.Info().Msg("bootstrap initial peers")
 	return nil
 }
+
+// printLocalPeerAddresses prints the local node's P2P addresses that other nodes can use to connect
+func (n *Network) printLocalPeerAddresses() {
+	peerID := n.h.ID()
+
+	n.logger.Info().Str("peer_id", peerID.String()).Msg("Local P2P node started")
+
+	if n.config.ExternalIP != "" {
+		n.logger.Info().Msgf("Using external IP: %s@%s:%d", peerID.String(), n.config.ExternalIP, n.config.Port)
+	} else {
+		n.logger.Info().Msgf("No external IP configured; using local addresses %s@0.0.0.0:%d", peerID.String(), n.config.Port)
+	}
+
+}
+
 func (n *Network) waitForQBTCNodeReady(ctx context.Context) (bootstrapPeers []peer.AddrInfo, err error) {
 	for i := range 100 {
 		bootstrapPeers, err = n.qBTCNode.GetBootstrapPeers(ctx)
