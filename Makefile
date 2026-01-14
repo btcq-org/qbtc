@@ -261,4 +261,4 @@ docker-run-proof-service:
 setup-prover:
 	./build/zkprover setup --output ./zk-setup
 
-.PHONY: build-prover build-proof-service setup-prover docker-proof-service docker-run-proof-service
+.PHONY: build-prover build-proof-service setup-prover docker-build-proof-service docker-run-proof-service
