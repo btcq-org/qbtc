@@ -82,7 +82,9 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.logger.Error().Err(err).Msg("failed to encode health response")
+	}
 }
 
 func (s *Service) handleProve(w http.ResponseWriter, r *http.Request) {
@@ -115,21 +117,27 @@ func (s *Service) handleProve(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.logger.Error().Err(err).Msg("failed to encode prove response")
+	}
 }
 
 func (s *Service) writeError(w http.ResponseWriter, status int, code, msg, details string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
 		Error:   msg,
 		Code:    code,
 		Details: details,
-	})
+	}); err != nil {
+		s.logger.Error().Err(err).Msg("failed to encode error response")
+	}
 }
 
 func (s *Service) writeErrorStruct(w http.ResponseWriter, status int, resp *ErrorResponse) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.logger.Error().Err(err).Msg("failed to encode error response")
+	}
 }
