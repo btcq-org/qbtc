@@ -29,7 +29,6 @@ func DefaultConfig() *Config {
 		SetupDir:          "./zk-setup",
 		ChainID:           "qbtc-1",
 		RequestTimeoutSec: 300,
-		LogLevel:          "info",
 	}
 }
 
