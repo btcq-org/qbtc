@@ -1,0 +1,29 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache build-base git
+
+WORKDIR /src/app
+COPY . /src/app
+RUN go mod download
+RUN CGO_ENABLED=0 go build -o /proof-service ./cmd/proof-service
+
+# Final image
+FROM alpine:3.23
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+
+COPY --from=builder /proof-service /usr/bin/proof-service
+
+# Create directories for config and zk-setup files
+RUN mkdir -p /app/zk-setup
+
+# Default config location
+ENV CONFIG_PATH=/app/config.json
+
+EXPOSE 8090
+
+ENTRYPOINT ["proof-service"]
+CMD ["-c", "/app/config.json"]
