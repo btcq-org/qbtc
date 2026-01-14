@@ -20,9 +20,6 @@ type Config struct {
 
 	// RequestTimeoutSec is the maximum time allowed for proof generation.
 	RequestTimeoutSec int `mapstructure:"request_timeout_sec" json:"request_timeout_sec"`
-
-	// LogLevel is the logging level (debug, info, warn, error).
-	LogLevel string `mapstructure:"log_level" json:"log_level"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
