@@ -9,6 +9,7 @@ release/
 *.ign
 btcqd
 build/
+bin/
 qbtcd
 debug_container.svg
 .golangci.bck.yml
@@ -25,3 +26,5 @@ cmd/zkprover/zkprover
 .testnets/
 .envrc
 dist/
+zk-setup/
+zk-cache/
