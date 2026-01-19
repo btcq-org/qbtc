@@ -1,54 +1,99 @@
 ---
 version: 2
-project_name: qbtc
+project_name: qbtcd
 env:
   - CGO_ENABLED=1
 builds:
   - id: qbtcd-darwin-arm64
-    goos: 
-    - darwin
-    goarch: 
-    - arm64
+    main: ./cmd/qbtcd
+    binary: qbtcd
+    hooks:
+      pre:
+        - wget https://github.com/CosmWasm/wasmvm/releases/download/{{ .Env.COSMWASM_VERSION }}/libwasmvmstatic_darwin.a -O /lib/libwasmvmstatic_darwin.a
     env:
       - CC=oa64-clang
       - CGO_LDFLAGS=-L/lib
-    binary: qbtcd-darwin-arm64
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    flags:
+      - -mod=readonly
+      - -trimpath
+    ldflags:
+      - -X github.com/cosmos/cosmos-sdk/version.Name=qbtc
+      - -X github.com/cosmos/cosmos-sdk/version.AppName=qbtcd
+      - -X github.com/cosmos/cosmos-sdk/version.Version={{ .Version }}
+      - -X github.com/cosmos/cosmos-sdk/version.Commit={{ .Commit }}
+      - -X github.com/cosmos/cosmos-sdk/version.BuildTags=netgo,ledger,static_wasm
+      - -w -s
+      - -linkmode=external
     tags:
       - netgo
       - ledger
-    flags:
-      - -trimpath
-      - -mod=readonly
+      - static_wasm
+
+  - id: qbtcd-linux-amd64
     main: ./cmd/qbtcd
+    binary: qbtcd
+    hooks:
+      pre:
+        - wget https://github.com/CosmWasm/wasmvm/releases/download/{{ .Env.COSMWASM_VERSION }}/libwasmvm_muslc.x86_64.a -O /usr/lib/libwasmvm_muslc.x86_64.a
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CC=x86_64-linux-gnu-gcc
+    flags:
+      - -mod=readonly
+      - -trimpath
     ldflags:
-      - -s -w
       - -X github.com/cosmos/cosmos-sdk/version.Name=qbtc
       - -X github.com/cosmos/cosmos-sdk/version.AppName=qbtcd
-      - -X github.com/cosmos/cosmos-sdk/version.Version=v{{ .Version }}
+      - -X github.com/cosmos/cosmos-sdk/version.Version={{ .Version }}
       - -X github.com/cosmos/cosmos-sdk/version.Commit={{ .Commit }}
-      - -X github.com/cosmos/cosmos-sdk/version.BuildTags=netgo,ledger
+      - -X github.com/cosmos/cosmos-sdk/version.BuildTags=netgo,ledger,muslc,osusergo
+      - -w -s
+      - -linkmode=external
+      - -extldflags '-L/usr/lib -lwasmvm_muslc.x86_64 -Wl,-z,muldefs -static -lm'
+    tags:
+      - netgo
+      - ledger
+      - muslc
+      - osusergo
 
-  # - id: "qbtcd-linux-amd64"
-  #   goos:
-  #   - linux
-  #   goarch: 
-  #   - amd64
-  #   env:
-  #   - CC=/opt/musl-cross/bin/x86_64-linux-musl-gcc
-  #   - LD=/opt/musl-cross/bin/x86_64-linux-musl-ld
-  #   - CGO_LDFLAGS=-L/lib
-  #   binary: qbtcd-linux-amd64
-  #   tags:
-  #     - netgo
-  #     - ledger
-  #   flags:
-  #     - -trimpath
-  #     - -mod=readonly
-  #   main: ./cmd/qbtcd
-  #   ldflags:
-  #     - -s -w
-  #     - -X github.com/cosmos/cosmos-sdk/version.Name=qbtc
-  #     - -X github.com/cosmos/cosmos-sdk/version.AppName=qbtcd
-  #     - -X github.com/cosmos/cosmos-sdk/version.Version=v{{ .Version }}
-  #     - -X github.com/cosmos/cosmos-sdk/version.Commit={{ .Commit }}
-  #     - -X github.com/cosmos/cosmos-sdk/version.BuildTags=netgo,ledger
+archives:
+  - id: zipped
+    builds:
+      - qbtcd-linux-amd64
+      - qbtcd-darwin-arm64
+    name_template: "{{.ProjectName}}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: tar.gz
+    files:
+      - none*
+  - id: binaries
+    builds:
+      - qbtcd-linux-amd64
+      - qbtcd-darwin-arm64
+    name_template: "{{.ProjectName}}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
+    files:
+      - none*
+
+checksum:
+  name_template: "sha256sum.txt"
+  algorithm: sha256
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: btcq-org
+    name: qbtc
+  name_template: "v{{.Version}}"
+  mode: replace
+  draft: true
+  use_existing_draft: true
+  replace_existing_artifacts: true
