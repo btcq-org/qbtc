@@ -1,6 +1,6 @@
 ---
 version: 2
-project_name: qbtc
+project_name: qbtcd
 env:
   - CGO_ENABLED=1
 builds:
