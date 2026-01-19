@@ -218,25 +218,37 @@ generate-testnet:
 ###############################################################################
 ###                                Release                                  ###
 ###############################################################################
-GO_VERSION := $(shell cat go.mod | grep -E 'go [0-9].[0-9]+' | cut -d ' ' -f 2)
 GORELEASER_IMAGE := ghcr.io/goreleaser/goreleaser-cross:v$(REQUIRE_GO_VERSION)
-DOCKER := $(shell which docker)
+COSMWASM_VERSION := $(shell go list -m github.com/CosmWasm/wasmvm/v2 | sed 's/.* //')
+
 # uses goreleaser to create static binaries for darwin on local machine
-goreleaser-build-local:
+release-local:
 	docker run \
 		--rm \
-		-v `pwd`:/go/src/qbtc \
-		-w /go/src/qbtc \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v `pwd`:/go/src/qbtcd \
+		-w /go/src/qbtcd \
+		-e COSMWASM_VERSION=$(COSMWASM_VERSION) \
 		$(GORELEASER_IMAGE) \
 		release \
 		--snapshot \
 		--clean \
 		--skip=publish \
 		--release-notes ./RELEASE_NOTES.md \
-		--timeout 90m \
-		--verbose
+		--timeout 90m
 
-.PHONY: generate-testnet
+release:
+	docker run \
+		--rm \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v `pwd`:/go/src/qbtcd \
+		-w /go/src/qbtcd \
+		-e COSMWASM_VERSION=$(COSMWASM_VERSION) \
+		-e GITHUB_TOKEN=$(GITHUB_TOKEN) \
+		$(GORELEASER_IMAGE) \
+		release \
+		--clean
+.PHONY: generate-testnet release-local release
 
 
 ###################

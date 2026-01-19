@@ -6,39 +6,19 @@ on:
 permissions:
   contents: write
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-    runs-on: ${{ matrix.os }}
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-          cache-dependency-path: go.sum
-      - name: Build
-        run: make build
-      - name: Rename binary
-        shell: bash
+      - name: Release
         run: |
-          mv build/qbtcd build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}
-          mv build/bifrost build/bifrost-${{ matrix.goos }}-${{ matrix.goarch }}
-      - name: Upload to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            build/qbtcd-${{ matrix.goos }}-${{ matrix.goarch }}
-            build/bifrost-${{ matrix.goos }}-${{ matrix.goarch }}
+          make release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Clean
+        run: |
+          sudo rm -rf dist/
