@@ -92,7 +92,7 @@ release:
   github:
     owner: btcq-org
     name: qbtc
-  name_template: "qbtc v{{.Version}}"
+  name_template: "v{{.Version}}"
   mode: replace
   draft: true
   use_existing_draft: true
