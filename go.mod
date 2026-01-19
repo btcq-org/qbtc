@@ -5,12 +5,8 @@ go 1.25.3
 replace (
 	// fork wasmd to work with SDK v0.53.4 + IBC v10
 	github.com/CosmWasm/wasmd => github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e
-	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20251013222417-a202e4a462b5
-	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20251117040207-129ec8172d1a
-
-	// stub packages for wasmd test_common.go imports
-	github.com/cosmos/cosmos-sdk/x/crisis => ./x/crisis
-	github.com/cosmos/cosmos-sdk/x/group => ./x/group
+	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20260119105947-d45bc2da3b42
+	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20260119213558-befaf76c3fc0
 	// fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
 	// replace broken goleveldb
@@ -22,8 +18,8 @@ replace (
 
 // Exclude problematic transitive test dependencies from wasmd
 exclude (
-	github.com/cosmos/cosmos-sdk/x/crisis v0.1.1
-	github.com/cosmos/cosmos-sdk/x/group v0.2.0-rc.1
+	github.com/cosmos/cosmos-sdk/x/crisis v0.0.0-00010101000000-000000000000
+	github.com/cosmos/cosmos-sdk/x/group v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -45,13 +41,13 @@ require (
 	github.com/btcsuite/btcd v0.24.2
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
 	github.com/btcsuite/btcd/btcutil v1.1.6
-	github.com/cometbft/cometbft v0.38.18
+	github.com/cometbft/cometbft v0.38.20
 	github.com/consensys/gnark v0.14.0
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/cosmos/cosmos-db v1.1.3
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5
 	github.com/cosmos/cosmos-sdk v0.53.4
-	github.com/cosmos/gogoproto v1.7.0
+	github.com/cosmos/gogoproto v1.7.2
 	github.com/cosmos/ibc-go/v10 v10.0.0
 	github.com/ethereum/go-ethereum v1.16.3
 	github.com/gogo/protobuf v1.3.2
@@ -166,7 +162,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/bgentry/speakeasy v0.2.0 // indirect
-	github.com/bits-and-blooms/bitset v1.24.0 // indirect
+	github.com/bits-and-blooms/bitset v1.24.3 // indirect
 	github.com/bkielbasa/cyclop v1.2.3 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/blizzy78/varnamelen v0.8.0 // indirect
@@ -181,8 +177,9 @@ require (
 	github.com/bufbuild/protoplugin v0.0.0-20250218205857-750e09ce93e1 // indirect
 	github.com/butuzov/ireturn v0.4.0 // indirect
 	github.com/butuzov/mirror v1.3.0 // indirect
-	github.com/bytedance/sonic v1.14.0 // indirect
-	github.com/bytedance/sonic/loader v0.3.0 // indirect
+	github.com/bytedance/gopkg v0.1.3 // indirect
+	github.com/bytedance/sonic v1.14.2 // indirect
+	github.com/bytedance/sonic/loader v0.4.0 // indirect
 	github.com/catenacyber/perfsprint v0.9.1 // indirect
 	github.com/ccojocar/zxcvbn-go v1.0.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -195,8 +192,8 @@ require (
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/ckaznocha/intrange v0.3.1 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/cloudwego/base64x v0.1.5 // indirect
+	github.com/cloudflare/circl v1.6.2 // indirect
+	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/cockroachdb/apd/v2 v2.0.2 // indirect
 	github.com/cockroachdb/errors v1.12.0 // indirect
@@ -210,15 +207,13 @@ require (
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.17.0 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
-	github.com/cosmos/cosmos-sdk/x/crisis v0.0.0-00010101000000-000000000000 // indirect
-	github.com/cosmos/cosmos-sdk/x/group v0.0.0-00010101000000-000000000000 // indirect
 	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
 	github.com/cosmos/iavl v1.2.6 // indirect
 	github.com/cosmos/ibc-go/modules/capability v1.0.1 // indirect
 	github.com/cosmos/ibc-go/v8 v8.7.0 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
-	github.com/cosmos/ledger-cosmos-go v0.16.0 // indirect
+	github.com/cosmos/ledger-cosmos-go v1.0.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/creachadair/atomicfile v0.3.1 // indirect
 	github.com/creachadair/tomledit v0.0.24 // indirect
