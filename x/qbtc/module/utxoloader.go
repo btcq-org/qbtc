@@ -11,8 +11,7 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/gogoproto/proto"
-	"google.golang.org/protobuf/encoding/protowire"
+	protoio "github.com/cosmos/gogoproto/io"
 )
 
 type UtxoLoader struct {
@@ -47,14 +46,14 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 		return err
 	}
 	defer f.Close()
-	bufReader := bufio.NewReader(f)
+	reader := protoio.NewDelimitedReader(f, 50*1024*1024) // 50MB max message size
 	outputDir := filepath.Join(ul.DataDir, "utxo_chunks")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
 	}
 	chunkIndex := 0
 	for {
-		err := ul.LoadUtxosToChunkFile(ctx, bufReader, chunkIndex, outputDir)
+		err := ul.LoadUtxosToChunkFile(ctx, reader, chunkIndex, outputDir)
 		if err != nil {
 			ctx.Logger().Info("spliting utxo files", "total", chunkIndex, "chuck_index", chunkIndex)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -67,70 +66,44 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 	}
 }
 
-func (ul *UtxoLoader) LoadUtxosToChunkFile(ctx sdk.Context, srcFileReader io.Reader, chunkIndex int, outputDir string) (err error) {
+func (ul *UtxoLoader) LoadUtxosToChunkFile(ctx sdk.Context, genesisReader protoio.Reader, chunkIndex int, outputDir string) (err error) {
 	chunkFile := filepath.Join(outputDir, fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
 	outF, createErr := os.Create(chunkFile)
 	if createErr != nil {
 		return createErr
 	}
-	bufWriter := bufio.NewWriter(outF)
 
-	// ensure buffer if flushed and file is properly closed
-	// and returning an error if there is a failure during file finalizatio
+	bufferWriter := bufio.NewWriter(outF)
+	writer := protoio.NewDelimitedWriter(bufferWriter)
+
+	// ensure file is properly closed
+	// and returning an error if there is a failure during file finalization
 	defer func() {
-		flushErr := bufWriter.Flush()
-		closeErr := outF.Close()
-		if flushErr != nil || closeErr != nil {
-			ctx.Logger().Error("failed to finalize file", "flush_error", flushErr, "close_error", closeErr)
+		flushErr := bufferWriter.Flush()
+		if flushErr != nil {
+			ctx.Logger().Error("failed to flush to file", "flush_error", flushErr)
 		}
-		err = errors.Join(err, flushErr, closeErr)
+		closeErr := outF.Close()
+		if closeErr != nil {
+			ctx.Logger().Error("failed to finalize file", "close_error", closeErr)
+		}
+		err = errors.Join(err, closeErr, flushErr)
 	}()
 
 	// Read and write 1,000,000 UTXOs per chunk file
 	for range 1000000 {
-		utxoBytes, err := ul.readUtxo(srcFileReader)
-		if err != nil {
-			return fmt.Errorf("error reading utox: %w", err)
+		var utxo types.UTXO
+		if err := genesisReader.ReadMsg(&utxo); err != nil {
+			return fmt.Errorf("error reading utxo: %w", err)
 		}
 
-		if err := ul.writeUtxo(bufWriter, utxoBytes); err != nil {
+		if err := writer.WriteMsg(&utxo); err != nil {
 			return fmt.Errorf("error writing utxo: %w", err)
 		}
 	}
-	return nil
-}
-func (ul *UtxoLoader) readUtxo(reader io.Reader) ([]byte, error) {
-	lengthBytes := make([]byte, protowire.SizeFixed32())
-	n, err := io.ReadFull(reader, lengthBytes)
-	if err != nil {
-		return nil, err
-	}
-	if n < protowire.SizeFixed32() {
-		return nil, io.EOF
-	}
-	size, n := protowire.ConsumeFixed32(lengthBytes)
-	if n < 0 {
-		return nil, fmt.Errorf("failed to read utxo size")
-	}
-	utxoBytes := make([]byte, size)
-	n, err = io.ReadFull(reader, utxoBytes)
-	if err != nil {
-		return nil, err
-	}
-	if uint32(n) < size {
-		return nil, io.EOF
-	}
-	return utxoBytes, nil
-}
 
-func (ul *UtxoLoader) writeUtxo(writer io.Writer, utxoData []byte) error {
-	lengthBytes := protowire.AppendFixed32(nil, uint32(len(utxoData)))
-	_, err := writer.Write(lengthBytes)
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(utxoData)
-	return err
+	// close proto writer
+	return writer.Close()
 }
 func (ul *UtxoLoader) EnsureLoadUtxoFromChunkFile(ctx sdk.Context, chunkIndex int, k *keeper.Keeper) error {
 	chunkFile := filepath.Join(ul.DataDir, "utxo_chunks", fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
@@ -154,19 +127,15 @@ func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k *keeper.Keeper, 
 		return err
 	}
 	defer f.Close()
-	bufReader := bufio.NewReader(f)
+	reader := protoio.NewDelimitedReader(f, 50*1024*1024) // 10MB max message size
 	processed := 0
 	for {
-		utxoBytes, err := ul.readUtxo(bufReader)
-		if err != nil {
+		var utxo types.UTXO
+		if err := reader.ReadMsg(&utxo); err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				ctx.Logger().Warn("break", "processed", processed, "err", err)
 				break
 			}
-			return err
-		}
-		var utxo types.UTXO
-		if err := proto.Unmarshal(utxoBytes, &utxo); err != nil {
 			return err
 		}
 		// This is the first UTXO , set it to already claimed , we need to mint 50 QBTC to start our genesis node
