@@ -12,7 +12,7 @@ import (
 
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
-	"github.com/cometbft/cometbft/libs/protoio"
+	protoio "github.com/cosmos/gogoproto/io"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -218,7 +218,7 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 				Address: vOut.ScriptPubKey.Address,
 			},
 		}
-		_, err = protoWriter.WriteMsg(&pVout)
+		err = protoWriter.WriteMsg(&pVout)
 		if err != nil {
 			return err
 		}
