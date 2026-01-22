@@ -179,7 +179,7 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	defer func() {
 		if f != nil {
 			bufErr := bufWriter.Flush()
-			if err != nil {
+			if bufErr != nil {
 				i.logger.Error().Err(bufErr).Msg("error flushing to file")
 			}
 
