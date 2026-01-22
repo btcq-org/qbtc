@@ -55,7 +55,7 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 	for {
 		err := ul.LoadUtxosToChunkFile(ctx, reader, chunkIndex, outputDir)
 		if err != nil {
-			ctx.Logger().Info("spliting utxo files", "total", chunkIndex, "chuck_index", chunkIndex)
+			ctx.Logger().Info("splitting utxo files", "total", chunkIndex, "chunk_index", chunkIndex)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				return nil
 			}
@@ -127,7 +127,7 @@ func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k *keeper.Keeper, 
 		return err
 	}
 	defer f.Close()
-	reader := protoio.NewDelimitedReader(f, 50*1024*1024) // 10MB max message size
+	reader := protoio.NewDelimitedReader(f, 50*1024*1024) // 50MB max message size
 	processed := 0
 	for {
 		var utxo types.UTXO

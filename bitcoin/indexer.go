@@ -178,12 +178,17 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	// close file only if we created one (not stdout)
 	defer func() {
 		if f != nil {
+			bufErr := bufWriter.Flush()
+			if err != nil {
+				i.logger.Error().Err(bufErr).Msg("error flushing to file")
+			}
+
 			closeErr := f.Close()
 			if closeErr != nil {
 				i.logger.Error().Err(closeErr).Msg("error closing the export file")
 			}
 			// return final error
-			err = errors.Join(err, closeErr)
+			err = errors.Join(err, closeErr, bufErr)
 		}
 	}()
 
@@ -213,7 +218,10 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 				Address: vOut.ScriptPubKey.Address,
 			},
 		}
-		protoWriter.WriteMsg(&pVout)
+		_, err = protoWriter.WriteMsg(&pVout)
+		if err != nil {
+			return err
+		}
 		idx++
 		if idx%1000 == 0 {
 			i.logger.Info().Int("count", idx).Msg("exported utxos")
@@ -225,10 +233,6 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	err = protoWriter.Close()
 	if err != nil {
 		return fmt.Errorf("error closing protowriter: %w", err)
-	}
-	err = bufWriter.Flush()
-	if err != nil {
-		return fmt.Errorf("error : %w", err)
 	}
 	return nil
 }
