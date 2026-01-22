@@ -2,6 +2,7 @@ package module
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -55,7 +56,7 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 	for {
 		err := ul.LoadUtxosToChunkFile(ctx, bufReader, chunkIndex, outputDir)
 		if err != nil {
-			ctx.Logger().Info("spliting utxo files", "total", chunkIndex)
+			ctx.Logger().Info("spliting utxo files", "total", chunkIndex, "chuck_index", chunkIndex)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				return nil
 			}
@@ -66,28 +67,34 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 	}
 }
 
-func (ul *UtxoLoader) LoadUtxosToChunkFile(ctx sdk.Context, srcFileReader io.Reader, chunkIndex int, outputDir string) error {
+func (ul *UtxoLoader) LoadUtxosToChunkFile(ctx sdk.Context, srcFileReader io.Reader, chunkIndex int, outputDir string) (err error) {
 	chunkFile := filepath.Join(outputDir, fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
-	outF, err := os.Create(chunkFile)
-	if err != nil {
-		return err
+	outF, createErr := os.Create(chunkFile)
+	if createErr != nil {
+		return createErr
 	}
-	defer func() {
-		if err := outF.Close(); err != nil {
-			ctx.Logger().Error("failed to close out file", "error", err)
-		}
-	}()
 	bufWriter := bufio.NewWriter(outF)
+
+	// ensure buffer if flushed and file is properly closed
+	// and returning an error if there is a failure during file finalizatio
+	defer func() {
+		flushErr := bufWriter.Flush()
+		closeErr := outF.Close()
+		if flushErr != nil || closeErr != nil {
+			ctx.Logger().Error("failed to finalize file", "flush_error", flushErr, "close_error", closeErr)
+		}
+		err = errors.Join(err, flushErr, closeErr)
+	}()
+
 	// Read and write 1,000,000 UTXOs per chunk file
 	for range 1000000 {
 		utxoBytes, err := ul.readUtxo(srcFileReader)
 		if err != nil {
-			bufWriter.Flush()
-			return err
+			return fmt.Errorf("error reading utox: %w", err)
 		}
 
 		if err := ul.writeUtxo(bufWriter, utxoBytes); err != nil {
-			return err
+			return fmt.Errorf("error writing utxo: %w", err)
 		}
 	}
 	return nil
@@ -148,10 +155,12 @@ func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k *keeper.Keeper, 
 	}
 	defer f.Close()
 	bufReader := bufio.NewReader(f)
+	processed := 0
 	for {
 		utxoBytes, err := ul.readUtxo(bufReader)
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				ctx.Logger().Warn("break", "processed", processed, "err", err)
 				break
 			}
 			return err
@@ -168,6 +177,7 @@ func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k *keeper.Keeper, 
 		if err != nil {
 			return err
 		}
+		processed++
 	}
 
 	return nil

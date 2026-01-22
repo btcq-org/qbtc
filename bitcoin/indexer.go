@@ -3,6 +3,7 @@ package bitcoin
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -165,7 +166,7 @@ func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 
 // ExportUTXO writes DB entries that mention "utxo" in the key to the named file (base64-encoded values).
 // If outPath is empty, it writes to stdout instead.
-func (i *Indexer) ExportUTXO(outPath string) error {
+func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	if outPath == "" {
 		return fmt.Errorf("output filepath is empty")
 	}
@@ -177,9 +178,16 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 	// close file only if we created one (not stdout)
 	defer func() {
 		if f != nil {
-			if err := f.Close(); err != nil {
-				i.logger.Error().Err(err).Msg("failed to close export file")
+			flushErr := writer.Flush()
+			if flushErr != nil {
+				i.logger.Error().Err(flushErr).Msg("unable to flush writer")
 			}
+			closeErr := f.Close()
+			if closeErr != nil {
+				i.logger.Error().Err(closeErr).Msg("error closing the export file")
+			}
+			// return final error
+			err = errors.Join(err, flushErr, closeErr)
 		}
 	}()
 
