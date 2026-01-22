@@ -12,11 +12,10 @@ import (
 
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
-	"github.com/cosmos/gogoproto/proto"
+	"github.com/cometbft/cometbft/libs/protoio"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/syndtr/goleveldb/leveldb"
-	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type Indexer struct {
@@ -174,20 +173,17 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create export file: %w", err)
 	}
-	writer := bufio.NewWriter(f)
+	bufWriter := bufio.NewWriter(f)
+	protoWriter := protoio.NewDelimitedWriter(bufWriter)
 	// close file only if we created one (not stdout)
 	defer func() {
 		if f != nil {
-			flushErr := writer.Flush()
-			if flushErr != nil {
-				i.logger.Error().Err(flushErr).Msg("unable to flush writer")
-			}
 			closeErr := f.Close()
 			if closeErr != nil {
 				i.logger.Error().Err(closeErr).Msg("error closing the export file")
 			}
 			// return final error
-			err = errors.Join(err, flushErr, closeErr)
+			err = errors.Join(err, closeErr)
 		}
 	}()
 
@@ -217,29 +213,22 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 				Address: vOut.ScriptPubKey.Address,
 			},
 		}
-		data, err := proto.Marshal(&pVout)
-		if err != nil {
-			i.logger.Error().Err(err).Msg("failed to marshal utxo during export")
-			continue
-		}
-		_, err = writer.Write(protowire.AppendFixed32(nil, uint32(len(data))))
-		if err != nil {
-			i.logger.Error().Err(err).Msg("failed to write fixed32 length during export")
-			continue
-		}
-		_, err = writer.Write(data)
-		if err != nil {
-			i.logger.Error().Err(err).Msg("failed to write utxo data during export")
-			continue
-		}
+		protoWriter.WriteMsg(&pVout)
 		idx++
 		if idx%1000 == 0 {
-			writer.Flush()
 			i.logger.Info().Int("count", idx).Msg("exported utxos")
 		}
 	}
 	if err := it.Error(); err != nil {
 		return fmt.Errorf("iterator error during export: %w", err)
+	}
+	err = protoWriter.Close()
+	if err != nil {
+		return fmt.Errorf("error closing protowriter: %w", err)
+	}
+	err = bufWriter.Flush()
+	if err != nil {
+		return fmt.Errorf("error : %w", err)
 	}
 	return nil
 }
