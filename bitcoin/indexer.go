@@ -3,6 +3,7 @@ package bitcoin
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -11,11 +12,10 @@ import (
 
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
-	"github.com/cosmos/gogoproto/proto"
+	protoio "github.com/cosmos/gogoproto/io"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/syndtr/goleveldb/leveldb"
-	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type Indexer struct {
@@ -165,7 +165,7 @@ func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 
 // ExportUTXO writes DB entries that mention "utxo" in the key to the named file (base64-encoded values).
 // If outPath is empty, it writes to stdout instead.
-func (i *Indexer) ExportUTXO(outPath string) error {
+func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	if outPath == "" {
 		return fmt.Errorf("output filepath is empty")
 	}
@@ -173,13 +173,22 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create export file: %w", err)
 	}
-	writer := bufio.NewWriter(f)
+	bufWriter := bufio.NewWriter(f)
+	protoWriter := protoio.NewDelimitedWriter(bufWriter)
 	// close file only if we created one (not stdout)
 	defer func() {
 		if f != nil {
-			if err := f.Close(); err != nil {
-				i.logger.Error().Err(err).Msg("failed to close export file")
+			bufErr := bufWriter.Flush()
+			if bufErr != nil {
+				i.logger.Error().Err(bufErr).Msg("error flushing to file")
 			}
+
+			closeErr := f.Close()
+			if closeErr != nil {
+				i.logger.Error().Err(closeErr).Msg("error closing the export file")
+			}
+			// return final error
+			err = errors.Join(err, closeErr, bufErr)
 		}
 	}()
 
@@ -209,29 +218,21 @@ func (i *Indexer) ExportUTXO(outPath string) error {
 				Address: vOut.ScriptPubKey.Address,
 			},
 		}
-		data, err := proto.Marshal(&pVout)
+		err = protoWriter.WriteMsg(&pVout)
 		if err != nil {
-			i.logger.Error().Err(err).Msg("failed to marshal utxo during export")
-			continue
-		}
-		_, err = writer.Write(protowire.AppendFixed32(nil, uint32(len(data))))
-		if err != nil {
-			i.logger.Error().Err(err).Msg("failed to write fixed32 length during export")
-			continue
-		}
-		_, err = writer.Write(data)
-		if err != nil {
-			i.logger.Error().Err(err).Msg("failed to write utxo data during export")
-			continue
+			return err
 		}
 		idx++
 		if idx%1000 == 0 {
-			writer.Flush()
 			i.logger.Info().Int("count", idx).Msg("exported utxos")
 		}
 	}
 	if err := it.Error(); err != nil {
 		return fmt.Errorf("iterator error during export: %w", err)
+	}
+	err = protoWriter.Close()
+	if err != nil {
+		return fmt.Errorf("error closing protowriter: %w", err)
 	}
 	return nil
 }
