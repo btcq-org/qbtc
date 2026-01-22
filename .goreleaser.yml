@@ -62,21 +62,74 @@ builds:
       - ledger
       - muslc
       - osusergo
+  - id: bifrost-linux-amd64
+    main: ./cmd/bifrost
+    binary: bifrost
+    goos:
+      - linux
+    goarch:
+      - amd64
+    flags:
+      - -mod=readonly
+      - -trimpath
+    tags:
+      - netgo
+
+  - id: proof-service-linux-amd64
+    main: ./cmd/proof-service
+    binary: proof-service
+    goos:
+      - linux
+    goarch:
+      - amd64
+    flags:
+      - -mod=readonly
+      - -trimpath
+    tags:
+      - netgo
 
 archives:
-  - id: zipped
+  - id: qbtcd-zipped
     builds:
       - qbtcd-linux-amd64
       - qbtcd-darwin-arm64
-    name_template: "{{.ProjectName}}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "qbtcd-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format: tar.gz
     files:
       - none*
-  - id: binaries
+  - id: qbtcd-binaries
     builds:
       - qbtcd-linux-amd64
       - qbtcd-darwin-arm64
-    name_template: "{{.ProjectName}}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "qbtcd-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
+    files:
+      - none*
+  - id: bifrost-zipped
+    builds:
+      - bifrost-linux-amd64
+    name_template: "bifrost-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: tar.gz
+    files:
+      - none*
+  - id: bifrost-binaries
+    builds:
+      - bifrost-linux-amd64
+    name_template: "bifrost-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: binary
+    files:
+      - none*
+  - id: proof-service-zipped
+    builds:
+      - proof-service-linux-amd64
+    name_template: "proof-service-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    format: tar.gz
+    files:
+      - none*
+  - id: proof-service-binaries
+    builds:
+      - proof-service-linux-amd64
+    name_template: "proof-service-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format: binary
     files:
       - none*
