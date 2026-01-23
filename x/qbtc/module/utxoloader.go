@@ -56,7 +56,7 @@ func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
 		err := ul.LoadUtxosToChunkFile(ctx, reader, chunkIndex, outputDir)
 		if err != nil {
 			ctx.Logger().Info("splitting utxo files", "total", chunkIndex, "chunk_index", chunkIndex)
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				return nil
 			}
 			return err
