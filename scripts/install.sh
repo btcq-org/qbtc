@@ -8,7 +8,7 @@ INSTALL_DIR="/usr/local/bin"
 QBTCD_HOME="$HOME/.qbtc"
 BIFROST_HOME="$HOME/.bifrost"
 ARCH="linux-amd64"
-GENESIS_URL="https://gist.githubusercontent.com/jhernandezb/a4ebfac37bd819111379079de5c53d19/raw/0da1001d14fd2bd833995e9ab60f55cd5b30e08b/genesis.json"
+GENESIS_URL="https://sgp1.vultrobjects.com/genesis/genesis.json"
 GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-933462.bin"
 COSMOVISOR_URL="https://github.com/cosmos/cosmos-sdk/releases/download/cosmovisor%2Fv1.7.1/cosmovisor-v1.7.1-linux-amd64.tar.gz"
 
