@@ -27,7 +27,6 @@ USE_COSMOVISOR=false
 SETUP_QBTCD_SERVICE=false
 SETUP_BIFROST_SERVICE=false
 VERSION=""
-SERVICE_USER=""
 
 # ========== UTILITY FUNCTIONS ==========
 
@@ -81,11 +80,28 @@ check_dependencies() {
         missing+=("tar")
     fi
 
+    if ! command -v sudo &> /dev/null; then
+        missing+=("sudo")
+    fi
+
+    if ! command -v sha256sum &> /dev/null; then
+        missing+=("sha256sum")
+    fi
+
     if [[ ${#missing[@]} -gt 0 ]]; then
         print_error "Missing required dependencies: ${missing[*]}"
         print_info "Please install them and run this script again."
         exit 1
     fi
+}
+
+check_systemctl() {
+    if ! command -v systemctl &> /dev/null; then
+        print_error "systemctl not found. Systemd is required for service setup."
+        print_info "Skipping systemd service configuration."
+        return 1
+    fi
+    return 0
 }
 
 show_help() {
@@ -100,7 +116,6 @@ Options:
 
 Environment Variables:
     QBTC_VERSION             Alternative way to specify version
-    QBTC_SERVICE_USER        User/group for systemd services (default: current user)
 
 Examples:
     $(basename "$0")                     # Install default version interactively
@@ -144,7 +159,9 @@ download_and_install_qbtcd() {
 
     local archive="qbtcd-${VERSION}-${ARCH}.tar.gz"
     local url="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${archive}"
+    local checksum_url="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/sha256sum.txt"
     local tmp_dir
+    local expected_checksum
 
     tmp_dir=$(mktemp -d)
 
@@ -154,6 +171,28 @@ download_and_install_qbtcd() {
         rm -rf "$tmp_dir"
         return 1
     fi
+
+    print_info "Downloading checksum file..."
+    if ! curl -fsSL "$checksum_url" -o "$tmp_dir/sha256sum.txt"; then
+        print_error "Failed to download checksum file from $checksum_url"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    print_info "Verifying checksum..."
+    expected_checksum=$(grep "  ${archive}$" "$tmp_dir/sha256sum.txt" | awk '{print $1}')
+    if [[ -z "$expected_checksum" ]]; then
+        print_error "Checksum for $archive not found in sha256sum.txt"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    if ! (cd "$tmp_dir" && echo "$expected_checksum  $archive" | sha256sum -c --status); then
+        print_error "Checksum verification failed for $archive"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    print_success "Checksum verified"
 
     print_info "Extracting archive..."
     tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
@@ -171,7 +210,9 @@ download_and_install_bifrost() {
 
     local archive="bifrost-${VERSION}-${ARCH}.tar.gz"
     local url="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${archive}"
+    local checksum_url="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/sha256sum.txt"
     local tmp_dir
+    local expected_checksum
 
     tmp_dir=$(mktemp -d)
 
@@ -182,6 +223,28 @@ download_and_install_bifrost() {
         return 1
     fi
 
+    print_info "Downloading checksum file..."
+    if ! curl -fsSL "$checksum_url" -o "$tmp_dir/sha256sum.txt"; then
+        print_error "Failed to download checksum file from $checksum_url"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    print_info "Verifying checksum..."
+    expected_checksum=$(grep "  ${archive}$" "$tmp_dir/sha256sum.txt" | awk '{print $1}')
+    if [[ -z "$expected_checksum" ]]; then
+        print_error "Checksum for $archive not found in sha256sum.txt"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    if ! (cd "$tmp_dir" && echo "$expected_checksum  $archive" | sha256sum -c --status); then
+        print_error "Checksum verification failed for $archive"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    print_success "Checksum verified"
+
     print_info "Extracting archive..."
     tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
 
@@ -189,7 +252,6 @@ download_and_install_bifrost() {
     sudo install -m 755 "$tmp_dir/bifrost" "$INSTALL_DIR/bifrost"
 
     rm -rf "$tmp_dir"
-
     print_success "bifrost installed successfully"
     INSTALLED_BIFROST=true
 }
@@ -252,6 +314,7 @@ init_qbtcd() {
         qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id bqtbc-testnet
     fi
 
+    qbtcd config set client chain-id qbtc-testnet --home "$QBTCD_HOME"
     print_info "Downloading genesis.json..."
     if ! curl -fsSL "$GENESIS_URL" -o "$QBTCD_HOME/config/genesis.json"; then
         print_error "Failed to download genesis.json"
@@ -308,40 +371,26 @@ create_bifrost_config() {
 }
 EOF
 
+    chmod 600 "$BIFROST_HOME/config.json"
     print_success "Bifrost config template created at $BIFROST_HOME/config.json"
 }
 
 # ========== SYSTEMD FUNCTIONS ==========
 
-ask_service_user() {
-    local default_user="${QBTC_SERVICE_USER:-$(whoami)}"
-
-    echo ""
-    read -r -p "Service user [$default_user]: " SERVICE_USER
-    SERVICE_USER="${SERVICE_USER:-$default_user}"
-    SERVICE_GROUP="$SERVICE_USER"
-
-    # Resolve home directory for the service user
-    if [[ "$SERVICE_USER" != "$(whoami)" ]]; then
-        SERVICE_USER_HOME=$(getent passwd "$SERVICE_USER" | cut -d: -f6)
-        if [[ -z "$SERVICE_USER_HOME" ]]; then
-            print_error "User '$SERVICE_USER' does not exist"
-            return 1
-        fi
-    else
-        SERVICE_USER_HOME="$HOME"
-    fi
-
-    print_info "Using user/group: $SERVICE_USER"
-    print_info "Service home directory: $SERVICE_USER_HOME"
-}
-
 setup_qbtcd_systemd() {
     print_header "Setting up qbtcd systemd service"
 
     local service_file="/etc/systemd/system/qbtcd.service"
-    local qbtcd_home="${SERVICE_USER_HOME}/.qbtc"
+    local service_user
+    local service_group
+    service_user=$(whoami)
+    service_group=$(id -gn "$service_user" 2>/dev/null)
+    if [[ -z "$service_group" ]]; then
+        print_error "Failed to resolve primary group for '$service_user'"
+        return 1
+    fi
 
+    print_info "Using user: $service_user, group: $service_group"
     print_info "Creating systemd service file..."
 
     if $USE_COSMOVISOR; then
@@ -354,14 +403,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_GROUP}
-ExecStart=${INSTALL_DIR}/cosmovisor run start --home ${qbtcd_home}
+User=${service_user}
+Group=${service_group}
+ExecStart=${INSTALL_DIR}/cosmovisor run start --home ${QBTCD_HOME}
 Restart=always
 RestartSec=10
 LimitNOFILE=65535
 Environment="DAEMON_NAME=qbtcd"
-Environment="DAEMON_HOME=${qbtcd_home}"
+Environment="DAEMON_HOME=${QBTCD_HOME}"
 Environment="DAEMON_ALLOW_DOWNLOAD_BINARIES=false"
 Environment="DAEMON_RESTART_AFTER_UPGRADE=true"
 Environment="UNSAFE_SKIP_BACKUP=true"
@@ -378,9 +427,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_GROUP}
-ExecStart=${INSTALL_DIR}/qbtcd start --home ${qbtcd_home}
+User=${service_user}
+Group=${service_group}
+ExecStart=${INSTALL_DIR}/qbtcd start --home ${QBTCD_HOME}
 Restart=always
 RestartSec=10
 LimitNOFILE=65535
@@ -404,8 +453,16 @@ setup_bifrost_systemd() {
     print_header "Setting up bifrost systemd service"
 
     local service_file="/etc/systemd/system/bifrost.service"
-    local bifrost_home="${SERVICE_USER_HOME}/.bifrost"
+    local service_user
+    local service_group
+    service_user=$(whoami)
+    service_group=$(id -gn "$service_user" 2>/dev/null)
+    if [[ -z "$service_group" ]]; then
+        print_error "Failed to resolve primary group for '$service_user'"
+        return 1
+    fi
 
+    print_info "Using user: $service_user, group: $service_group"
     print_info "Creating systemd service file..."
 
     sudo tee "$service_file" > /dev/null << EOF
@@ -414,9 +471,9 @@ Description=Bifrost Service
 
 [Service]
 Type=simple
-User=${SERVICE_USER}
-Group=${SERVICE_GROUP}
-ExecStart=${INSTALL_DIR}/bifrost start --config ${bifrost_home}/config.json
+User=${service_user}
+Group=${service_group}
+ExecStart=${INSTALL_DIR}/bifrost start --config ${BIFROST_HOME}/config.json
 Restart=always
 RestartSec=10
 LimitNOFILE=65535
@@ -466,13 +523,13 @@ print_summary() {
         echo "Systemd services:"
         if $SETUP_QBTCD_SERVICE; then
             if $USE_COSMOVISOR; then
-                echo "  - qbtcd.service (user: $SERVICE_USER, via cosmovisor)"
+                echo "  - qbtcd.service (user: $(whoami), via cosmovisor)"
             else
-                echo "  - qbtcd.service (user: $SERVICE_USER)"
+                echo "  - qbtcd.service (user: $(whoami))"
             fi
         fi
         if $SETUP_BIFROST_SERVICE; then
-            echo "  - bifrost.service (user: $SERVICE_USER)"
+            echo "  - bifrost.service (user: $(whoami))"
         fi
     fi
 
@@ -574,9 +631,7 @@ main() {
 
     # Setup systemd services
     if $INSTALLED_QBTCD || $INSTALLED_BIFROST; then
-        if ask_yn "Setup systemd services?" "y"; then
-            ask_service_user
-
+        if check_systemctl && ask_yn "Setup systemd services?" "y"; then
             if $INSTALLED_QBTCD; then
                 if ask_yn "Create qbtcd systemd service?" "y"; then
                     setup_qbtcd_systemd
