@@ -10,6 +10,7 @@ BIFROST_HOME="$HOME/.bifrost"
 ARCH="linux-amd64"
 GENESIS_URL="https://gist.githubusercontent.com/jhernandezb/a4ebfac37bd819111379079de5c53d19/raw/0da1001d14fd2bd833995e9ab60f55cd5b30e08b/genesis.json"
 GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-933462.bin"
+COSMOVISOR_URL="https://github.com/cosmos/cosmos-sdk/releases/download/cosmovisor%2Fv1.7.1/cosmovisor-v1.7.1-linux-amd64.tar.gz"
 
 # ========== COLORS ==========
 RED='\033[0;31m'
@@ -21,6 +22,8 @@ NC='\033[0m' # No Color
 # ========== STATE ==========
 INSTALLED_QBTCD=false
 INSTALLED_BIFROST=false
+INSTALLED_COSMOVISOR=false
+USE_COSMOVISOR=false
 SETUP_QBTCD_SERVICE=false
 SETUP_BIFROST_SERVICE=false
 VERSION=""
@@ -191,6 +194,45 @@ download_and_install_bifrost() {
     INSTALLED_BIFROST=true
 }
 
+download_and_install_cosmovisor() {
+    print_header "Installing cosmovisor"
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    print_info "Downloading cosmovisor..."
+    if ! curl -fsSL "$COSMOVISOR_URL" -o "$tmp_dir/cosmovisor.tar.gz"; then
+        print_error "Failed to download cosmovisor from $COSMOVISOR_URL"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    print_info "Extracting archive..."
+    tar -xzf "$tmp_dir/cosmovisor.tar.gz" -C "$tmp_dir"
+
+    print_info "Installing cosmovisor to ${INSTALL_DIR} (requires sudo)..."
+    sudo install -m 755 "$tmp_dir/cosmovisor" "$INSTALL_DIR/cosmovisor"
+
+    rm -rf "$tmp_dir"
+    print_success "cosmovisor installed successfully"
+    INSTALLED_COSMOVISOR=true
+}
+
+setup_cosmovisor_directories() {
+    print_header "Setting up cosmovisor directory structure"
+
+    local cosmovisor_dir="$QBTCD_HOME/cosmovisor"
+    local genesis_bin_dir="$cosmovisor_dir/genesis/bin"
+
+    print_info "Creating cosmovisor directories..."
+    mkdir -p "$genesis_bin_dir"
+
+    print_info "Copying qbtcd binary to cosmovisor genesis..."
+    cp "$INSTALL_DIR/qbtcd" "$genesis_bin_dir/qbtcd"
+
+    print_success "Cosmovisor directory structure created at $cosmovisor_dir"
+}
+
 init_qbtcd() {
     print_header "Initializing qbtcd"
 
@@ -302,10 +344,37 @@ setup_qbtcd_systemd() {
 
     print_info "Creating systemd service file..."
 
-    sudo tee "$service_file" > /dev/null << EOF
+    if $USE_COSMOVISOR; then
+        print_info "Using cosmovisor to manage qbtcd..."
+        sudo tee "$service_file" > /dev/null << EOF
+[Unit]
+Description=QBTC Daemon (via Cosmovisor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${SERVICE_USER}
+Group=${SERVICE_GROUP}
+ExecStart=${INSTALL_DIR}/cosmovisor run start --home ${qbtcd_home}
+Restart=always
+RestartSec=10
+LimitNOFILE=65535
+Environment="DAEMON_NAME=qbtcd"
+Environment="DAEMON_HOME=${qbtcd_home}"
+Environment="DAEMON_ALLOW_DOWNLOAD_BINARIES=false"
+Environment="DAEMON_RESTART_AFTER_UPGRADE=true"
+Environment="UNSAFE_SKIP_BACKUP=true"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    else
+        sudo tee "$service_file" > /dev/null << EOF
 [Unit]
 Description=QBTC Daemon
-
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -319,6 +388,7 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
 
     print_info "Reloading systemd daemon..."
     sudo systemctl daemon-reload
@@ -374,6 +444,9 @@ print_summary() {
     if $INSTALLED_QBTCD; then
         echo "  - qbtcd v${VERSION} -> ${INSTALL_DIR}/qbtcd"
     fi
+    if $INSTALLED_COSMOVISOR; then
+        echo "  - cosmovisor -> ${INSTALL_DIR}/cosmovisor"
+    fi
     if $INSTALLED_BIFROST; then
         echo "  - bifrost v${VERSION} -> ${INSTALL_DIR}/bifrost"
     fi
@@ -392,7 +465,11 @@ print_summary() {
         echo ""
         echo "Systemd services:"
         if $SETUP_QBTCD_SERVICE; then
-            echo "  - qbtcd.service (user: $SERVICE_USER)"
+            if $USE_COSMOVISOR; then
+                echo "  - qbtcd.service (user: $SERVICE_USER, via cosmovisor)"
+            else
+                echo "  - qbtcd.service (user: $SERVICE_USER)"
+            fi
         fi
         if $SETUP_BIFROST_SERVICE; then
             echo "  - bifrost.service (user: $SERVICE_USER)"
@@ -461,6 +538,14 @@ main() {
         print_info "Skipping qbtcd installation."
     fi
 
+    # Install cosmovisor (for chain upgrades)
+    if $INSTALLED_QBTCD; then
+        if ask_yn "Install cosmovisor? (manages chain upgrades)" "y"; then
+            download_and_install_cosmovisor
+            USE_COSMOVISOR=true
+        fi
+    fi
+
     # Install bifrost
     if ask_yn "Install bifrost?" "y"; then
         download_and_install_bifrost
@@ -472,6 +557,11 @@ main() {
     if $INSTALLED_QBTCD; then
         if ask_yn "Initialize qbtcd config?" "y"; then
             init_qbtcd
+
+            # Setup cosmovisor directories after qbtcd init
+            if $USE_COSMOVISOR; then
+                setup_cosmovisor_directories
+            fi
         fi
     fi
 
