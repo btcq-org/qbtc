@@ -97,7 +97,6 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 
 	// Clear any previous verifier state
 	zk.ClearVerifierForTesting()
-	defer zk.ClearVerifierForTesting()
 
 	// ========================================
 	// Step 1: PLONK Setup
@@ -263,7 +262,6 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 
 	// Clear any previous verifier state
 	zk.ClearVerifierForTesting()
-	defer zk.ClearVerifierForTesting()
 
 	// PLONK Setup
 	t.Log("Setting up PLONK...")

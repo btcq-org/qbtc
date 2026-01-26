@@ -10,7 +10,24 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+func TestSecurityAuditTestSuite(t *testing.T) {
+	suite.Run(t, new(SecurityAuditTestSuite))
+}
+
+type SecurityAuditTestSuite struct {
+	suite.Suite
+	setup *SetupResult
+}
+
+func (s *SecurityAuditTestSuite) SetupSuite() {
+	ClearVerifierForTesting()
+	setup, err := SetupWithOptions(TestSetupOptions())
+	s.Require().NoError(err)
+	s.setup = setup
+}
 
 // =============================================================================
 // SECURITY AUDIT TESTS
@@ -23,21 +40,18 @@ import (
 
 // TestSoundness_WrongPrivateKey verifies that a proof generated with a different
 // private key (that doesn't match the address) will fail verification.
-func TestSoundness_WrongPrivateKey(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestSoundness_WrongPrivateKey() {
 	if testing.Short() {
-		t.Skip("skipping soundness test in short mode")
+		s.T().Skip("skipping soundness test in short mode")
 	}
 
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	prover := ProverFromSetup(setup)
-	verifier := NewVerifier(setup.VerifyingKey)
+	prover := ProverFromSetup(s.setup)
+	verifier := NewVerifier(s.setup.VerifyingKey)
 
 	// Create the legitimate address owner's key
 	legitimateKey, _ := btcec.NewPrivateKey()
 	legitimateAddressHash, err := PublicKeyToAddressHash(legitimateKey.PubKey().SerializeCompressed())
-	require.NoError(t, err)
+	require.NoError(s.T(), err)
 
 	// Create an attacker's key (different from legitimate owner)
 	attackerKey, _ := btcec.NewPrivateKey()
@@ -51,13 +65,13 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 
 	// Attacker signs with their key
 	sig := btcecdsa.Sign(attackerKey, messageHash[:])
-	r, s := parseDERSignature(t, sig.Serialize())
+	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	// Attempt to generate proof - this WILL fail because the public key
 	// won't hash to the claimed address (constraint satisfaction fails)
 	_, err = prover.GenerateProof(ProofParams{
 		SignatureR:      r,
-		SignatureS:      s,
+		SignatureS:      signature,
 		PublicKeyX:      attackerKey.PubKey().X(),
 		PublicKeyY:      attackerKey.PubKey().Y(),
 		MessageHash:     messageHash,
@@ -67,8 +81,8 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 	})
 	// SECURITY VALIDATION: Proof generation MUST fail because the pubkey doesn't hash to addressHash
 	// This is the core soundness property - you cannot prove ownership of an address you don't control
-	require.Error(t, err, "CRITICAL: proof generation MUST fail when pubkey doesn't match address - soundness violation!")
-	t.Logf("PASS: Soundness verified - attacker cannot generate proof for address they don't own: %v", err)
+	require.Error(s.T(), err, "CRITICAL: proof generation MUST fail when pubkey doesn't match address - soundness violation!")
+	s.T().Logf("PASS: Soundness verified - attacker cannot generate proof for address they don't own: %v", err)
 
 	// The attacker CAN generate a valid proof for their OWN address
 	// but they need to sign the correct message for their address
@@ -77,7 +91,7 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 
 	// Attacker signs the correct message for their own address
 	attackerSig := btcecdsa.Sign(attackerKey, attackerMessageHash[:])
-	attackerR, attackerS := parseDERSignature(t, attackerSig.Serialize())
+	attackerR, attackerS := parseDERSignature(s.T(), attackerSig.Serialize())
 
 	// This should work (attacker proving their own address)
 	proof, err := prover.GenerateProof(ProofParams{
@@ -90,7 +104,7 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.NoError(t, err, "attacker should be able to prove their own address")
+	require.NoError(s.T(), err, "attacker should be able to prove their own address")
 
 	// But trying to verify against the legitimate address should fail
 	err = verifier.VerifyProof(proof, VerificationParams{
@@ -99,20 +113,17 @@ func TestSoundness_WrongPrivateKey(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.Error(t, err, "verification should fail - proof is bound to attacker's address, not legitimate address")
-	t.Log("PASS: Attacker's proof cannot be used to claim legitimate address")
+	require.Error(s.T(), err, "verification should fail - proof is bound to attacker's address, not legitimate address")
+	s.T().Log("PASS: Attacker's proof cannot be used to claim legitimate address")
 }
 
 // TestSoundness_InvalidSignature verifies that an invalid signature fails.
-func TestSoundness_InvalidSignature(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestSoundness_InvalidSignature() {
 	if testing.Short() {
-		t.Skip("skipping soundness test in short mode")
+		s.T().Skip("skipping soundness test in short mode")
 	}
 
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	prover := ProverFromSetup(setup)
+	prover := ProverFromSetup(s.setup)
 
 	privateKey, _ := btcec.NewPrivateKey()
 	pubKey := privateKey.PubKey()
@@ -128,7 +139,7 @@ func TestSoundness_InvalidSignature(t *testing.T) {
 		16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1})
 
 	// Proof generation should fail with invalid signature
-	_, err = prover.GenerateProof(ProofParams{
+	_, err := prover.GenerateProof(ProofParams{
 		SignatureR:      invalidR,
 		SignatureS:      invalidS,
 		PublicKeyX:      pubKey.X(),
@@ -138,7 +149,7 @@ func TestSoundness_InvalidSignature(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.Error(t, err, "proof generation should fail with invalid signature")
+	require.Error(s.T(), err, "proof generation should fail with invalid signature")
 }
 
 // -----------------------------------------------------------------------------
@@ -147,16 +158,13 @@ func TestSoundness_InvalidSignature(t *testing.T) {
 
 // TestBinding_FrontRunningProtection verifies that a proof cannot be redirected
 // to a different destination address.
-func TestBinding_FrontRunningProtection(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestBinding_FrontRunningProtection() {
 	if testing.Short() {
-		t.Skip("skipping binding test in short mode")
+		s.T().Skip("skipping binding test in short mode")
 	}
 
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	prover := ProverFromSetup(setup)
-	verifier := NewVerifier(setup.VerifyingKey)
+	prover := ProverFromSetup(s.setup)
+	verifier := NewVerifier(s.setup.VerifyingKey)
 
 	// Legitimate user creates a proof
 	privateKey, _ := btcec.NewPrivateKey()
@@ -168,11 +176,11 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	sig := btcecdsa.Sign(privateKey, messageHash[:])
-	r, s := parseDERSignature(t, sig.Serialize())
+	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proof, err := prover.GenerateProof(ProofParams{
 		SignatureR:      r,
-		SignatureS:      s,
+		SignatureS:      signature,
 		PublicKeyX:      pubKey.X(),
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
@@ -180,7 +188,7 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.NoError(t, err)
+	require.NoError(s.T(), err)
 
 	// Attacker intercepts the proof and tries to redirect to their address
 	attackerDestination := "qbtc1attacker"
@@ -194,7 +202,7 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 		QBTCAddressHash: attackerQBTCAddressHash, // Attacker's destination
 		ChainID:         chainIDHash,
 	})
-	require.Error(t, err, "front-running attack should fail")
+	require.Error(s.T(), err, "front-running attack should fail")
 
 	// But the original verification should succeed
 	err = verifier.VerifyProof(proof, VerificationParams{
@@ -203,21 +211,18 @@ func TestBinding_FrontRunningProtection(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.NoError(t, err, "legitimate verification should succeed")
+	require.NoError(s.T(), err, "legitimate verification should succeed")
 }
 
 // TestBinding_CrossChainReplayProtection verifies that a proof from one chain
 // cannot be replayed on another chain.
-func TestBinding_CrossChainReplayProtection(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestBinding_CrossChainReplayProtection() {
 	if testing.Short() {
-		t.Skip("skipping binding test in short mode")
+		s.T().Skip("skipping binding test in short mode")
 	}
 
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	prover := ProverFromSetup(setup)
-	verifier := NewVerifier(setup.VerifyingKey)
+	prover := ProverFromSetup(s.setup)
+	verifier := NewVerifier(s.setup.VerifyingKey)
 
 	privateKey, _ := btcec.NewPrivateKey()
 	pubKey := privateKey.PubKey()
@@ -229,11 +234,11 @@ func TestBinding_CrossChainReplayProtection(t *testing.T) {
 	messageHashA := ComputeClaimMessage(addressHash, qbtcAddressHash, chainAHash)
 
 	sig := btcecdsa.Sign(privateKey, messageHashA[:])
-	r, s := parseDERSignature(t, sig.Serialize())
+	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proofA, err := prover.GenerateProof(ProofParams{
 		SignatureR:      r,
-		SignatureS:      s,
+		SignatureS:      signature,
 		PublicKeyX:      pubKey.X(),
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHashA,
@@ -241,7 +246,7 @@ func TestBinding_CrossChainReplayProtection(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainAHash,
 	})
-	require.NoError(t, err)
+	require.NoError(s.T(), err)
 
 	// Try to replay on chain B
 	chainBHash := ComputeChainIDHash("qbtc-testnet-1")
@@ -253,7 +258,7 @@ func TestBinding_CrossChainReplayProtection(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainBHash, // Different chain!
 	})
-	require.Error(t, err, "cross-chain replay should fail")
+	require.Error(s.T(), err, "cross-chain replay should fail")
 }
 
 // -----------------------------------------------------------------------------
@@ -262,33 +267,24 @@ func TestBinding_CrossChainReplayProtection(t *testing.T) {
 
 // TestVerifier_ImmutabilityAfterInit verifies that the global verifier cannot
 // be replaced after initialization (prevents VK replacement attacks).
-func TestVerifier_ImmutabilityAfterInit(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestVerifier_ImmutabilityAfterInit() {
 	ClearVerifierForTesting()
-	defer ClearVerifierForTesting()
 
-	setup1, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	vkBytes1, _ := SerializeVerifyingKey(setup1.VerifyingKey)
-
+	vkBytes, err := SerializeVerifyingKey(s.setup.VerifyingKey)
+	s.Require().NoError(err)
 	// First registration succeeds
-	err = RegisterVerifier(vkBytes1)
-	require.NoError(t, err)
-	require.True(t, IsVerifierInitialized())
-
-	// Setup a different circuit (would have different VK)
-	setup2, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-	vkBytes2, _ := SerializeVerifyingKey(setup2.VerifyingKey)
+	err = RegisterVerifier(vkBytes)
+	s.Require().NoError(err)
+	s.Require().True(IsVerifierInitialized())
 
 	// Second registration fails
-	err = RegisterVerifier(vkBytes2)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrVerifierAlreadyInitialized)
+	err = RegisterVerifier([]byte{0x00, 0x01, 0x02}) // Invalid VK bytes
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, ErrVerifierAlreadyInitialized)
 
 	// Even with the same VK
-	err = RegisterVerifier(vkBytes1)
-	require.Error(t, err)
+	err = RegisterVerifier(vkBytes)
+	s.Require().Error(err)
 }
 
 // -----------------------------------------------------------------------------
@@ -296,34 +292,27 @@ func TestVerifier_ImmutabilityAfterInit(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 // TestEdgeCase_ZeroValues tests handling of edge case inputs.
-func TestEdgeCase_ZeroValues(t *testing.T) {
-	t.Run("empty address hash", func(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestEdgeCase_ZeroValues() {
+	s.T().Run("empty address hash", func(t *testing.T) {
 		qbtcAddressHash := HashQBTCAddress("")
 		require.NotEqual(t, [32]byte{}, qbtcAddressHash, "empty string should still hash")
 	})
 
-	t.Run("nil proof rejection", func(t *testing.T) {
-		ClearVerifierForTesting()
-		defer ClearVerifierForTesting()
-
-		setup, err := SetupWithOptions(TestSetupOptions())
-		require.NoError(t, err)
-		verifier := NewVerifier(setup.VerifyingKey)
-
-		err = verifier.VerifyProof(nil, VerificationParams{})
-		require.Error(t, err)
+	s.T().Run("nil proof rejection", func(t *testing.T) {
+		verifier := NewVerifier(s.setup.VerifyingKey)
+		require.Error(t, verifier.VerifyProof(nil, VerificationParams{}))
 	})
 }
 
 // TestEdgeCase_LargeInputs tests handling of boundary values.
-func TestEdgeCase_LargeInputs(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestEdgeCase_LargeInputs() {
 	// Test with max valid secp256k1 scalar (n-1)
 	n := btcec.S256().N
 	maxScalar := new(big.Int).Sub(n, big.NewInt(1))
 
 	// Should be able to convert without panic
 	limbs := testBigIntToLimbs(maxScalar)
-	require.Len(t, limbs, 4)
+	s.Require().Len(limbs, 4)
 }
 
 // -----------------------------------------------------------------------------
@@ -331,7 +320,7 @@ func TestEdgeCase_LargeInputs(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 // TestDeterminism_SameInputsSameOutput verifies proof generation is deterministic.
-func TestDeterminism_SameInputsSameOutput(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestDeterminism_SameInputsSameOutput() {
 	// Message computation should be deterministic
 	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 	qbtcHash := HashQBTCAddress("qbtc1test")
@@ -340,13 +329,13 @@ func TestDeterminism_SameInputsSameOutput(t *testing.T) {
 	msg1 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 	msg2 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 
-	require.Equal(t, msg1, msg2, "message computation should be deterministic")
+	s.Require().Equal(msg1, msg2, "message computation should be deterministic")
 
 	// Hash160 should be deterministic
 	data := []byte("test data for hashing")
 	h1 := Hash160(data)
 	h2 := Hash160(data)
-	require.Equal(t, h1, h2, "Hash160 should be deterministic")
+	s.Require().Equal(h1, h2, "Hash160 should be deterministic")
 }
 
 // -----------------------------------------------------------------------------
@@ -355,37 +344,34 @@ func TestDeterminism_SameInputsSameOutput(t *testing.T) {
 
 // TestCompleteness_ValidProofAccepted verifies that a correctly generated proof
 // for a valid claim is accepted.
-func TestCompleteness_ValidProofAccepted(t *testing.T) {
+func (s *SecurityAuditTestSuite) TestCompleteness_ValidProofAccepted() {
 	if testing.Short() {
-		t.Skip("skipping completeness test in short mode")
+		s.T().Skip("skipping completeness test in short mode")
 	}
 
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	prover := ProverFromSetup(setup)
-	verifier := NewVerifier(setup.VerifyingKey)
+	prover := ProverFromSetup(s.setup)
+	verifier := NewVerifier(s.setup.VerifyingKey)
 
 	// Generate random private key
 	privateKeyBytes := make([]byte, 32)
-	_, err = rand.Read(privateKeyBytes)
-	require.NoError(t, err)
+	_, err := rand.Read(privateKeyBytes)
+	s.Require().NoError(err)
 
 	privateKey, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
 	pubKey := privateKey.PubKey()
 	addressHash, err := PublicKeyToAddressHash(pubKey.SerializeCompressed())
-	require.NoError(t, err)
+	s.Require().NoError(err)
 
 	qbtcAddressHash := HashQBTCAddress("qbtc1completeness_test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	sig := btcecdsa.Sign(privateKey, messageHash[:])
-	r, s := parseDERSignature(t, sig.Serialize())
+	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proof, err := prover.GenerateProof(ProofParams{
 		SignatureR:      r,
-		SignatureS:      s,
+		SignatureS:      signature,
 		PublicKeyX:      pubKey.X(),
 		PublicKeyY:      pubKey.Y(),
 		MessageHash:     messageHash,
@@ -393,7 +379,7 @@ func TestCompleteness_ValidProofAccepted(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.NoError(t, err, "proof generation should succeed for valid inputs")
+	s.Require().NoError(err, "proof generation should succeed for valid inputs")
 
 	err = verifier.VerifyProof(proof, VerificationParams{
 		MessageHash:     messageHash,
@@ -401,7 +387,7 @@ func TestCompleteness_ValidProofAccepted(t *testing.T) {
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
-	require.NoError(t, err, "valid proof should be accepted")
+	s.Require().NoError(err, "valid proof should be accepted")
 }
 
 // -----------------------------------------------------------------------------

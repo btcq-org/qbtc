@@ -208,54 +208,6 @@ func (mv *MultiVerifier) VerifyP2SHP2WPKHProof(proof *Proof, params P2SHP2WPKHVe
 	return plonk.Verify(plonkProof, verifier.vk, witness)
 }
 
-// VerifyP2PKProof verifies a P2PK proof
-func (mv *MultiVerifier) VerifyP2PKProof(proof *Proof, params P2PKVerificationParams) error {
-	mv.mu.RLock()
-	verifier, ok := mv.verifiers[CircuitTypeP2PK]
-	mv.mu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("p2pk circuit not registered")
-	}
-
-	if proof == nil || proof.ProofData == nil {
-		return fmt.Errorf("proof cannot be nil")
-	}
-
-	// Verify the message hash matches expected
-	expectedMessage := ComputeClaimMessageForP2PK(params.CompressedPubKey, params.QBTCAddressHash, params.ChainID)
-	if expectedMessage != params.MessageHash {
-		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
-	}
-
-	// Deserialize the proof
-	plonkProof := plonk.NewProof(ecc.BN254)
-	_, err := plonkProof.ReadFrom(bytes.NewReader(proof.ProofData))
-	if err != nil {
-		return fmt.Errorf("failed to deserialize proof: %w", err)
-	}
-
-	// Create the public witness
-	assignment := &BTCP2PKCircuit{}
-	for i := 0; i < 32; i++ {
-		assignment.MessageHash[i] = params.MessageHash[i]
-		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
-	}
-	for i := 0; i < 33; i++ {
-		assignment.CompressedPubKey[i] = params.CompressedPubKey[i]
-	}
-	for i := 0; i < 8; i++ {
-		assignment.ChainID[i] = params.ChainID[i]
-	}
-
-	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField(), frontend.PublicOnly())
-	if err != nil {
-		return fmt.Errorf("failed to create public witness: %w", err)
-	}
-
-	return plonk.Verify(plonkProof, verifier.vk, witness)
-}
-
 // VerifyP2WSHSingleKeyProof verifies a P2WSH single-key proof
 func (mv *MultiVerifier) VerifyP2WSHSingleKeyProof(proof *Proof, params P2WSHSingleKeyVerificationParams) error {
 	mv.mu.RLock()
