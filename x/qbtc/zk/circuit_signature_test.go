@@ -125,7 +125,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
-		s.Require().NoError(err)
+		require.NoError(t, err)
 
 		// Try to verify with different message hash
 		wrongMessageHash := messageHash
@@ -151,7 +151,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
-		s.Require().NoError(err)
+		require.NoError(t, err)
 
 		wrongAddressHash := addressHash
 		wrongAddressHash[0] ^= 0xFF
@@ -162,7 +162,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
-		s.Require().Error(err, "proof with wrong address hash should fail")
+		require.Error(t, err, "proof with wrong address hash should fail")
 	})
 
 	s.T().Run("front-running attack should fail", func(t *testing.T) {
@@ -176,7 +176,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
-		s.Require().NoError(err)
+		require.NoError(t, err)
 
 		// Attacker tries to redirect to their address
 		attackerHash := HashQBTCAddress("qbtc1attacker")
@@ -187,7 +187,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: attackerHash,
 			ChainID:         chainIDHash,
 		})
-		s.Require().Error(err, "front-running attack should fail")
+		require.Error(t, err, "front-running attack should fail")
 	})
 
 	s.T().Run("cross-chain replay should fail", func(t *testing.T) {
@@ -201,7 +201,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         chainIDHash,
 		})
-		s.Require().NoError(err)
+		require.NoError(t, err)
 
 		wrongChainIDHash := ComputeChainIDHash("other-chain-1")
 
@@ -211,7 +211,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 			QBTCAddressHash: qbtcAddressHash,
 			ChainID:         wrongChainIDHash,
 		})
-		s.Require().Error(err, "cross-chain replay should fail")
+		require.Error(t, err, "cross-chain replay should fail")
 	})
 }
 

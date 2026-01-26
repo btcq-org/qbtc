@@ -300,7 +300,7 @@ func (s *SecurityAuditTestSuite) TestEdgeCase_ZeroValues() {
 
 	s.T().Run("nil proof rejection", func(t *testing.T) {
 		verifier := NewVerifier(s.setup.VerifyingKey)
-		s.Require().Error(verifier.VerifyProof(nil, VerificationParams{}))
+		require.Error(t, verifier.VerifyProof(nil, VerificationParams{}))
 	})
 }
 
