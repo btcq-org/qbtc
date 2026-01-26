@@ -13,6 +13,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func TestSecurityAuditTestSuite(t *testing.T) {
+	suite.Run(t, new(SecurityAuditTestSuite))
+}
+
 type SecurityAuditTestSuite struct {
 	suite.Suite
 	setup *SetupResult

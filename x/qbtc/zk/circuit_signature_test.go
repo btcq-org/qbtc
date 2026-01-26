@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func TestCircuitSignatureTestSuite(t *testing.T) {
+	suite.Run(t, new(CircuitSignatureTestSuite))
+}
+
 type CircuitSignatureTestSuite struct {
 	suite.Suite
 	setup *SetupResult
