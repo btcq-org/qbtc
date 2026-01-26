@@ -142,12 +142,6 @@ func SetupP2SHP2WPKHWithOptions(opts SetupOptions) (*SetupResult, error) {
 	return SetupCircuitWithOptions(circuit, opts)
 }
 
-// SetupP2PKWithOptions performs PLONK setup for the BTCP2PKCircuit.
-func SetupP2PKWithOptions(opts SetupOptions) (*SetupResult, error) {
-	circuit := NewBTCP2PKCircuitPlaceholder()
-	return SetupCircuitWithOptions(circuit, opts)
-}
-
 // SetupP2WSHSingleKeyWithOptions performs PLONK setup for the BTCP2WSHSingleKeyCircuit.
 func SetupP2WSHSingleKeyWithOptions(opts SetupOptions) (*SetupResult, error) {
 	circuit := NewBTCP2WSHSingleKeyCircuitPlaceholder()
@@ -695,75 +689,6 @@ func (p *P2SHP2WPKHProver) GenerateProof(params P2SHP2WPKHProofParams) (*Proof, 
 	}
 	for i := 0; i < 20; i++ {
 		assignment.ScriptHash[i] = params.ScriptHash[i]
-	}
-	for i := 0; i < 8; i++ {
-		assignment.ChainID[i] = params.ChainID[i]
-	}
-
-	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create witness: %w", err)
-	}
-
-	proof, err := plonk.Prove(p.cs, p.pk, witness)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate proof: %w", err)
-	}
-
-	var proofBuf bytes.Buffer
-	_, err = proof.WriteTo(&proofBuf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize proof: %w", err)
-	}
-
-	publicWitness, err := witness.Public()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get public witness: %w", err)
-	}
-
-	var publicBuf bytes.Buffer
-	_, err = publicWitness.WriteTo(&publicBuf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
-	}
-
-	return &Proof{
-		ProofData:    proofBuf.Bytes(),
-		PublicInputs: publicBuf.Bytes(),
-	}, nil
-}
-
-// P2PKProver handles proof generation for P2PK claims.
-type P2PKProver struct {
-	cs constraint.ConstraintSystem
-	pk plonk.ProvingKey
-}
-
-// NewP2PKProver creates a new P2PK prover
-func NewP2PKProver(cs constraint.ConstraintSystem, pk plonk.ProvingKey) *P2PKProver {
-	return &P2PKProver{cs: cs, pk: pk}
-}
-
-// P2PKProverFromSetup creates a P2PK prover from setup result
-func P2PKProverFromSetup(setup *SetupResult) *P2PKProver {
-	return NewP2PKProver(setup.ConstraintSystem, setup.ProvingKey)
-}
-
-// GenerateProof generates a PLONK proof for a P2PK claim
-func (p *P2PKProver) GenerateProof(params P2PKProofParams) (*Proof, error) {
-	assignment := &BTCP2PKCircuit{}
-
-	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
-	assignment.SignatureS.Limbs = bigIntToLimbs(params.SignatureS)
-	assignment.PublicKeyX.Limbs = bigIntToLimbs(params.PublicKeyX)
-	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
-
-	for i := 0; i < 32; i++ {
-		assignment.MessageHash[i] = params.MessageHash[i]
-		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
-	}
-	for i := 0; i < 33; i++ {
-		assignment.CompressedPubKey[i] = params.CompressedPubKey[i]
 	}
 	for i := 0; i < 8; i++ {
 		assignment.ChainID[i] = params.ChainID[i]

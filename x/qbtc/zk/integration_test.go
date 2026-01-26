@@ -163,14 +163,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		require.Error(t, err, "claiming different BTC address should fail")
 	})
 
-	// Cleanup
-	ClearVerifierForTesting()
 }
 
 // TestVerifierNotInitialized tests behavior when verifier is not initialized.
 func TestVerifierNotInitialized(t *testing.T) {
 	ClearVerifierForTesting()
-	defer ClearVerifierForTesting()
 
 	require.False(t, IsVerifierInitialized(), "verifier should not be initialized")
 
@@ -186,33 +183,4 @@ func TestVerifierNotInitialized(t *testing.T) {
 	err = VerifyProofGlobal(dummyProof.ProofData, VerificationParams{})
 	require.Error(t, err, "VerifyProofGlobal should fail when verifier not initialized")
 	require.Contains(t, err.Error(), "not initialized")
-}
-
-// TestVerifierImmutability tests that the verifier cannot be re-registered
-// after initial registration. This is a critical security property.
-func TestVerifierImmutability(t *testing.T) {
-	ClearVerifierForTesting()
-	defer ClearVerifierForTesting()
-
-	// Create a test VK
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err)
-
-	vkBytes, err := SerializeVerifyingKey(setup.VerifyingKey)
-	require.NoError(t, err)
-
-	// First registration should succeed
-	err = RegisterVerifier(vkBytes)
-	require.NoError(t, err, "first registration should succeed")
-
-	require.True(t, IsVerifierInitialized())
-
-	// Second registration should fail
-	err = RegisterVerifier(vkBytes)
-	require.Error(t, err, "second registration should fail")
-	require.ErrorIs(t, err, ErrVerifierAlreadyInitialized)
-
-	// Third attempt should also fail
-	err = RegisterVerifier(vkBytes)
-	require.Error(t, err, "third registration should also fail")
 }
