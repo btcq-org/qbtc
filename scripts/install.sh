@@ -60,7 +60,7 @@ ask_yn() {
         prompt="$prompt [y/N]: "
     fi
 
-    read -r -p "$prompt" response
+    read -r -p "$prompt" response < /dev/tty
     response="${response:-$default}"
 
     case "$response" in
