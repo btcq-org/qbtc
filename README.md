@@ -68,6 +68,55 @@ go test -tags=testing ./x/qbtc/zk/...
 ./scripts/start-node.sh
 ```
 
+## Running a Node
+
+Use the install script to set up a qbtc node on a server:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/btcq-org/qbtc/main/scripts/install.sh | bash
+```
+
+The script will guide you through:
+
+1. **Installing binaries** - Downloads `qbtcd` and `bifrost` to `/usr/local/bin`
+2. **Cosmovisor setup** - Optional for managed upgrades
+3. **Node initialization** - Creates config directory and downloads genesis file
+4. **Bifrost configuration** - Creates config template for the enshrined service.
+5. **Systemd services** - Sets up services for automatic startup and management
+
+### Manual Installation
+
+If you prefer to install manually or need a specific version:
+
+```bash
+# Download specific version
+curl -sSL https://raw.githubusercontent.com/btcq-org/qbtc/main/scripts/install.sh | bash -s -- -v 1.0.7
+
+# Or set version via environment variable
+QBTC_VERSION=1.0.7 bash -c "$(curl -sSL https://raw.githubusercontent.com/btcq-org/qbtc/main/scripts/install.sh)"
+```
+
+### Post-Installation
+
+After installation, configure your node:
+
+1. Edit bifrost config with your Bitcoin RPC credentials:
+   ```bash
+   vim ~/.bifrost/config.json
+   ```
+
+2. Start the services:
+   ```bash
+   sudo systemctl start qbtcd
+   sudo systemctl start bifrost
+   ```
+
+3. Check status:
+   ```bash
+   sudo systemctl status qbtcd bifrost
+   sudo journalctl -u qbtcd -f
+   ```
+
 ## Documentation
 
 - [ZK Proof System Technical Specification](docs/ZK_SYSTEM.md) - Detailed documentation of the zero-knowledge proof system
