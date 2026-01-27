@@ -131,6 +131,11 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -v|--version)
+                if [[ -z "$2" || "$2" == -* ]]; then
+                    print_error "Option $1 requires a version argument"
+                    show_help
+                    exit 1
+                fi
                 VERSION="$2"
                 shift 2
                 ;;
@@ -301,7 +306,7 @@ init_qbtcd() {
     if [[ -d "$QBTCD_HOME" ]]; then
         print_info "Directory $QBTCD_HOME already exists."
 
-        if ask_yn "Overwrite existing gensis and data?" "n"; then
+        if ask_yn "Overwrite existing genesis and data?" "n"; then
             print_info "Running qbtcd init with overwrite..."
             qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id bqtbc-testnet --overwrite
             qbtcd comet unsafe-reset-all --home "$QBTCD_HOME"
