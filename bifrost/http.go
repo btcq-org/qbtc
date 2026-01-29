@@ -2,6 +2,8 @@ package bifrost
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 )
 
@@ -22,9 +24,29 @@ func (s *Service) handleConnectedPeers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Service) handlePeerId(w http.ResponseWriter, r *http.Request) {
+	peerID := s.network.GetHost().ID()
+	w.Header().Set("Content-Type", "application/json")
+	_, p, err := net.SplitHostPort(s.cfg.ListenAddr)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("failed to parse listen address")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	externalIP := s.cfg.ExternalIP
+	if externalIP == "" {
+		externalIP = "0.0.0.0"
+	}
+	resp := fmt.Sprintf("%s@%s:%s", peerID.String(), externalIP, p)
+	w.Write([]byte(resp))
+	w.WriteHeader(http.StatusOK)
+
+}
+
 func (s *Service) registerRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/connected-peers", s.handleConnectedPeers)
+	mux.HandleFunc("/peerid", s.handlePeerId)
 	return mux
 }
