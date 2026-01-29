@@ -24,7 +24,7 @@ func (s *Service) handleConnectedPeers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Service) handlePeerId(w http.ResponseWriter, r *http.Request) {
+func (s *Service) handlePeerID(w http.ResponseWriter, r *http.Request) {
 	peerID := s.network.GetHost().ID()
 	_, p, err := net.SplitHostPort(s.cfg.ListenAddr)
 	if err != nil {
@@ -48,6 +48,6 @@ func (s *Service) registerRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/connected-peers", s.handleConnectedPeers)
-	mux.HandleFunc("/peerid", s.handlePeerId)
+	mux.HandleFunc("/peerid", s.handlePeerID)
 	return mux
 }
