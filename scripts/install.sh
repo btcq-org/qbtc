@@ -328,7 +328,7 @@ setup_statesync() {
         return 1
     fi
 
-    local trust_height=$((latest_height - 2000))
+    local trust_height=$((latest_height / 2000 * 2000))
     local trust_hash
     trust_hash=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block?height=$trust_height" | jq -r .result.block_id.hash)
     if [[ -z "$trust_hash" || "$trust_hash" == "null" ]]; then
