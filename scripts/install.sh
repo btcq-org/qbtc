@@ -317,7 +317,7 @@ setup_statesync() {
 
     print_info "Querying latest block from $STATESYNC_RPC..."
     local latest_height
-    latest_height=$(curl -s "$STATESYNC_RPC/block" | jq -r .result.block.header.height)
+    latest_height=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block" | jq -r .result.block.header.height)
     if [[ -z "$latest_height" || "$latest_height" == "null" ]]; then
         print_error "Failed to query latest block height from $STATESYNC_RPC"
         return 1
@@ -330,7 +330,7 @@ setup_statesync() {
 
     local trust_height=$((latest_height - 2000))
     local trust_hash
-    trust_hash=$(curl -s "$STATESYNC_RPC/block?height=$trust_height" | jq -r .result.block_id.hash)
+    trust_hash=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block?height=$trust_height" | jq -r .result.block_id.hash)
     if [[ -z "$trust_hash" || "$trust_hash" == "null" ]]; then
         print_error "Failed to query trust hash at height $trust_height"
         return 1
@@ -342,7 +342,7 @@ setup_statesync() {
 
     # Query the node ID for persistent_peers
     local node_id
-    node_id=$(curl -s "$STATESYNC_RPC/status" | jq -r .result.node_info.id)
+    node_id=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/status" | jq -r .result.node_info.id)
     if [[ -z "$node_id" || "$node_id" == "null" ]]; then
         print_error "Failed to query node ID from $STATESYNC_RPC"
         return 1
