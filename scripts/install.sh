@@ -89,10 +89,6 @@ check_dependencies() {
         missing+=("sha256sum")
     fi
 
-    if ! command -v jq &> /dev/null; then
-        missing+=("jq")
-    fi
-
     if [[ ${#missing[@]} -gt 0 ]]; then
         print_error "Missing required dependencies: ${missing[*]}"
         print_info "Please install them and run this script again."
@@ -308,6 +304,11 @@ setup_cosmovisor_directories() {
 setup_statesync() {
     print_header "Configuring statesync"
 
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is required for statesync setup. Please install jq and try again."
+        return 1
+    fi
+
     local config_file="$QBTCD_HOME/config/config.toml"
     if [[ ! -f "$config_file" ]]; then
         print_error "config.toml not found at $config_file"
@@ -319,6 +320,11 @@ setup_statesync() {
     latest_height=$(curl -s "$STATESYNC_RPC/block" | jq -r .result.block.header.height)
     if [[ -z "$latest_height" || "$latest_height" == "null" ]]; then
         print_error "Failed to query latest block height from $STATESYNC_RPC"
+        return 1
+    fi
+
+    if [[ "$latest_height" -le 2000 ]]; then
+        print_error "Chain height ($latest_height) is too low for statesync (need > 2000)"
         return 1
     fi
 
