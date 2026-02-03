@@ -11,6 +11,7 @@ ARCH="linux-amd64"
 GENESIS_URL="https://sgp1.vultrobjects.com/genesis/genesis.json"
 GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-933462.bin"
 COSMOVISOR_URL="https://github.com/cosmos/cosmos-sdk/releases/download/cosmovisor%2Fv1.7.1/cosmovisor-v1.7.1-linux-amd64.tar.gz"
+STATESYNC_RPC="http://45.76.190.51:26657"
 
 # ========== COLORS ==========
 RED='\033[0;31m'
@@ -300,6 +301,70 @@ setup_cosmovisor_directories() {
     print_success "Cosmovisor directory structure created at $cosmovisor_dir"
 }
 
+setup_statesync() {
+    print_header "Configuring statesync"
+
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is required for statesync setup. Please install jq and try again."
+        return 1
+    fi
+
+    local config_file="$QBTCD_HOME/config/config.toml"
+    if [[ ! -f "$config_file" ]]; then
+        print_error "config.toml not found at $config_file"
+        return 1
+    fi
+
+    print_info "Querying latest block from $STATESYNC_RPC..."
+    local latest_height
+    latest_height=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block" | jq -r .result.block.header.height)
+    if [[ -z "$latest_height" || "$latest_height" == "null" ]]; then
+        print_error "Failed to query latest block height from $STATESYNC_RPC"
+        return 1
+    fi
+
+    if [[ "$latest_height" -le 2000 ]]; then
+        print_error "Chain height ($latest_height) is too low for statesync (need > 2000)"
+        return 1
+    fi
+
+    local trust_height=$((latest_height / 2000 * 2000))
+    local trust_hash
+    trust_hash=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block?height=$trust_height" | jq -r .result.block_id.hash)
+    if [[ -z "$trust_hash" || "$trust_hash" == "null" ]]; then
+        print_error "Failed to query trust hash at height $trust_height"
+        return 1
+    fi
+
+    print_info "Latest height: $latest_height"
+    print_info "Trust height:  $trust_height"
+    print_info "Trust hash:    $trust_hash"
+
+    # Query the node ID for persistent_peers
+    local node_id
+    node_id=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/status" | jq -r .result.node_info.id)
+    if [[ -z "$node_id" || "$node_id" == "null" ]]; then
+        print_error "Failed to query node ID from $STATESYNC_RPC"
+        return 1
+    fi
+
+    local rpc_host
+    rpc_host=$(echo "$STATESYNC_RPC" | sed -E 's|^https?://||; s|:[0-9]+$||')
+    local peer="${node_id}@${rpc_host}:26656"
+    print_info "Persistent peer: $peer"
+
+    print_info "Updating config.toml..."
+    sed -i.bak -E \
+        "s|^(enable[[:space:]]+=[[:space:]]+).*$|\1true|
+         s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"${STATESYNC_RPC},${STATESYNC_RPC}\"|
+         s|^(trust_height[[:space:]]+=[[:space:]]+).*$|\1${trust_height}|
+         s|^(trust_hash[[:space:]]+=[[:space:]]+).*$|\1\"${trust_hash}\"|
+         s|^(persistent_peers[[:space:]]+=[[:space:]]+).*$|\1\"${peer}\"|" "$config_file"
+    rm -f "${config_file}.bak"
+
+    print_success "Statesync configured"
+}
+
 init_qbtcd() {
     print_header "Initializing qbtcd"
 
@@ -326,7 +391,9 @@ init_qbtcd() {
         return 1
     fi
 
-    if ask_yn "Download genesis.bin snapshot? (large file)" "n"; then
+    if ask_yn "Use statesync to bootstrap from the network?" "y"; then
+        setup_statesync
+    elif ask_yn "Download genesis.bin snapshot? (large file)" "n"; then
         print_info "Downloading genesis.bin (this may take a while)..."
         if ! curl -fL --progress-bar "$GENESIS_BIN_URL" -o "$QBTCD_HOME/config/genesis.bin"; then
             print_error "Failed to download genesis.bin"
