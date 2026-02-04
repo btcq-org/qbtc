@@ -7,6 +7,7 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/bifrost/qclient"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/stretchr/testify/require"
@@ -136,4 +137,56 @@ func TestValidatorsVotingPower(t *testing.T) {
 	require.Equal(t, math.LegacyMustNewDecFromStr("0.018181818181818182"), vp.Share)
 
 	require.Equal(t, math.LegacyOneDec(), totalShare)
+}
+
+func TestIsActiveValidator(t *testing.T) {
+	// Generate two ed25519 key pairs for validators
+	privKey1 := ed25519.GenPrivKey()
+	pubKey1 := privKey1.PubKey()
+	privKey2 := ed25519.GenPrivKey()
+	pubKey2 := privKey2.PubKey()
+	// A third key not in the bonded set
+	privKey3 := ed25519.GenPrivKey()
+
+	// Create validators with proper consensus keys
+	val1, err := stakingtypes.NewValidator("", pubKey1, stakingtypes.Description{Moniker: "val1"})
+	require.NoError(t, err)
+	val1.Status = stakingtypes.Bonded
+	val1.Tokens = math.NewInt(1_000_000)
+
+	val2, err := stakingtypes.NewValidator("", pubKey2, stakingtypes.Description{Moniker: "val2"})
+	require.NoError(t, err)
+	val2.Status = stakingtypes.Bonded
+	val2.Tokens = math.NewInt(2_000_000)
+
+	totalTokens := val1.Tokens.Add(val2.Tokens)
+	mock := &mockStakingClient{
+		validators:   []stakingtypes.Validator{val1, val2},
+		bondedTokens: totalTokens,
+	}
+
+	client, err := qclient.New("localhost:9090", true)
+	require.NoError(t, err)
+	client = client.WithStakingClient(mock)
+
+	t.Run("validator in bonded set", func(t *testing.T) {
+		consAddr := sdk.ConsAddress(pubKey1.Address())
+		active, err := client.IsActiveValidator(context.Background(), consAddr)
+		require.NoError(t, err)
+		require.True(t, active)
+	})
+
+	t.Run("second validator in bonded set", func(t *testing.T) {
+		consAddr := sdk.ConsAddress(pubKey2.Address())
+		active, err := client.IsActiveValidator(context.Background(), consAddr)
+		require.NoError(t, err)
+		require.True(t, active)
+	})
+
+	t.Run("validator not in bonded set", func(t *testing.T) {
+		consAddr := sdk.ConsAddress(privKey3.PubKey().Address())
+		active, err := client.IsActiveValidator(context.Background(), consAddr)
+		require.NoError(t, err)
+		require.False(t, active)
+	})
 }
