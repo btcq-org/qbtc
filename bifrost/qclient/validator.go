@@ -3,6 +3,7 @@ package qclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"cosmossdk.io/math"
@@ -35,6 +36,27 @@ func (c *Client) Validator(ctx context.Context, address string) (ValidatorVoting
 		VotingPower: votingPower,
 		Share:       math.LegacyNewDec(votingPower).Quo(math.LegacyNewDec(totalVotingPower)),
 	}, nil
+}
+
+func (c *Client) IsActiveValidator(ctx context.Context, consAddr sdk.ConsAddress) (bool, error) {
+	activeValidators, err := c.ActiveValidators(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get active validators: %w", err)
+	}
+
+	consAddrStr := consAddr.String()
+	for _, validator := range activeValidators {
+		pubKey, err := validator.ConsPubKey()
+		if err != nil {
+			c.logger.Error().Err(err).Str("operator_address", validator.OperatorAddress).Msg("failed to get consensus public key for validator")
+			continue
+		}
+		if sdk.ConsAddress(pubKey.Address()).String() == consAddrStr {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (c *Client) ActiveValidators(ctx context.Context) ([]stakingtypes.Validator, error) {

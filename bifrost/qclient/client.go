@@ -40,6 +40,7 @@ type QBTCNode interface {
 	VerifyAttestation(ctx context.Context, block qtypes.BlockGossip) error
 	CheckAttestationsSuperMajority(ctx context.Context, msg *qtypes.MsgBtcBlock) error
 	GetLatestBtcBlockHeight(ctx context.Context) (uint64, error)
+	IsActiveValidator(ctx context.Context, consAddr sdk.ConsAddress) (bool, error)
 }
 
 var _ QBTCNode = &Client{}

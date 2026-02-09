@@ -240,6 +240,7 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 	}
 
 	s.logger.Info().Int64("start_block_height", blockHeight).Msg("starting to process bitcoin blocks")
+	consAddr := sdk.ConsAddress(s.validatorPrivateKey.PubKey().Address())
 	var backOffTime *time.Time
 	for {
 		select {
@@ -250,6 +251,18 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
+			isActive, err := s.qclient.IsActiveValidator(ctx, consAddr)
+			if err != nil {
+				s.logger.Error().Err(err).Msg("failed to check if node is active validator")
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			if !isActive {
+				s.logger.Warn().Str("consensus_address", consAddr.String()).Msg("node is not an active validator, waiting")
+				time.Sleep(30 * time.Second)
+				continue
+			}
+
 			latestBlockHeight, err := s.getQBTCLatestProcessBTCBlockHeight(ctx)
 			if err != nil {
 				s.logger.Error().Err(err).Msg("failed to get latest bitcoin block height")
