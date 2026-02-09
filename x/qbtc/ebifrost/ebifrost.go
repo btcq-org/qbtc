@@ -76,6 +76,9 @@ func (eb *EnshrinedBifrost) Start() error {
 	if eb == nil {
 		return nil
 	}
+	if !eb.cfg.Enable {
+		return nil
+	}
 	eb.startedMu.Lock()
 	defer eb.startedMu.Unlock()
 	if eb.started {
