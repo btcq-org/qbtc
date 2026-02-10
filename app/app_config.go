@@ -59,6 +59,7 @@ import (
 	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
 	ibctransfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
 	ibcexported "github.com/cosmos/ibc-go/v10/modules/core/exported"
+	tokenfactorytypes "github.com/cosmos/tokenfactory/x/tokenfactory/types"
 )
 
 var (
@@ -72,6 +73,7 @@ var (
 		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: wasmtypes.ModuleName, Permissions: []string{authtypes.Burner}},
+		{Account: tokenfactorytypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 	}
 
 	// blocked account addresses
@@ -115,6 +117,8 @@ var (
 						qbtcmoduletypes.ModuleName,
 						// wasm module
 						wasmtypes.ModuleName,
+						//tokenfactory
+						tokenfactorytypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
@@ -124,7 +128,8 @@ var (
 						// chain modules
 						qbtcmoduletypes.ModuleName,
 						// wasm module - must be after bank staking,and IBC
-						wasmtypes.ModuleName,
+						wasmtypes.ModuleName, //tokenfactory
+						tokenfactorytypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
@@ -159,6 +164,7 @@ var (
 						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
 						wasmtypes.ModuleName,
+						tokenfactorytypes.ModuleName,
 					},
 				}),
 			},

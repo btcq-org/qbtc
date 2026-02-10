@@ -36,6 +36,9 @@ import (
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 	solomachine "github.com/cosmos/ibc-go/v10/modules/light-clients/06-solomachine"
 	ibctm "github.com/cosmos/ibc-go/v10/modules/light-clients/07-tendermint"
+	tokenfactory "github.com/cosmos/tokenfactory/x/tokenfactory"
+	tokenfactorykeeper "github.com/cosmos/tokenfactory/x/tokenfactory/keeper"
+	tokenfactorytypes "github.com/cosmos/tokenfactory/x/tokenfactory/types"
 	"github.com/spf13/cast"
 )
 
@@ -60,6 +63,7 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 		storetypes.NewKVStoreKey(icacontrollertypes.StoreKey),
 		storetypes.NewKVStoreKey(wasmtypes.StoreKey),
 		storetypes.NewTransientStoreKey(wasmtypes.TStoreKey),
+		storetypes.NewKVStoreKey(tokenfactorytypes.StoreKey),
 	); err != nil {
 		return err
 	}
@@ -174,7 +178,17 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 	soloLightClientModule := solomachine.NewLightClientModule(app.appCodec, storeProvider)
 	clientKeeper.AddRoute(solomachine.ModuleName, &soloLightClientModule)
 
-	// register IBC modules
+	app.TokenFactoryKeeper = tokenfactorykeeper.NewKeeper(
+		app.appCodec,
+		app.GetKey(tokenfactorytypes.StoreKey),
+		GetMaccPerms(),
+		app.AuthKeeper,
+		app.BankKeeper,
+		app.DistrKeeper,
+		[]string{tokenfactorytypes.EnableSetMetadata, tokenfactorytypes.EnableCommunityPoolFeeFunding},
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+	)
+	// register IBC and non-depinject modules
 	if err := app.RegisterModules(
 		ibc.NewAppModule(app.IBCKeeper),
 		ibctransfer.NewAppModule(*app.TransferKeeper),
@@ -182,6 +196,7 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 		ibctm.NewAppModule(tmLightClientModule),
 		solomachine.NewAppModule(soloLightClientModule),
 		wasm.NewAppModule(app.appCodec, &app.WasmKeeper, app.StakingKeeper, app.AuthKeeper, app.BankKeeper, app.MsgServiceRouter(), nil), // IBC v10: no param subspace
+		tokenfactory.NewAppModule(app.TokenFactoryKeeper, app.AuthKeeper, app.BankKeeper, nil),
 	); err != nil {
 		return err
 	}
@@ -194,12 +209,13 @@ func (app *App) registerIBCModules(appOpts servertypes.AppOptions) error {
 // This needs to be removed after IBC supports App Wiring.
 func RegisterIBC(cdc codec.Codec) map[string]appmodule.AppModule {
 	modules := map[string]appmodule.AppModule{
-		ibcexported.ModuleName:      ibc.NewAppModule(&ibckeeper.Keeper{}),
-		ibctransfertypes.ModuleName: ibctransfer.NewAppModule(ibctransferkeeper.Keeper{}),
-		icatypes.ModuleName:         icamodule.NewAppModule(&icacontrollerkeeper.Keeper{}, &icahostkeeper.Keeper{}),
-		ibctm.ModuleName:            ibctm.NewAppModule(ibctm.NewLightClientModule(cdc, ibcclienttypes.StoreProvider{})),
-		solomachine.ModuleName:      solomachine.NewAppModule(solomachine.NewLightClientModule(cdc, ibcclienttypes.StoreProvider{})),
-		wasmtypes.ModuleName:        wasm.NewAppModule(cdc, &wasmkeeper.Keeper{}, nil, nil, nil, nil, nil), // WASM module for genesis
+		ibcexported.ModuleName:       ibc.NewAppModule(&ibckeeper.Keeper{}),
+		ibctransfertypes.ModuleName:  ibctransfer.NewAppModule(ibctransferkeeper.Keeper{}),
+		icatypes.ModuleName:          icamodule.NewAppModule(&icacontrollerkeeper.Keeper{}, &icahostkeeper.Keeper{}),
+		ibctm.ModuleName:             ibctm.NewAppModule(ibctm.NewLightClientModule(cdc, ibcclienttypes.StoreProvider{})),
+		solomachine.ModuleName:       solomachine.NewAppModule(solomachine.NewLightClientModule(cdc, ibcclienttypes.StoreProvider{})),
+		wasmtypes.ModuleName:         wasm.NewAppModule(cdc, &wasmkeeper.Keeper{}, nil, nil, nil, nil, nil), // WASM module for genesis
+		tokenfactorytypes.ModuleName: tokenfactory.NewAppModule(tokenfactorykeeper.Keeper{}, nil, nil, nil),
 	}
 
 	for _, m := range modules {

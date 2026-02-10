@@ -49,6 +49,9 @@ import (
 	qbtcmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	tokenfactorykeeper "github.com/cosmos/tokenfactory/x/tokenfactory/keeper"
+
+	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
 )
 
 const (
@@ -91,6 +94,7 @@ type App struct {
 	SlashingKeeper        slashingkeeper.Keeper
 	GovKeeper             *govkeeper.Keeper
 	FeeGrantKeeper        feegrantkeeper.Keeper
+	DistrKeeper           distrkeeper.Keeper
 
 	// ibc keepers
 	IBCKeeper           *ibckeeper.Keeper
@@ -100,6 +104,9 @@ type App struct {
 
 	// wasm keeper
 	WasmKeeper wasmkeeper.Keeper
+
+	// token factory
+	TokenFactoryKeeper tokenfactorykeeper.Keeper
 
 	// simulation manager
 	sm         *module.SimulationManager
@@ -172,6 +179,7 @@ func New(
 		&app.interfaceRegistry,
 		&app.AuthKeeper,
 		&app.BankKeeper,
+		&app.DistrKeeper,
 		&app.UpgradeKeeper,
 		&app.AuthzKeeper,
 		&app.ConsensusParamsKeeper,
