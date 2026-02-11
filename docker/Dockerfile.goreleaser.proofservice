@@ -1,0 +1,13 @@
+FROM alpine:3.23
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+
+COPY proof-service /usr/bin/proof-service
+
+RUN mkdir -p /app/zk-setup
+
+EXPOSE 8090
+
+CMD ["proof-service", "-c", "/app/config.json"]
