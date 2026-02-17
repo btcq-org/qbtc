@@ -259,7 +259,9 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
-			syncing, err := s.qclient.IsSyncing(ctx)
+			syncCtx, syncCancel := context.WithTimeout(ctx, 5*time.Second)
+			syncing, err := s.qclient.IsSyncing(syncCtx)
+			syncCancel()
 			if err != nil {
 				s.logger.Error().Err(err).Msg("failed to check node sync status")
 				time.Sleep(10 * time.Second)
@@ -350,7 +352,6 @@ func (s *Service) getBtcBlock(height int64) error {
 		return nil
 	}
 
-	s.logger.Info().Int64("block_height", height).Msg("published block gossip")
 	content, err := json.Marshal(block)
 	if err != nil {
 		return fmt.Errorf("failed to marshal block content at height %d: %w", height, err)
@@ -380,6 +381,7 @@ func (s *Service) getBtcBlock(height int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to publish block gossip at height %d: %w", height, err)
 	}
+	s.logger.Info().Int64("block_height", height).Msg("published block gossip")
 	s.metrics.IncrCounter(metrics.MetricNameProcessedBlocks)
 	return nil
 }
