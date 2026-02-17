@@ -38,7 +38,7 @@ type PubSubService struct {
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient, metrics *metrics.Metrics) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, isValidatorPeer func(peer.ID) bool, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient, metrics *metrics.Metrics) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
@@ -48,27 +48,11 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	if ebifrost == nil {
 		return nil, fmt.Errorf("ebifrost client instance is nil")
 	}
-	options := []pubsub.Option{
-		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
-		pubsub.WithDirectPeers(directPeers),
-		pubsub.WithMaxMessageSize(10 << 20), // 10 MB (default is 1MB)
+	if isValidatorPeer == nil {
+		return nil, fmt.Errorf("isValidatorPeer callback is nil")
 	}
-	pubsub, err := pubsub.NewGossipSub(
-		ctx,
-		host,
-		options...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start gossip pub sub,err: %w", err)
-	}
-	topic, err := pubsub.Join(topic)
-	if err != nil {
-		return nil, fmt.Errorf("fail to join topic, err: %w", err)
-	}
-	return &PubSubService{
-		pubsub:   pubsub,
+	service := &PubSubService{
 		host:     host,
-		topic:    topic,
 		logger:   log.With().Str("module", "pubsub_service").Logger(),
 		stopchan: make(chan struct{}),
 		wg:       &sync.WaitGroup{},
@@ -76,7 +60,97 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		qbtcNode: qbtcNode,
 		ebifrost: ebifrost,
 		metrics:  metrics,
-	}, nil
+	}
+
+	// Peer scoring biases GossipSub mesh membership and gossip decisions.
+	// Higher scores make peers more likely to stay in the mesh and be selected for gossip.
+	// Validator peers get a small positive boost so they are preferred without overriding topic-based scoring.
+	peerScoreParams := &pubsub.PeerScoreParams{
+		Topics: map[string]*pubsub.TopicScoreParams{
+			topic: {
+				TopicWeight:                    1.0,
+				TimeInMeshWeight:               0.01,
+				TimeInMeshQuantum:              time.Second,
+				TimeInMeshCap:                  3600,
+				FirstMessageDeliveriesWeight:   1.0,
+				FirstMessageDeliveriesDecay:    pubsub.ScoreParameterDecay(10 * time.Minute),
+				FirstMessageDeliveriesCap:      100,
+				InvalidMessageDeliveriesWeight: -10.0,
+				InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
+			},
+		},
+		AppSpecificScore: func(p peer.ID) float64 {
+			if isValidatorPeer(p) {
+				return 35.0
+			}
+			return 0.0
+		},
+		AppSpecificWeight: 1.0,
+		DecayInterval:     time.Minute,
+		DecayToZero:       0.01,
+		RetainScore:       30 * time.Minute,
+	}
+	// Thresholds define when peers are ignored, restricted, or graylisted based on total score.
+	// Keeping these near defaults ensures invalid messages still have consequences.
+	peerScoreThresholds := &pubsub.PeerScoreThresholds{
+		GossipThreshold:             -30,
+		PublishThreshold:            -50,
+		GraylistThreshold:           -80,
+		AcceptPXThreshold:           10,
+		OpportunisticGraftThreshold: 5,
+	}
+	options := []pubsub.Option{
+		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
+		pubsub.WithDirectPeers(directPeers),
+		pubsub.WithMaxMessageSize(10 << 20), // 10 MB (default is 1MB)
+		pubsub.WithPeerScore(peerScoreParams, peerScoreThresholds),
+		pubsub.WithStrictSignatureVerification(true),
+	}
+	ps, err := pubsub.NewGossipSub(
+		ctx,
+		host,
+		options...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start gossip pub sub,err: %w", err)
+	}
+	validator := func(ctx context.Context, from peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		if msg == nil {
+			return pubsub.ValidationReject
+		}
+		syncing, err := qbtcNode.IsSyncing(ctx)
+		if err != nil {
+			service.logger.Warn().Err(err).Msg("failed to check sync status in pubsub validator; ignoring message")
+			return pubsub.ValidationIgnore
+		}
+		if syncing {
+			service.logger.Warn().Msg("node syncing; ignoring pubsub message")
+			return pubsub.ValidationIgnore
+		}
+		var block types.BlockGossip
+		if err := proto.Unmarshal(msg.GetData(), &block); err != nil {
+			return pubsub.ValidationReject
+		}
+		verifyCtx, verifyCancel := context.WithTimeout(ctx, DefaultTimeout)
+		defer verifyCancel()
+		if err := qbtcNode.VerifyAttestation(verifyCtx, block); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return pubsub.ValidationIgnore
+			}
+			return pubsub.ValidationReject
+		}
+		return pubsub.ValidationAccept
+	}
+	if err := ps.RegisterTopicValidator(topic, validator, pubsub.WithValidatorTimeout(DefaultTimeout)); err != nil {
+		return nil, fmt.Errorf("failed to register pubsub topic validator: %w", err)
+	}
+	topic, err := ps.Join(topic)
+	if err != nil {
+		return nil, fmt.Errorf("fail to join topic, err: %w", err)
+	}
+	service.pubsub = ps
+	service.topic = topic
+	return service, nil
 }
 
 // GetPubSub returns the underlying PubSub instance
@@ -174,6 +248,17 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 
 	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer verifyCancel()
+
+	syncing, err := p.qbtcNode.IsSyncing(verifyCtx)
+	if err != nil {
+		p.logger.Error().Err(err).Msg("failed to check node sync status")
+		return fmt.Errorf("failed to check node sync status: %w", err)
+	}
+	if syncing {
+		p.logger.Warn().Msg("node is catching up; skipping attestation aggregation")
+		return nil
+	}
+
 	if err := p.qbtcNode.VerifyAttestation(verifyCtx, block); err != nil {
 		p.logger.Error().Err(err).Msg("failed to verify attestation")
 		return fmt.Errorf("failed to verify attestation: %w", err)

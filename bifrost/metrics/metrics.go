@@ -16,6 +16,7 @@ type MetricName string
 const (
 	MetricNameProcessedBlocks MetricName = "processed_blocks"
 	MetricNameAttestedBlocks  MetricName = "attested_blocks"
+	MetricNameValidatorPeers  MetricName = "validator_peers"
 )
 
 func (m MetricName) String() string {
@@ -43,6 +44,14 @@ var (
 			Help:      "Number of attested blocks",
 		}),
 	}
+	gauges = map[MetricName]prometheus.Gauge{
+		MetricNameValidatorPeers: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: NamespaceBifrost,
+			Subsystem: SubsystemP2P,
+			Name:      MetricNameValidatorPeers.String(),
+			Help:      "Number of known validator peers",
+		}),
+	}
 )
 
 var registerOnce sync.Once
@@ -52,6 +61,9 @@ func NewMetrics() *Metrics {
 		for _, counter := range counters {
 			_ = prometheus.Register(counter)
 		}
+		for _, gauge := range gauges {
+			_ = prometheus.Register(gauge)
+		}
 	})
 	return &Metrics{}
 }
@@ -59,6 +71,12 @@ func NewMetrics() *Metrics {
 func (m *Metrics) IncrCounter(name MetricName) {
 	if counter, ok := counters[name]; ok {
 		counter.Inc()
+	}
+}
+
+func (m *Metrics) SetGauge(name MetricName, value float64) {
+	if gauge, ok := gauges[name]; ok {
+		gauge.Set(value)
 	}
 }
 

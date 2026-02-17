@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,7 +71,12 @@ func NewService(cfg config.Config) (*Service, error) {
 	if qbtcGRPCAddress == "" {
 		qbtcGRPCAddress = "localhost:9090"
 	}
-	qClient, err := qclient.New(qbtcGRPCAddress, true)
+	cometBFTRPCAddress := cfg.CometBFTRPCAddress
+	if cometBFTRPCAddress == "" {
+		cometBFTRPCAddress = "http://localhost:26657"
+	}
+	cometBFTRPCAddress = normalizeCometBFTRPCAddress(cometBFTRPCAddress)
+	qClient, err := qclient.New(qbtcGRPCAddress, true, cometBFTRPCAddress)
 	if err != nil {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
@@ -159,6 +165,15 @@ func NewService(cfg config.Config) (*Service, error) {
 	}, nil
 }
 
+func normalizeCometBFTRPCAddress(addr string) string {
+	if strings.HasPrefix(addr, "tcp://") {
+		addr = "http://" + strings.TrimPrefix(addr, "tcp://")
+	} else if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	return addr
+}
+
 func getValidatorKey(qbtcHome string) (crypto.PrivKey, error) {
 	homeFolder := qbtcHome
 	if homeFolder == "" {
@@ -194,7 +209,11 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start p2p network: %w", err)
 	}
 	s.logger.Info().Msg("bifrost service started")
-	pubSubService, err := p2p.NewPubSubService(ctx, s.network.GetHost(), s.network.ConnectedPeers(), s.db, s.qclient, s.ebifrost, s.metrics)
+	pubSubService, err := p2p.NewPubSubService(
+		ctx, s.network.GetHost(), s.network.ValidatorPeers(),
+		s.network.IsValidatorPeer,
+		s.db, s.qclient, s.ebifrost, s.metrics,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub service: %w", err)
 	}
@@ -251,6 +270,20 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
+			syncCtx, syncCancel := context.WithTimeout(ctx, 5*time.Second)
+			syncing, err := s.qclient.IsSyncing(syncCtx)
+			syncCancel()
+			if err != nil {
+				s.logger.Error().Err(err).Msg("failed to check node sync status")
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			if syncing {
+				s.logger.Warn().Msg("node is still catching up; waiting for sync to complete")
+				time.Sleep(30 * time.Second)
+				continue
+			}
+
 			isActive, err := s.qclient.IsActiveValidator(ctx, consAddr)
 			if err != nil {
 				s.logger.Error().Err(err).Msg("failed to check if node is active validator")
@@ -329,7 +362,7 @@ func (s *Service) getBtcBlock(height int64) error {
 	if block == nil {
 		return nil
 	}
-	s.logger.Info().Int64("block_height", height).Msg("published block gossip")
+
 	content, err := json.Marshal(block)
 	if err != nil {
 		return fmt.Errorf("failed to marshal block content at height %d: %w", height, err)
@@ -346,7 +379,7 @@ func (s *Service) getBtcBlock(height int64) error {
 	// sdk.ValAddress is reserved for the OperatorAddress
 	// eg: qbtcvalcons1...
 	valAddr := sdk.ConsAddress(s.validatorPrivateKey.PubKey().Address())
-	blockGassip := types.BlockGossip{
+	blockGossip := types.BlockGossip{
 		Hash:         block.Hash,
 		Height:       uint64(block.Height),
 		BlockContent: compressedContent,
@@ -355,10 +388,11 @@ func (s *Service) getBtcBlock(height int64) error {
 			Signature: sig,
 		},
 	}
-	err = s.pubsub.Publish(blockGassip)
+	err = s.pubsub.Publish(blockGossip)
 	if err != nil {
 		return fmt.Errorf("failed to publish block gossip at height %d: %w", height, err)
 	}
+	s.logger.Info().Int64("block_height", height).Msg("published block gossip")
 	s.metrics.IncrCounter(metrics.MetricNameProcessedBlocks)
 	return nil
 }

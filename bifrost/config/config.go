@@ -19,6 +19,7 @@ type Config struct {
 	QBTCHome             string         `mapstructure:"qbtc_home" json:"qbtc_home"`
 	EbifrostAddress      string         `mapstructure:"ebifrost_address" json:"ebifrost_address"`
 	QBTCGRPCAddress      string         `mapstructure:"qbtc_grpc_address" json:"qbtc_grpc_address"`
+	CometBFTRPCAddress   string         `mapstructure:"cometbft_rpc_address" json:"cometbft_rpc_address"`
 	BackoffTimeInMinutes int64          `mapstructure:"backoff_time_in_minutes" json:"backoff_time_in_minutes"`
 }
 
@@ -44,6 +45,7 @@ func DefaultConfig() *Config {
 		},
 		EbifrostAddress:      "localhost:50051",
 		QBTCGRPCAddress:      "localhost:9090",
+		CometBFTRPCAddress:   "http://localhost:26657",
 		BackoffTimeInMinutes: 1,
 	}
 }

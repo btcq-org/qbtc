@@ -110,7 +110,7 @@ func MockStakingClient() stakingtypes.QueryClient {
 	}
 }
 func TestValidatorsVotingPower(t *testing.T) {
-	client, err := qclient.New("localhost:9090", true)
+	client, err := qclient.New("localhost:9090", true, "http://localhost:26657")
 	require.NoError(t, err)
 	client = client.WithStakingClient(MockStakingClient())
 	// create random validator vp array
@@ -165,7 +165,7 @@ func TestIsActiveValidator(t *testing.T) {
 		bondedTokens: totalTokens,
 	}
 
-	client, err := qclient.New("localhost:9090", true)
+	client, err := qclient.New("localhost:9090", true, "http://localhost:26657")
 	require.NoError(t, err)
 	client = client.WithStakingClient(mock)
 
