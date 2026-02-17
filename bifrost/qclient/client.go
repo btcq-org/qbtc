@@ -54,10 +54,11 @@ func NewGRPCConnection(target string, insecure bool) (*grpc.ClientConn, error) {
 	if insecure {
 		conn, err := grpc.NewClient(target,
 			grpc.WithTransportCredentials(insecurecreds.NewCredentials()),
-			grpc.WithContextDialer(dialerFunc))
-		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(10*1024*1024),
-			grpc.MaxCallSendMsgSize(10*1024*1024),
+			grpc.WithContextDialer(dialerFunc),
+			grpc.WithDefaultCallOptions(
+				grpc.MaxCallRecvMsgSize(10*1024*1024),
+				grpc.MaxCallSendMsgSize(10*1024*1024),
+			),
 		)
 		if err != nil {
 			return nil, err
@@ -70,6 +71,10 @@ func NewGRPCConnection(target string, insecure bool) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			MinVersion: tls.VersionTLS13,
 		})),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(10*1024*1024), // 10MB
+			grpc.MaxCallSendMsgSize(10*1024*1024), // 10MB
+		),
 	)
 	if err != nil {
 		return nil, err
