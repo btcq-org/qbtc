@@ -53,6 +53,7 @@ type Network struct {
 	validatorPeers   map[peer.ID]peer.AddrInfo
 	stopChan         chan struct{}
 	wg               sync.WaitGroup
+	connectPeer      func(peer.AddrInfo)
 }
 
 func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode, metrics *metrics.Metrics) (*Network, error) {
@@ -84,6 +85,7 @@ func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode, metrics *me
 		logger:         log.With().Str("module", "p2p").Logger(),
 		metrics:        metrics,
 	}
+	n.connectPeer = n.connectValidatorPeer
 
 	if config.ExternalIP != "" {
 		if net.ParseIP(config.ExternalIP) == nil {
@@ -375,16 +377,7 @@ func (n *Network) refreshValidatorPeers(ctx context.Context) {
 			n.logger.Info().Str("peer", id.String()).Msg("tagged new validator peer")
 			// Connect if not already connected
 			if n.h.Network().Connectedness(id) != network.Connected {
-				peerInfo := p
-				n.wg.Add(1)
-				go func(p peer.AddrInfo) {
-					defer n.wg.Done()
-					connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer connectCancel()
-					if err := n.h.Connect(connectCtx, p); err != nil {
-						n.logger.Warn().Err(err).Str("peer", p.ID.String()).Msg("failed to connect to new validator peer")
-					}
-				}(peerInfo)
+				n.connectPeer(p)
 			}
 		}
 	}
@@ -402,4 +395,16 @@ func (n *Network) refreshValidatorPeers(ctx context.Context) {
 		n.metrics.SetGauge(metrics.MetricNameValidatorPeers, float64(len(newSet)))
 	}
 	n.logger.Info().Int("validator_peers", len(newSet)).Msg("refreshed validator peer set")
+}
+
+func (n *Network) connectValidatorPeer(p peer.AddrInfo) {
+	n.wg.Add(1)
+	go func(p peer.AddrInfo) {
+		defer n.wg.Done()
+		connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer connectCancel()
+		if err := n.h.Connect(connectCtx, p); err != nil {
+			n.logger.Warn().Err(err).Str("peer", p.ID.String()).Msg("failed to connect to new validator peer")
+		}
+	}(p)
 }
