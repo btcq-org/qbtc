@@ -8,8 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"fmt"
+
 	"github.com/btcq-org/qbtc/common"
 	qtypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -26,6 +29,7 @@ type Client struct {
 	conn          *grpc.ClientConn
 	qClient       qtypes.QueryClient
 	stakingClient stakingtypes.QueryClient
+	cmtRPCClient  *rpchttp.HTTP
 	logger        zerolog.Logger
 
 	// cached validators
@@ -41,6 +45,7 @@ type QBTCNode interface {
 	CheckAttestationsSuperMajority(ctx context.Context, msg *qtypes.MsgBtcBlock) error
 	GetLatestBtcBlockHeight(ctx context.Context) (uint64, error)
 	IsActiveValidator(ctx context.Context, consAddr sdk.ConsAddress) (bool, error)
+	IsSyncing(ctx context.Context) (bool, error)
 }
 
 var _ QBTCNode = &Client{}
@@ -73,22 +78,28 @@ func NewGRPCConnection(target string, insecure bool) (*grpc.ClientConn, error) {
 }
 
 // New creates a new query client for QBTC blockchain node at the given target address.
-func New(target string, insecure bool) (*Client, error) {
+func New(target string, insecure bool, cometBFTRPCAddress string) (*Client, error) {
 	conn, err := NewGRPCConnection(target, insecure)
 	if err != nil {
 		return nil, err
 	}
 
-	return clientWithConn(conn), nil
+	cmtRPCClient, err := rpchttp.New(cometBFTRPCAddress, "/websocket")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CometBFT RPC client: %w", err)
+	}
+
+	return clientWithConn(conn, cmtRPCClient), nil
 }
 
-func clientWithConn(conn *grpc.ClientConn) *Client {
+func clientWithConn(conn *grpc.ClientConn, cmtRPCClient *rpchttp.HTTP) *Client {
 	registry := codectypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(registry)
 	return &Client{
 		conn:             conn,
 		qClient:          qtypes.NewQueryClient(conn),
 		stakingClient:    stakingtypes.NewQueryClient(conn),
+		cmtRPCClient:     cmtRPCClient,
 		logger:           log.With().Str("module", "qclient").Logger(),
 		activeValidators: make([]stakingtypes.Validator, 0),
 		lastUpdateTime:   time.Now().Add(-time.Minute),
@@ -120,6 +131,14 @@ func protocolAndAddress(listenAddr string) (string, string) {
 	}
 
 	return protocol, address
+}
+
+func (c *Client) IsSyncing(ctx context.Context) (bool, error) {
+	status, err := c.cmtRPCClient.Status(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get node sync status: %w", err)
+	}
+	return status.SyncInfo.CatchingUp, nil
 }
 
 func (c *Client) Close() error {

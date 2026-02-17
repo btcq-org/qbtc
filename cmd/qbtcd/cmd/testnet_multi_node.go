@@ -432,6 +432,7 @@ func initTestnetFiles(
 			bifrostHome,
 			fmt.Sprintf("node_%d:50051", i),
 			fmt.Sprintf("node_%d:%d", i, 9090-2*i),
+			fmt.Sprintf("http://node_%d:26657", i),
 			"/qbtc_data/.qbtc/bitcoin_data"); err != nil {
 			return err
 		}
@@ -503,7 +504,7 @@ func writeFile(file, dir string, contents []byte) error {
 	return nil
 }
 
-func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress, dataDir string) error {
+func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress, cometBFTRPCAddress, dataDir string) error {
 	bifrostConfig := bifrostconfig.DefaultConfig()
 	bifrostConfig.StartBlockHeight = args.bifrostStartBlockHeight
 	bifrostConfig.BitcoinConfig.Host = args.bitcoinRPCHost
@@ -520,6 +521,7 @@ func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress
 	bifrostConfig.QBTCHome = "/qbtc_data/.qbtc"
 	bifrostConfig.EbifrostAddress = ebifrostAddress
 	bifrostConfig.QBTCGRPCAddress = nodeGRPCAddress
+	bifrostConfig.CometBFTRPCAddress = cometBFTRPCAddress
 
 	bifrostConfigJSON, err := json.Marshal(bifrostConfig)
 	if err != nil {

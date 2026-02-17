@@ -70,7 +70,11 @@ func NewService(cfg config.Config) (*Service, error) {
 	if qbtcGRPCAddress == "" {
 		qbtcGRPCAddress = "localhost:9090"
 	}
-	qClient, err := qclient.New(qbtcGRPCAddress, true)
+	cometBFTRPCAddress := cfg.CometBFTRPCAddress
+	if cometBFTRPCAddress == "" {
+		cometBFTRPCAddress = "http://localhost:26657"
+	}
+	qClient, err := qclient.New(qbtcGRPCAddress, true, cometBFTRPCAddress)
 	if err != nil {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
 	}
@@ -255,6 +259,18 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			s.logger.Info().Msg("stopping bitcoin block processing")
 			return
 		default:
+			syncing, err := s.qclient.IsSyncing(ctx)
+			if err != nil {
+				s.logger.Error().Err(err).Msg("failed to check node sync status")
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			if syncing {
+				s.logger.Warn().Msg("node is still catching up; waiting for sync to complete")
+				time.Sleep(30 * time.Second)
+				continue
+			}
+
 			isActive, err := s.qclient.IsActiveValidator(ctx, consAddr)
 			if err != nil {
 				s.logger.Error().Err(err).Msg("failed to check if node is active validator")

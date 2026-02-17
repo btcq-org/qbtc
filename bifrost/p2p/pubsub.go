@@ -118,6 +118,13 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		if msg == nil {
 			return pubsub.ValidationReject
 		}
+		syncing, err := qbtcNode.IsSyncing(ctx)
+		if err != nil {
+			return pubsub.ValidationIgnore
+		}
+		if syncing {
+			return pubsub.ValidationIgnore
+		}
 		var block types.BlockGossip
 		if err := proto.Unmarshal(msg.GetData(), &block); err != nil {
 			return pubsub.ValidationReject
@@ -239,6 +246,17 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 
 	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer verifyCancel()
+
+	syncing, err := p.qbtcNode.IsSyncing(verifyCtx)
+	if err != nil {
+		p.logger.Error().Err(err).Msg("failed to check node sync status")
+		return fmt.Errorf("failed to check node sync status: %w", err)
+	}
+	if syncing {
+		p.logger.Warn().Msg("node is catching up; skipping attestation aggregation")
+		return nil
+	}
+
 	if err := p.qbtcNode.VerifyAttestation(verifyCtx, block); err != nil {
 		p.logger.Error().Err(err).Msg("failed to verify attestation")
 		return fmt.Errorf("failed to verify attestation: %w", err)
