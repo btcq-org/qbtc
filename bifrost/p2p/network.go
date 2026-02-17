@@ -15,12 +15,20 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	maddr "github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	validatorTag             = "validator"
+	validatorTagValue        = 100
+	validatorRefreshInterval = 60 * time.Second
 )
 
 // Network is the p2p network
@@ -38,6 +46,11 @@ type Network struct {
 	localDHT *dht.IpfsDHT
 	logger   zerolog.Logger
 	metrics  *metrics.Metrics
+
+	validatorPeersMu sync.RWMutex
+	validatorPeers   map[peer.ID]peer.AddrInfo
+	stopChan         chan struct{}
+	wg               sync.WaitGroup
 }
 
 func NewNetwork(config *config.P2PConfig, qBTCNode qclient.QBTCNode, metrics *metrics.Metrics) (*Network, error) {
@@ -120,6 +133,14 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 	if err != nil {
 		return err
 	}
+	cm, err := connmgr.NewConnManager(
+		40,  // low watermark
+		100, // high watermark
+		connmgr.WithGracePeriod(time.Minute),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create connection manager: %w", err)
+	}
 	opts := []libp2p.Option{
 		libp2p.ListenAddrs(n.listenAddr, n.listenAddrQUIC),
 		libp2p.ChainOptions(
@@ -130,12 +151,16 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 		libp2p.Identity(privKey),
 		// address factory
 		libp2p.AddrsFactory(n.addressFactory),
+		libp2p.ConnectionManager(cm),
 	}
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return err
 	}
 	n.h = host
+	n.validatorPeers = make(map[peer.ID]peer.AddrInfo)
+	n.stopChan = make(chan struct{})
+
 	dht, err := dht.New(ctx, n.h,
 		dht.QueryFilter(dht.PublicQueryFilter),
 		dht.RoutingTableFilter(dht.PublicRoutingTableFilter),
@@ -166,6 +191,10 @@ func (n *Network) Start(ctx context.Context, key *keystore.PrivKey) error {
 		return fmt.Errorf("failed to bootstrap initial peers,err: %w", err)
 	}
 	n.logger.Info().Msg("bootstrap initial peers")
+
+	n.wg.Add(1)
+	go n.startValidatorPeerRefresh(ctx)
+
 	return nil
 }
 
@@ -210,6 +239,14 @@ func (n *Network) Stop() error {
 	if n.h == nil {
 		return nil
 	}
+	if n.stopChan != nil {
+		select {
+		case <-n.stopChan:
+		default:
+			close(n.stopChan)
+		}
+	}
+	n.wg.Wait()
 	err := n.h.Close()
 	n.h = nil
 	n.localDHT.Close()
@@ -224,19 +261,132 @@ func (n *Network) GetListenAddr() maddr.Multiaddr {
 
 // BootstrapInitialPeers connects to the given initial bootstrap peers
 func (n *Network) BootstrapInitialPeers(initialPeers []peer.AddrInfo) error {
-	wg := sync.WaitGroup{}
-	wg.Add(len(initialPeers))
+	bootstrapWg := sync.WaitGroup{}
+	bootstrapWg.Add(len(initialPeers))
 	for _, p := range initialPeers {
-		go func() {
-			defer wg.Done()
+		peerInfo := p
+		go func(p peer.AddrInfo) {
+			defer bootstrapWg.Done()
 			err := n.h.Connect(context.Background(), p)
 			if err != nil {
 				n.logger.Err(err).Msgf("failed to connect to bootstrapper %s", p.String())
 				return
 			}
+			n.h.ConnManager().TagPeer(p.ID, validatorTag, validatorTagValue)
+			n.h.ConnManager().Protect(p.ID, validatorTag)
 			n.logger.Info().Msgf("successfully connected to bootstrapper %s", p.String())
-		}()
+		}(peerInfo)
 	}
-	wg.Wait()
+	bootstrapWg.Wait()
+
+	// Store initial validator peers
+	n.validatorPeersMu.Lock()
+	for _, p := range initialPeers {
+		if p.ID == n.h.ID() {
+			continue
+		}
+		n.validatorPeers[p.ID] = p
+	}
+	n.validatorPeersMu.Unlock()
+	if n.metrics != nil {
+		n.metrics.SetGauge(metrics.MetricNameValidatorPeers, float64(len(n.validatorPeers)))
+	}
+
 	return nil
+}
+
+// ValidatorPeers returns the tracked validator peers (excluding self)
+func (n *Network) ValidatorPeers() []peer.AddrInfo {
+	n.validatorPeersMu.RLock()
+	defer n.validatorPeersMu.RUnlock()
+	peers := make([]peer.AddrInfo, 0, len(n.validatorPeers))
+	for _, p := range n.validatorPeers {
+		peers = append(peers, p)
+	}
+	return peers
+}
+
+// IsValidatorPeer returns true if the given peer ID is a known validator
+func (n *Network) IsValidatorPeer(p peer.ID) bool {
+	n.validatorPeersMu.RLock()
+	_, ok := n.validatorPeers[p]
+	n.validatorPeersMu.RUnlock()
+	return ok
+}
+
+func (n *Network) startValidatorPeerRefresh(ctx context.Context) {
+	defer n.wg.Done()
+	ticker := time.NewTicker(validatorRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-n.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n.refreshValidatorPeers(ctx)
+		}
+	}
+}
+
+func (n *Network) refreshValidatorPeers(ctx context.Context) {
+	refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	newPeers, err := n.qBTCNode.GetBootstrapPeers(refreshCtx)
+	if err != nil {
+		n.logger.Error().Err(err).Msg("failed to refresh validator peers")
+		return
+	}
+	if len(newPeers) == 0 {
+		n.logger.Warn().Msg("validator peer refresh returned empty set; keeping existing peers")
+		return
+	}
+
+	newSet := make(map[peer.ID]peer.AddrInfo, len(newPeers))
+	for _, p := range newPeers {
+		if p.ID == n.h.ID() {
+			continue
+		}
+		newSet[p.ID] = p
+	}
+
+	n.validatorPeersMu.Lock()
+	oldSet := n.validatorPeers
+	n.validatorPeers = newSet
+	n.validatorPeersMu.Unlock()
+
+	// Tag new validators
+	for id, p := range newSet {
+		if _, existed := oldSet[id]; !existed {
+			n.h.ConnManager().TagPeer(id, validatorTag, validatorTagValue)
+			n.h.ConnManager().Protect(id, validatorTag)
+			n.logger.Info().Str("peer", id.String()).Msg("tagged new validator peer")
+			// Connect if not already connected
+			if n.h.Network().Connectedness(id) != network.Connected {
+				peerInfo := p
+				go func(p peer.AddrInfo) {
+					connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer connectCancel()
+					if err := n.h.Connect(connectCtx, p); err != nil {
+						n.logger.Warn().Err(err).Str("peer", p.ID.String()).Msg("failed to connect to new validator peer")
+					}
+				}(peerInfo)
+			}
+		}
+	}
+
+	// Untag removed validators
+	for id := range oldSet {
+		if _, exists := newSet[id]; !exists {
+			n.h.ConnManager().UntagPeer(id, validatorTag)
+			n.h.ConnManager().Unprotect(id, validatorTag)
+			n.logger.Info().Str("peer", id.String()).Msg("untagged removed validator peer")
+		}
+	}
+
+	if n.metrics != nil {
+		n.metrics.SetGauge(metrics.MetricNameValidatorPeers, float64(len(newSet)))
+	}
+	n.logger.Info().Int("validator_peers", len(newSet)).Msg("refreshed validator peer set")
 }

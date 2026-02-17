@@ -38,7 +38,7 @@ type PubSubService struct {
 }
 
 // NewPubSubService creates a new PubSubService instance
-func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient, metrics *metrics.Metrics) (*PubSubService, error) {
+func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.AddrInfo, isValidatorPeer func(peer.ID) bool, db *leveldb.DB, qbtcNode qclient.QBTCNode, ebifrost ebifrost.LocalhostBifrostClient, metrics *metrics.Metrics) (*PubSubService, error) {
 	if db == nil {
 		return nil, fmt.Errorf("leveldb instance is nil")
 	}
@@ -48,10 +48,63 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	if ebifrost == nil {
 		return nil, fmt.Errorf("ebifrost client instance is nil")
 	}
+	if isValidatorPeer == nil {
+		return nil, fmt.Errorf("isValidatorPeer callback is nil")
+	}
+	service := &PubSubService{
+		host:     host,
+		logger:   log.With().Str("module", "pubsub_service").Logger(),
+		stopchan: make(chan struct{}),
+		wg:       &sync.WaitGroup{},
+		db:       db,
+		qbtcNode: qbtcNode,
+		ebifrost: ebifrost,
+		metrics:  metrics,
+	}
+
+	// Peer scoring biases GossipSub mesh membership and gossip decisions.
+	// Higher scores make peers more likely to stay in the mesh and be selected for gossip.
+	// Validator peers get a small positive boost so they are preferred without overriding topic-based scoring.
+	peerScoreParams := &pubsub.PeerScoreParams{
+		Topics: map[string]*pubsub.TopicScoreParams{
+			topic: {
+				TopicWeight:                    1.0,
+				TimeInMeshWeight:               0.01,
+				TimeInMeshQuantum:              time.Second,
+				TimeInMeshCap:                  3600,
+				FirstMessageDeliveriesWeight:   1.0,
+				FirstMessageDeliveriesDecay:    pubsub.ScoreParameterDecay(10 * time.Minute),
+				FirstMessageDeliveriesCap:      100,
+				InvalidMessageDeliveriesWeight: -100.0,
+				InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
+			},
+		},
+		AppSpecificScore: func(p peer.ID) float64 {
+			if isValidatorPeer(p) {
+				return 25.0
+			}
+			return 0.0
+		},
+		AppSpecificWeight: 1.0,
+		DecayInterval:     time.Minute,
+		DecayToZero:       0.01,
+		RetainScore:       30 * time.Minute,
+	}
+	// Thresholds define when peers are ignored, restricted, or graylisted based on total score.
+	// Keeping these near defaults ensures invalid messages still have consequences.
+	peerScoreThresholds := &pubsub.PeerScoreThresholds{
+		GossipThreshold:             -10,
+		PublishThreshold:            -50,
+		GraylistThreshold:           -80,
+		AcceptPXThreshold:           10,
+		OpportunisticGraftThreshold: 5,
+	}
 	options := []pubsub.Option{
 		pubsub.WithGossipSubProtocols([]protocol.ID{pubsub.GossipSubID_v13}, pubsub.GossipSubDefaultFeatures),
 		pubsub.WithDirectPeers(directPeers),
 		pubsub.WithMaxMessageSize(10 << 20), // 10 MB (default is 1MB)
+		pubsub.WithPeerScore(peerScoreParams, peerScoreThresholds),
+		pubsub.WithStrictSignatureVerification(true),
 	}
 	pubsub, err := pubsub.NewGossipSub(
 		ctx,
@@ -65,18 +118,9 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	if err != nil {
 		return nil, fmt.Errorf("fail to join topic, err: %w", err)
 	}
-	return &PubSubService{
-		pubsub:   pubsub,
-		host:     host,
-		topic:    topic,
-		logger:   log.With().Str("module", "pubsub_service").Logger(),
-		stopchan: make(chan struct{}),
-		wg:       &sync.WaitGroup{},
-		db:       db,
-		qbtcNode: qbtcNode,
-		ebifrost: ebifrost,
-		metrics:  metrics,
-	}, nil
+	service.pubsub = pubsub
+	service.topic = topic
+	return service, nil
 }
 
 // GetPubSub returns the underlying PubSub instance
