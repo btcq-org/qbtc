@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -75,8 +75,9 @@ func NewService(cfg config.Config) (*Service, error) {
 	if cometBFTRPCAddress == "" {
 		cometBFTRPCAddress = "http://localhost:26657"
 	}
-	if !strings.HasPrefix(cometBFTRPCAddress, "http://") && !strings.HasPrefix(cometBFTRPCAddress, "https://") {
-		cometBFTRPCAddress = "http://" + cometBFTRPCAddress
+	cometBFTRPCAddress, err = normalizeCometBFTRPCAddress(cometBFTRPCAddress)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cometbft rpc address %q: %w", cometBFTRPCAddress, err)
 	}
 	qClient, err := qclient.New(qbtcGRPCAddress, true, cometBFTRPCAddress)
 	if err != nil {
@@ -165,6 +166,22 @@ func NewService(cfg config.Config) (*Service, error) {
 		hs:                  hs,
 		metrics:             metrics,
 	}, nil
+}
+
+func normalizeCometBFTRPCAddress(addr string) (string, error) {
+	parsed, err := url.Parse(addr)
+	if err != nil {
+		return "", err
+	}
+
+	if parsed.Scheme == "" {
+		return "http://" + addr, nil
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		parsed.Scheme = "http"
+		return parsed.String(), nil
+	}
+	return addr, nil
 }
 
 func getValidatorKey(qbtcHome string) (crypto.PrivKey, error) {

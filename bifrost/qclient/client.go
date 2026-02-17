@@ -139,6 +139,9 @@ func protocolAndAddress(listenAddr string) (string, string) {
 }
 
 func (c *Client) IsSyncing(ctx context.Context) (bool, error) {
+	if c.cmtRPCClient == nil {
+		return false, fmt.Errorf("cmtRPCClient is nil")
+	}
 	status, err := c.cmtRPCClient.Status(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to get node sync status: %w", err)
