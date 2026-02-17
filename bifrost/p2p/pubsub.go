@@ -75,13 +75,13 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 				FirstMessageDeliveriesWeight:   1.0,
 				FirstMessageDeliveriesDecay:    pubsub.ScoreParameterDecay(10 * time.Minute),
 				FirstMessageDeliveriesCap:      100,
-				InvalidMessageDeliveriesWeight: -100.0,
+				InvalidMessageDeliveriesWeight: -10.0,
 				InvalidMessageDeliveriesDecay:  pubsub.ScoreParameterDecay(time.Hour),
 			},
 		},
 		AppSpecificScore: func(p peer.ID) float64 {
 			if isValidatorPeer(p) {
-				return 25.0
+				return 35.0
 			}
 			return 0.0
 		},
@@ -93,7 +93,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	// Thresholds define when peers are ignored, restricted, or graylisted based on total score.
 	// Keeping these near defaults ensures invalid messages still have consequences.
 	peerScoreThresholds := &pubsub.PeerScoreThresholds{
-		GossipThreshold:             -10,
+		GossipThreshold:             -30,
 		PublishThreshold:            -50,
 		GraylistThreshold:           -80,
 		AcceptPXThreshold:           10,
@@ -106,7 +106,7 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		pubsub.WithPeerScore(peerScoreParams, peerScoreThresholds),
 		pubsub.WithStrictSignatureVerification(true),
 	}
-	pubsub, err := pubsub.NewGossipSub(
+	ps, err := pubsub.NewGossipSub(
 		ctx,
 		host,
 		options...,
@@ -114,11 +114,32 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 	if err != nil {
 		return nil, fmt.Errorf("failed to start gossip pub sub,err: %w", err)
 	}
-	topic, err := pubsub.Join(topic)
+	validator := func(ctx context.Context, from peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		if msg == nil {
+			return pubsub.ValidationReject
+		}
+		var block types.BlockGossip
+		if err := proto.Unmarshal(msg.GetData(), &block); err != nil {
+			return pubsub.ValidationReject
+		}
+		verifyCtx, verifyCancel := context.WithTimeout(ctx, DefaultTimeout)
+		defer verifyCancel()
+		if err := qbtcNode.VerifyAttestation(verifyCtx, block); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return pubsub.ValidationIgnore
+			}
+			return pubsub.ValidationReject
+		}
+		return pubsub.ValidationAccept
+	}
+	if err := ps.RegisterTopicValidator(topic, validator, pubsub.WithValidatorTimeout(DefaultTimeout)); err != nil {
+		return nil, fmt.Errorf("failed to register pubsub topic validator: %w", err)
+	}
+	topic, err := ps.Join(topic)
 	if err != nil {
 		return nil, fmt.Errorf("fail to join topic, err: %w", err)
 	}
-	service.pubsub = pubsub
+	service.pubsub = ps
 	service.topic = topic
 	return service, nil
 }
