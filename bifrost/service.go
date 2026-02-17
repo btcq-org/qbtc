@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -168,20 +168,13 @@ func NewService(cfg config.Config) (*Service, error) {
 	}, nil
 }
 
-func normalizeCometBFTRPCAddress(addr string) (string, error) {
-	parsed, err := url.Parse(addr)
-	if err != nil {
-		return "", err
+func normalizeCometBFTRPCAddress(addr string) string {
+	if strings.HasPrefix(addr, "tcp://") {
+		addr = "http://" + strings.TrimPrefix(addr, "tcp://")
+	} else if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
 	}
-
-	if parsed.Scheme == "" {
-		return "http://" + addr, nil
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		parsed.Scheme = "http"
-		return parsed.String(), nil
-	}
-	return addr, nil
+	return addr
 }
 
 func getValidatorKey(qbtcHome string) (crypto.PrivKey, error) {
