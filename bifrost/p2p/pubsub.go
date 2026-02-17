@@ -120,9 +120,11 @@ func NewPubSubService(ctx context.Context, host host.Host, directPeers []peer.Ad
 		}
 		syncing, err := qbtcNode.IsSyncing(ctx)
 		if err != nil {
+			service.logger.Warn().Err(err).Msg("failed to check sync status in pubsub validator; ignoring message")
 			return pubsub.ValidationIgnore
 		}
 		if syncing {
+			service.logger.Warn().Msg("node syncing; ignoring pubsub message")
 			return pubsub.ValidationIgnore
 		}
 		var block types.BlockGossip
