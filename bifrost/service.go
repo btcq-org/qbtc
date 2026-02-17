@@ -300,7 +300,7 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 			}
 			s.logger.Info().Str("block_hash", blockHash).Int64("block_height", blockHeight+1).Msg("retrieved latest block hash")
 
-			if err := s.getBtcBlock(ctx, blockHeight); err != nil {
+			if err := s.getBtcBlock(blockHeight); err != nil {
 				// when there is an error , let's retry it
 				s.logger.Error().Err(err).Msgf("failed to get btc block at height %d", blockHeight)
 				continue
@@ -321,7 +321,7 @@ func (s *Service) getQBTCLatestProcessBTCBlockHeight(ctx context.Context) (uint6
 }
 
 // getBtcBlock retrieves the bitcoin block at the given height
-func (s *Service) getBtcBlock(ctx context.Context, height int64) error {
+func (s *Service) getBtcBlock(height int64) error {
 	blockHash, err := s.btcClient.GetBlockHash(height)
 	if err != nil {
 		return fmt.Errorf("failed to get block hash at height %d: %w", height, err)
@@ -333,16 +333,7 @@ func (s *Service) getBtcBlock(ctx context.Context, height int64) error {
 	if block == nil {
 		return nil
 	}
-	statusCtx, statusCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer statusCancel()
-	consAddr := sdk.ConsAddress(s.validatorPrivateKey.PubKey().Address())
-	isActive, err := s.qclient.IsActiveValidator(statusCtx, consAddr)
-	if err != nil {
-		return fmt.Errorf("failed to check active validator status: %w", err)
-	}
-	if !isActive {
-		return fmt.Errorf("validator not active; skipping block gossip publish")
-	}
+
 	s.logger.Info().Int64("block_height", height).Msg("published block gossip")
 	content, err := json.Marshal(block)
 	if err != nil {
