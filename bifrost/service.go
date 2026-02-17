@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,6 +74,9 @@ func NewService(cfg config.Config) (*Service, error) {
 	cometBFTRPCAddress := cfg.CometBFTRPCAddress
 	if cometBFTRPCAddress == "" {
 		cometBFTRPCAddress = "http://localhost:26657"
+	}
+	if !strings.HasPrefix(cometBFTRPCAddress, "http://") && !strings.HasPrefix(cometBFTRPCAddress, "https://") {
+		cometBFTRPCAddress = "http://" + cometBFTRPCAddress
 	}
 	qClient, err := qclient.New(qbtcGRPCAddress, true, cometBFTRPCAddress)
 	if err != nil {

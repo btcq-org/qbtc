@@ -251,8 +251,10 @@ func (n *Network) Stop() error {
 	n.wg.Wait()
 	err := n.h.Close()
 	n.h = nil
-	n.localDHT.Close()
-	n.localDHT = nil
+	if n.localDHT != nil {
+		n.localDHT.Close()
+		n.localDHT = nil
+	}
 	return err
 }
 
