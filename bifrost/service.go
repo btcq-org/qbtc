@@ -75,10 +75,7 @@ func NewService(cfg config.Config) (*Service, error) {
 	if cometBFTRPCAddress == "" {
 		cometBFTRPCAddress = "http://localhost:26657"
 	}
-	cometBFTRPCAddress, err = normalizeCometBFTRPCAddress(cometBFTRPCAddress)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cometbft rpc address %q: %w", cometBFTRPCAddress, err)
-	}
+	cometBFTRPCAddress = normalizeCometBFTRPCAddress(cometBFTRPCAddress)
 	qClient, err := qclient.New(qbtcGRPCAddress, true, cometBFTRPCAddress)
 	if err != nil {
 		return nil, fmt.Errorf("fail to created client to qbtc node,err: %w", err)
