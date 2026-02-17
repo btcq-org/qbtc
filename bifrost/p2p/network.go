@@ -376,7 +376,9 @@ func (n *Network) refreshValidatorPeers(ctx context.Context) {
 			// Connect if not already connected
 			if n.h.Network().Connectedness(id) != network.Connected {
 				peerInfo := p
+				n.wg.Add(1)
 				go func(p peer.AddrInfo) {
+					defer n.wg.Done()
 					connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer connectCancel()
 					if err := n.h.Connect(connectCtx, p); err != nil {

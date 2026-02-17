@@ -79,14 +79,14 @@ func NewGRPCConnection(target string, insecure bool) (*grpc.ClientConn, error) {
 
 // New creates a new query client for QBTC blockchain node at the given target address.
 func New(target string, insecure bool, cometBFTRPCAddress string) (*Client, error) {
-	conn, err := NewGRPCConnection(target, insecure)
-	if err != nil {
-		return nil, err
-	}
-
 	cmtRPCClient, err := rpchttp.New(cometBFTRPCAddress, "/websocket")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CometBFT RPC client: %w", err)
+	}
+
+	conn, err := NewGRPCConnection(target, insecure)
+	if err != nil {
+		return nil, err
 	}
 
 	return clientWithConn(conn, cmtRPCClient), nil
