@@ -16,6 +16,13 @@ var Upgrades = []upgrades.Upgrade{
 
 // RegisterUpgradeHandlers handles upgrade registration
 func (app App) RegisterUpgradeHandlers(configurator module.Configurator) {
+	for _, u := range Upgrades {
+		app.UpgradeKeeper.SetUpgradeHandler(
+			u.UpgradeName,
+			u.CreateUpgradeHandler(app.ModuleManager, configurator),
+		)
+	}
+
 	upgradeInfo, err := app.UpgradeKeeper.ReadUpgradeInfoFromDisk()
 	if err != nil {
 		panic(fmt.Sprintf("failed to read upgrade info from disk %s", err))

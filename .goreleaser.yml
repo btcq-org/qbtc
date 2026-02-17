@@ -65,6 +65,8 @@ builds:
   - id: bifrost-linux-amd64
     main: ./cmd/bifrost
     binary: bifrost
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:
@@ -78,6 +80,8 @@ builds:
   - id: proof-service-linux-amd64
     main: ./cmd/proof-service
     binary: proof-service
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:
@@ -133,6 +137,27 @@ archives:
     format: binary
     files:
       - none*
+
+dockers:
+  - id: qbtcd
+    ids:
+      - qbtcd-linux-amd64
+      - bifrost-linux-amd64
+    image_templates:
+      - "ghcr.io/btcq-org/qbtcd:{{ .Version }}"
+      - "ghcr.io/btcq-org/qbtcd:latest"
+    dockerfile: docker/Dockerfile.goreleaser.qbtcd
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - id: proof-service
+    ids:
+      - proof-service-linux-amd64
+    image_templates:
+      - "ghcr.io/btcq-org/proof-service:{{ .Version }}"
+      - "ghcr.io/btcq-org/proof-service:latest"
+    dockerfile: docker/Dockerfile.goreleaser.proofservice
+    build_flag_templates:
+      - "--platform=linux/amd64"
 
 checksum:
   name_template: "sha256sum.txt"
