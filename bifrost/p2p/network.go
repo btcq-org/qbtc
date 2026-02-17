@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -29,6 +30,7 @@ const (
 	validatorTag             = "validator"
 	validatorTagValue        = 100
 	validatorRefreshInterval = 60 * time.Second
+	bootstrapConnectTimeout  = 10 * time.Second
 )
 
 // Network is the p2p network
@@ -267,8 +269,14 @@ func (n *Network) BootstrapInitialPeers(initialPeers []peer.AddrInfo) error {
 		peerInfo := p
 		go func(p peer.AddrInfo) {
 			defer bootstrapWg.Done()
-			err := n.h.Connect(context.Background(), p)
+			connectCtx, connectCancel := context.WithTimeout(context.Background(), bootstrapConnectTimeout)
+			defer connectCancel()
+			err := n.h.Connect(connectCtx, p)
 			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
+					n.logger.Warn().Err(err).Msgf("bootstrapper connect timed out: %s", p.String())
+					return
+				}
 				n.logger.Err(err).Msgf("failed to connect to bootstrapper %s", p.String())
 				return
 			}
