@@ -287,9 +287,10 @@ func (n *Network) BootstrapInitialPeers(initialPeers []peer.AddrInfo) error {
 		}
 		n.validatorPeers[p.ID] = p
 	}
+	validatorCount := len(n.validatorPeers)
 	n.validatorPeersMu.Unlock()
 	if n.metrics != nil {
-		n.metrics.SetGauge(metrics.MetricNameValidatorPeers, float64(len(n.validatorPeers)))
+		n.metrics.SetGauge(metrics.MetricNameValidatorPeers, float64(validatorCount))
 	}
 
 	return nil
