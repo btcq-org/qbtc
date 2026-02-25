@@ -60,6 +60,7 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 	start := make(chan struct{})
+	errCh := make(chan error, numWriters*iterations)
 
 	for w := 0; w < numWriters; w++ {
 		wg.Add(1)
@@ -69,7 +70,7 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 			for i := 0; i < iterations; i++ {
 				key := (workerID*iterations + i) % keySpace
 				_, err := eb.SendBTCBlock(context.Background(), buildBlock(key, workerID*iterations+i))
-				require.NoError(t, err)
+				errCh <- err
 			}
 		}(w)
 	}
@@ -88,6 +89,11 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 
 	close(start)
 	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 
 	_ = eb.btcBlockCache.Get()
 }
