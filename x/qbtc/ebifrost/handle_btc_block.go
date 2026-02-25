@@ -27,12 +27,9 @@ func (eb *EnshrinedBifrost) MarkBlockAsProcessed(ctx sdk.Context, block *types.M
 	eb.logger.Info("Marking BTC block as processed", "height", block.Height, "hash", block.Hash)
 	go eb.broadcastBtcBlockEvent(block)
 
-	for i := 0; i < len(eb.btcBlockCache.items); i++ {
-		if eb.btcBlockCache.items[i].Item.Equals(block) {
-			eb.btcBlockCache.RemoveAt(i)
-			break
-		}
-	}
+	eb.btcBlockCache.RemoveWhere(func(item *types.MsgBtcBlock) bool {
+		return item.Equals(block)
+	})
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	height := sdkCtx.BlockHeight()
