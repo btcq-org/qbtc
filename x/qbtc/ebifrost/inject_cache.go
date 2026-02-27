@@ -76,6 +76,21 @@ func (c *InjectCache[T]) RemoveAt(index int) {
 	c.items = append(c.items[:index], c.items[index+1:]...)
 }
 
+// RemoveWhere removes the first item matching the predicate under a single lock.
+func (c *InjectCache[T]) RemoveWhere(match func(T) bool) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for i := 0; i < len(c.items); i++ {
+		if match(c.items[i].Item) {
+			c.items = append(c.items[:i], c.items[i+1:]...)
+			return true
+		}
+	}
+
+	return false
+}
+
 // AddToBlock adds items to the specified block height
 func (c *InjectCache[T]) AddToBlock(height int64, item T) {
 	c.mu.Lock()
