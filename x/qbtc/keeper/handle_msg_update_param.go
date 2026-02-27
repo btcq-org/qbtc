@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -15,6 +16,9 @@ func (s *msgServer) UpdateParam(ctx context.Context, msg *types.MsgUpdateParam) 
 	}
 	if msg.Authority != s.k.GetAuthority() {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("unauthorized")
+	}
+	if _, ok := constants.FromString(msg.Key); !ok {
+		return nil, sdkerrors.ErrUnknownRequest.Wrapf("unknown parameter key: %s", msg.Key)
 	}
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	cacheCtx, write := sdkCtx.CacheContext()
