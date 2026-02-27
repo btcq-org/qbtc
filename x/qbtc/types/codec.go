@@ -9,7 +9,12 @@ import (
 
 func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 	registrar.RegisterImplementations((*sdk.Msg)(nil),
-		&MsgBtcBlock{})
+		&MsgBtcBlock{},
+		&MsgClaimWithProof{},
+		&MsgGovClaimUTXO{},
+		&MsgUpdateParam{},
+		&MsgSetNodePeerAddress{},
+	)
 
 	msgservice.RegisterMsgServiceDesc(registrar, &_Msg_serviceDesc)
 }
