@@ -3,6 +3,7 @@ package keeper
 import (
 	"context"
 	"errors"
+	"sort"
 
 	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/constants"
@@ -26,11 +27,18 @@ type queryServer struct {
 // AllParams returns all parameters in the qbtc module.
 func (qs queryServer) AllParams(ctx context.Context, req *types.QueryAllParamsRequest) (*types.QueryAllParamsResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	params := []*types.Param{}
-	for key, value := range constants.DefaultValues {
+
+	keys := make([]constants.ConstantName, 0, len(constants.DefaultValues))
+	for key := range constants.DefaultValues {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
+
+	params := make([]*types.Param, 0, len(keys))
+	for _, key := range keys {
 		params = append(params, &types.Param{
 			Key:   key.String(),
-			Value: value,
+			Value: constants.DefaultValues[key],
 		})
 	}
 	for _, p := range params {
