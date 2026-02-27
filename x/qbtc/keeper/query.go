@@ -48,6 +48,7 @@ func (qs queryServer) AllParams(ctx context.Context, req *types.QueryAllParamsRe
 				continue
 			}
 			sdkCtx.Logger().Error("failed to get constant override", "key", p.Key, "error", err)
+			continue
 		}
 		p.Value = overriddenValue
 	}
