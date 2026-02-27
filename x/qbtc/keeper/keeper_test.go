@@ -35,6 +35,7 @@ type fixture struct {
 	stakingKeeper         *qbtctestutil.MockStakingKeeper
 	bankKeeper            *qbtctestutil.MockBankKeeper
 	authKeeper            *qbtctestutil.MockAuthKeeper
+	storeKey              *storetypes.KVStoreKey
 }
 
 func initFixture(t *testing.T) *fixture {
@@ -87,6 +88,7 @@ func initFixture(t *testing.T) *fixture {
 		stakingKeeper:         stakingKeeper,
 		bankKeeper:            bankKeeper,
 		authKeeper:            authKeeper,
+		storeKey:              storeKey,
 	}
 }
 func (f *fixture) GetAddressFromPubKey(pubKey []byte) (string, error) {
