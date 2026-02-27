@@ -49,6 +49,9 @@ func TestClaimUTXO_MintViaQBTCModuleAccount(t *testing.T) {
 	}
 	require.NoError(t, app.QbtcKeeper.Utxoes.Set(ctx, key, utxo))
 
+	// --- snapshot recipient balance before the claim ---
+	preBalance := app.BankKeeper.GetBalance(ctx, recipient, sdk.DefaultBondDenom)
+
 	// --- attempt the claim (recipient != nil → mints via "qbtc" module account) ---
 	err := app.QbtcKeeper.ClaimUTXO(ctx, txid, vout, recipient)
 	require.NoError(t, err,
@@ -63,10 +66,11 @@ func TestClaimUTXO_MintViaQBTCModuleAccount(t *testing.T) {
 	require.Equal(t, uint64(0), claimed.EntitledAmount,
 		"entitled amount must be reset to 0 after a successful claim")
 
-	// --- verify recipient actually received the coins ---
-	balance := app.BankKeeper.GetBalance(ctx, recipient, sdk.DefaultBondDenom)
-	require.True(t, balance.Amount.GTE(math.NewInt(50_000_000)),
-		"recipient must have received the minted coins, got %s", balance)
+	// --- verify recipient actually received the minted coins ---
+	postBalance := app.BankKeeper.GetBalance(ctx, recipient, sdk.DefaultBondDenom)
+	minted := postBalance.Amount.Sub(preBalance.Amount)
+	require.True(t, minted.GTE(math.NewInt(50_000_000)),
+		"recipient balance should have increased by the entitled amount, got delta %s", minted)
 }
 
 // TestClaimUTXO_ReserveMint test with the reserver module account (governance)
