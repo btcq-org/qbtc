@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/btcq-org/qbtc/constants"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
@@ -24,6 +25,9 @@ func (m *MsgUpdateParam) ValidateBasic() error {
 	}
 	if m.Key == "" {
 		return sdkerrors.ErrUnknownRequest.Wrap("parameter key cannot be empty")
+	}
+	if _, ok := constants.FromString(m.Key); !ok {
+		return sdkerrors.ErrUnknownRequest.Wrapf("unknown parameter key: %s", m.Key)
 	}
 	if m.Value < 0 {
 		return sdkerrors.ErrUnknownRequest.Wrap("parameter value cannot be negative")

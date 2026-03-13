@@ -13,6 +13,9 @@ func (m *MsgGovClaimUTXO) ValidateBasic() error {
 	if len(m.Utxos) == 0 {
 		return se.ErrInvalidRequest.Wrap("must provide at least one UTXO to claim")
 	}
+	if len(m.Utxos) > MaxBatchClaimUTXOs {
+		return se.ErrInvalidRequest.Wrapf("too many UTXOs in batch: %d (max %d)", len(m.Utxos), MaxBatchClaimUTXOs)
+	}
 	for _, utxo := range m.Utxos {
 		if utxo.Txid == "" {
 			return se.ErrInvalidRequest.Wrap("txid is required")

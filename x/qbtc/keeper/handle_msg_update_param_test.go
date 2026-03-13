@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"testing"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			name: "valid message - unauthorized",
 			msg: &types.MsgUpdateParam{
 				Authority: "qbtc1validaddressxxxxxxxxxxxxxxxx",
-				Key:       "test_param",
+				Key:       constants.EmissionCurve.String(),
 				Value:     42,
 			},
 			want:    nil,
@@ -30,7 +31,7 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			name: "invalid message - authority empty",
 			msg: &types.MsgUpdateParam{
 				Authority: "",
-				Key:       "test_param",
+				Key:       constants.EmissionCurve.String(),
 				Value:     42,
 			},
 			want:    nil,
@@ -50,8 +51,18 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			name: "invalid message - value negative",
 			msg: &types.MsgUpdateParam{
 				Authority: "gov",
-				Key:       "test_param",
+				Key:       constants.EmissionCurve.String(),
 				Value:     -1,
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "invalid message - unknown key",
+			msg: &types.MsgUpdateParam{
+				Authority: "gov",
+				Key:       "test_param",
+				Value:     42,
 			},
 			want:    nil,
 			wantErr: true,
@@ -60,7 +71,7 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			name: "valid message",
 			msg: &types.MsgUpdateParam{
 				Authority: "gov",
-				Key:       "test_param",
+				Key:       constants.EmissionCurve.String(),
 				Value:     42,
 			},
 			want:    &types.MsgEmpty{},
