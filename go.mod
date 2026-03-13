@@ -5,8 +5,8 @@ go 1.25.3
 replace (
 	// fork wasmd to work with SDK v0.53.4 + IBC v10
 	github.com/CosmWasm/wasmd => github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e
-	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20260119105947-d45bc2da3b42
-	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20260119213558-befaf76c3fc0
+	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20260313055048-0a43a1ca4e16
+	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20260313055526-5dbb8d808611
 	// fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
 	// replace broken goleveldb
