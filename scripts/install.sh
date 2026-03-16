@@ -12,6 +12,8 @@ GENESIS_URL="https://sgp1.vultrobjects.com/genesis/genesis.json"
 GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-940593.bin"
 COSMOVISOR_URL="https://github.com/cosmos/cosmos-sdk/releases/download/cosmovisor%2Fv1.7.1/cosmovisor-v1.7.1-linux-amd64.tar.gz"
 STATESYNC_RPC="http://45.76.190.51:26657"
+GENESIS_P2P_HOST="45.76.190.51"
+GENESIS_P2P_PORT="26656"
 
 # ========== COLORS ==========
 RED='\033[0;31m'
@@ -365,6 +367,38 @@ setup_statesync() {
     print_success "Statesync configured"
 }
 
+configure_persistent_peers() {
+    print_header "Configuring persistent peers"
+
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is required for peer setup. Please install jq and try again."
+        return 1
+    fi
+
+    local config_file="$QBTCD_HOME/config/config.toml"
+    if [[ ! -f "$config_file" ]]; then
+        print_error "config.toml not found at $config_file"
+        return 1
+    fi
+
+    print_info "Querying genesis node ID from $STATESYNC_RPC..."
+    local node_id
+    node_id=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/status" | jq -r .result.node_info.id)
+    if [[ -z "$node_id" || "$node_id" == "null" ]]; then
+        print_error "Failed to query node ID from $STATESYNC_RPC"
+        return 1
+    fi
+
+    local peer="${node_id}@${GENESIS_P2P_HOST}:${GENESIS_P2P_PORT}"
+    print_info "Setting persistent peer: $peer"
+
+    sed -i.bak -E \
+        "s|^(persistent_peers[[:space:]]+=[[:space:]]+).*$|\1\"${peer}\"|" "$config_file"
+    rm -f "${config_file}.bak"
+
+    print_success "persistent_peers set to $peer"
+}
+
 init_qbtcd() {
     print_header "Initializing qbtcd"
 
@@ -391,8 +425,11 @@ init_qbtcd() {
         return 1
     fi
 
+    local used_statesync=false
     if ask_yn "Use statesync to bootstrap from the network?" "y"; then
-        setup_statesync
+        if setup_statesync; then
+            used_statesync=true
+        fi
     elif ask_yn "Download genesis.bin snapshot? (large file)" "n"; then
         print_info "Downloading genesis.bin (this may take a while)..."
         if ! curl -fL --progress-bar "$GENESIS_BIN_URL" -o "$QBTCD_HOME/config/genesis.bin"; then
@@ -400,6 +437,12 @@ init_qbtcd() {
             return 1
         fi
         print_success "genesis.bin downloaded"
+    fi
+
+    if ! $used_statesync; then
+        if ask_yn "Configure persistent peer to sync with genesis node?" "y"; then
+            configure_persistent_peers
+        fi
     fi
 
     print_success "qbtcd initialized at $QBTCD_HOME"
