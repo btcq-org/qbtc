@@ -1625,6 +1625,8 @@ github.com/viant/assertly v0.4.8/go.mod h1:aGifi++jvCrUaklKEKT0BU95igDNaqkvz+49u
 github.com/viant/toolbox v0.24.0/go.mod h1:OxMCG57V0PXuIP2HNQrtJf2CjqdmbrOx5EkMILuUhzM=
 github.com/vultisig/go-wrappers v0.0.0-20251126082520-f9a603c22c9f h1:Tb4tIXR9cdGoEezlNj+ZjhlQPVnQBJM/XKMld8bewpo=
 github.com/vultisig/go-wrappers v0.0.0-20251126082520-f9a603c22c9f/go.mod h1:vEP0x0RmNlghWxfalt13FvVsBwmobSwimMhJxGfqCD4=
+github.com/vultisig/go-wrappers v0.0.0-20260223034715-9a5927a3c4c6 h1:hmQqgBl4S5iPiEz61TxQhvBe9yFbRCXQHR0TC98Sp0I=
+github.com/vultisig/go-wrappers v0.0.0-20260223034715-9a5927a3c4c6/go.mod h1:vEP0x0RmNlghWxfalt13FvVsBwmobSwimMhJxGfqCD4=
 github.com/warpfork/go-wish v0.0.0-20220906213052-39a1cc7a02d0 h1:GDDkbFiaK8jsSDJfjId/PEGEShv6ugrt4kYsC5UIDaQ=
 github.com/warpfork/go-wish v0.0.0-20220906213052-39a1cc7a02d0/go.mod h1:x6AKhvSSexNrVSrViXSHUEbICjmGXhtgABaHIySUSGw=
 github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 h1:EKhdznlJHPMoKr0XTrX+IlJs1LH3lyx2nfr1dOlZ79k=

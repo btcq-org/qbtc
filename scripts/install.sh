@@ -85,8 +85,8 @@ check_dependencies() {
         missing+=("sudo")
     fi
 
-    if ! command -v sha256sum &> /dev/null; then
-        missing+=("sha256sum")
+    if ! command -v sha256sum &> /dev/null && ! command -v shasum &> /dev/null; then
+        missing+=("sha256sum or shasum")
     fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
@@ -94,6 +94,19 @@ check_dependencies() {
         print_info "Please install them and run this script again."
         exit 1
     fi
+}
+
+verify_sha256() {
+    local dir="$1"
+    local checksum="$2"
+    local file="$3"
+    local actual
+    if command -v shasum &> /dev/null; then
+        actual=$(shasum -a 256 "$dir/$file" | awk '{print $1}')
+    else
+        actual=$(sha256sum "$dir/$file" | awk '{print $1}')
+    fi
+    [[ "$actual" == "$checksum" ]]
 }
 
 check_systemctl() {
@@ -193,7 +206,7 @@ download_and_install_qbtcd() {
         return 1
     fi
 
-    if ! (cd "$tmp_dir" && echo "$expected_checksum  $archive" | sha256sum -c --status); then
+    if ! verify_sha256 "$tmp_dir" "$expected_checksum" "$archive"; then
         print_error "Checksum verification failed for $archive"
         rm -rf "$tmp_dir"
         return 1
@@ -244,7 +257,7 @@ download_and_install_bifrost() {
         return 1
     fi
 
-    if ! (cd "$tmp_dir" && echo "$expected_checksum  $archive" | sha256sum -c --status); then
+    if ! verify_sha256 "$tmp_dir" "$expected_checksum" "$archive"; then
         print_error "Checksum verification failed for $archive"
         rm -rf "$tmp_dir"
         return 1

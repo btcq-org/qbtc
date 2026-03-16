@@ -70,7 +70,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d
-	github.com/vultisig/go-wrappers v0.0.0-20251126082520-f9a603c22c9f
+	github.com/vultisig/go-wrappers v0.0.0-20260223034715-9a5927a3c4c6
 	golang.org/x/crypto v0.43.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4
 	google.golang.org/grpc v1.76.0
