@@ -50,6 +50,8 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ebifrost.NewInjectedTxDecorator(),
 		// outermost AnteDecorator. SetUpContext must be called first
 		ante.NewSetUpContextDecorator(),
+		// free gas for MsgClaimWithProof txs — must be after SetUpContext
+		ebifrost.NewFreeClaimDecorator(),
 		ante.NewExtensionOptionsDecorator(options.ExtensionOptionChecker),
 		ante.NewValidateBasicDecorator(),
 		ante.NewTxTimeoutHeightDecorator(),
