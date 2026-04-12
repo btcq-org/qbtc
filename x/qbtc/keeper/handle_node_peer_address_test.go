@@ -182,7 +182,7 @@ func TestSetNodePeerAddress(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
-			sdk.GetConfig().SetBech32PrefixForValidator(common.AccountAddressPrefix+sdk.PrefixValidator, common.AccountAddressPrefix+sdk.PrefixPublic)
+			sdk.GetConfig().SetBech32PrefixForValidator(common.AccountAddressPrefix+sdk.PrefixValidator, common.AccountAddressPrefix+sdk.PrefixValidator+sdk.PrefixPublic)
 			encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
 			addressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix)
 			validatorAddressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix + sdk.PrefixValidator)
