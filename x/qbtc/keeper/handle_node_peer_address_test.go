@@ -30,13 +30,13 @@ func TestSetNodePeerAddress(t *testing.T) {
 	validSigner := qbtctestutil.GetRandomQBTCAddress()
 
 	tests := []struct {
-		name                   string
-		setup                  func(t *testing.T, f *fixture, stakingKeeper *qbtctestutil.MockStakingKeeper, validator stakingtypes.Validator)
+		name                    string
+		setup                   func(t *testing.T, f *fixture, stakingKeeper *qbtctestutil.MockStakingKeeper, validator stakingtypes.Validator)
 		skipDefaultGetValidator bool // when true, setup is responsible for registering GetValidator expectation
-		msg                    *types.MsgSetNodePeerAddress
-		expectErr              bool
-		wantErrIs              error
-		checkFunc              func(t *testing.T, f *fixture, validator stakingtypes.Validator)
+		msg                     *types.MsgSetNodePeerAddress
+		expectErr               bool
+		wantErrIs               error
+		checkFunc               func(t *testing.T, f *fixture, validator stakingtypes.Validator)
 	}{
 		{
 			name: "valid request sets peer address",
