@@ -21,6 +21,9 @@ var (
 	// UTXOKeys is the prefix for UTXO store
 	UTXOKeys = collections.NewPrefix("utxo")
 
+	// UTXOByAddressKeys is the prefix for the UTXO-by-address secondary index
+	UTXOByAddressKeys = collections.NewPrefix("idx_utxo_by_addr")
+
 	// NodePeerAddressKeys is the prefix for validators to store their node peer address
 	NodePeerAddressKeys = collections.NewPrefix("node_peer_address")
 	// ConstOverrideKeys is the prefix for constant overrides

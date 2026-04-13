@@ -28,7 +28,7 @@ type Keeper struct {
 
 	// Collections
 	Schema            collections.Schema
-	Utxoes            collections.Map[string, types.UTXO]
+	Utxoes            *collections.IndexedMap[string, types.UTXO, types.UTXOIndexes]
 	NodePeerAddresses collections.Map[string, string]
 	ConstOverrides    collections.Map[string, int64]
 
@@ -57,7 +57,7 @@ func NewKeeper(
 		bankKeeper:         bankKeeper,
 		authority:          authority,
 		authKeeper:         authKeeper,
-		Utxoes:             collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		Utxoes:             collections.NewIndexedMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc), types.NewUTXOIndexes(sb)),
 		NodePeerAddresses:  collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:     collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
 		ZkVerifyingKey:     collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),

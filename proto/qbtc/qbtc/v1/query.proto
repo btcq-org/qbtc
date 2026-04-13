@@ -8,6 +8,7 @@ import "google/api/annotations.proto";
 import "qbtc/qbtc/v1/query_peer_address.proto";
 import "qbtc/qbtc/v1/query_params.proto";
 import "qbtc/qbtc/v1/query_last_processed.proto";
+import "qbtc/qbtc/v1/query_utxo.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // Query defines the gRPC querier service.
@@ -33,5 +34,10 @@ service Query {
   // AllParams returns all parameters in the qbtc module.
   rpc AllParams(QueryAllParamsRequest) returns (QueryAllParamsResponse) {
     option (google.api.http).get = "/qbtc/v1/params";
+  }
+  // UTXOsByAddress returns all UTXOs for a specific Bitcoin address.
+  rpc UTXOsByAddress(QueryUTXOsByAddressRequest)
+      returns (QueryUTXOsByAddressResponse) {
+    option (google.api.http).get = "/qbtc/v1/utxos/{btc_address}";
   }
 }

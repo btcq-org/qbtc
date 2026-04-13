@@ -1,0 +1,26 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+import "cosmos/base/query/v1beta1/pagination.proto";
+import "qbtc/qbtc/v1/type_utxo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.marshaler_all) = true;
+
+// QueryUTXOsByAddressRequest requests UTXOs for a specific Bitcoin address.
+message QueryUTXOsByAddressRequest {
+  // btc_address is the Bitcoin address to query UTXOs for.
+  string btc_address = 1;
+  // pagination defines an optional pagination for the request.
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryUTXOsByAddressResponse contains the UTXOs for the requested Bitcoin
+// address.
+message QueryUTXOsByAddressResponse {
+  // utxos is the list of UTXOs matching the Bitcoin address.
+  repeated UTXO utxos = 1 [ (gogoproto.nullable) = false ];
+  // pagination is the pagination response.
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
