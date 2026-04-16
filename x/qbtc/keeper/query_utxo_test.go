@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
@@ -96,7 +97,7 @@ func TestQueryUTXOsByAddress(t *testing.T) {
 			setup: func(t *testing.T, f *fixture) {
 				for i := range 5 {
 					utxo := types.UTXO{
-						Txid:           "ccc" + string(rune('1'+i)) + "000000000000000000000000000000000000000000000000000000000001",
+						Txid:           fmt.Sprintf("ccc%d000000000000000000000000000000000000000000000000000000000001", i+1),
 						Vout:           uint32(i),
 						Amount:         100000000,
 						EntitledAmount: 50000000,
@@ -124,7 +125,7 @@ func TestQueryUTXOsByAddress(t *testing.T) {
 			setup: func(t *testing.T, f *fixture) {
 				for i := range 5 {
 					utxo := types.UTXO{
-						Txid:           "ddd" + string(rune('1'+i)) + "000000000000000000000000000000000000000000000000000000000001",
+						Txid:           fmt.Sprintf("ddd%d000000000000000000000000000000000000000000000000000000000001", i+1),
 						Vout:           uint32(i),
 						Amount:         100000000,
 						EntitledAmount: 50000000,
