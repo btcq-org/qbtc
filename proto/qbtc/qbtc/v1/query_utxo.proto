@@ -12,11 +12,11 @@ option (gogoproto.marshaler_all) = true;
 message QueryUTXOsByAddressRequest {
   // btc_address is the Bitcoin address to query UTXOs for.
   string btc_address = 1;
-  // pagination defines an optional pagination for the request.
-  cosmos.base.query.v1beta1.PageRequest pagination = 2;
   // claimable, if true, restricts the result to UTXOs whose entitled_amount is
   // greater than zero (i.e. still claimable).
-  bool claimable = 3;
+  bool claimable = 2;
+  // pagination defines an optional pagination for the request.
+  cosmos.base.query.v1beta1.PageRequest pagination = 3;
 }
 
 // QueryUTXOsByAddressResponse contains the UTXOs for the requested Bitcoin
