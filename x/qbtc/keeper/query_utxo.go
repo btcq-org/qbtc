@@ -25,7 +25,20 @@ func (qs queryServer) UTXOsByAddress(ctx context.Context, req *types.QueryUTXOsB
 		return nil, err
 	}
 
-	// Apply pagination over the primary keys.
+	// Resolve primary keys to UTXOs, applying the claimable filter if set.
+	matched := make([]types.UTXO, 0, len(pks))
+	for _, pk := range pks {
+		utxo, err := qs.k.Utxoes.Get(ctx, pk)
+		if err != nil {
+			return nil, err
+		}
+		if req.Claimable && utxo.EntitledAmount == 0 {
+			continue
+		}
+		matched = append(matched, utxo)
+	}
+
+	// Apply pagination over the filtered list.
 	limit := uint64(query.DefaultLimit)
 	offset := uint64(0)
 	if req.Pagination != nil {
@@ -35,7 +48,7 @@ func (qs queryServer) UTXOsByAddress(ctx context.Context, req *types.QueryUTXOsB
 		offset = req.Pagination.Offset
 	}
 
-	total := uint64(len(pks))
+	total := uint64(len(matched))
 	end := offset + limit
 	if end > total {
 		end = total
@@ -44,14 +57,7 @@ func (qs queryServer) UTXOsByAddress(ctx context.Context, req *types.QueryUTXOsB
 		offset = total
 	}
 
-	var utxos []types.UTXO
-	for _, pk := range pks[offset:end] {
-		utxo, err := qs.k.Utxoes.Get(ctx, pk)
-		if err != nil {
-			return nil, err
-		}
-		utxos = append(utxos, utxo)
-	}
+	utxos := matched[offset:end]
 
 	return &types.QueryUTXOsByAddressResponse{
 		Utxos: utxos,

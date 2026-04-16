@@ -174,6 +174,97 @@ func TestQueryUTXOsByAddress(t *testing.T) {
 			},
 		},
 		{
+			name: "claimable filter excludes UTXOs with zero entitled_amount",
+			setup: func(t *testing.T, f *fixture) {
+				claimed := types.UTXO{
+					Txid:           "1110000000000000000000000000000000000000000000000000000000000001",
+					Vout:           0,
+					Amount:         100000000,
+					EntitledAmount: 0,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1ClaimableAddr",
+					},
+				}
+				unclaimed1 := types.UTXO{
+					Txid:           "1110000000000000000000000000000000000000000000000000000000000002",
+					Vout:           1,
+					Amount:         200000000,
+					EntitledAmount: 50000000,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1ClaimableAddr",
+					},
+				}
+				unclaimed2 := types.UTXO{
+					Txid:           "1110000000000000000000000000000000000000000000000000000000000003",
+					Vout:           2,
+					Amount:         300000000,
+					EntitledAmount: 150000000,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1ClaimableAddr",
+					},
+				}
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, claimed.GetKey(), claimed))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, unclaimed1.GetKey(), unclaimed1))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, unclaimed2.GetKey(), unclaimed2))
+			},
+			req: &types.QueryUTXOsByAddressRequest{
+				BtcAddress: "1ClaimableAddr",
+				Claimable:  true,
+			},
+			expectErr: false,
+			checkFunc: func(t *testing.T, resp *types.QueryUTXOsByAddressResponse) {
+				assert.Len(t, resp.Utxos, 2)
+				assert.Equal(t, uint64(2), resp.Pagination.Total)
+				for _, utxo := range resp.Utxos {
+					assert.Greater(t, utxo.EntitledAmount, uint64(0))
+				}
+			},
+		},
+		{
+			name: "claimable=false returns all UTXOs regardless of entitled_amount",
+			setup: func(t *testing.T, f *fixture) {
+				claimed := types.UTXO{
+					Txid:           "2220000000000000000000000000000000000000000000000000000000000001",
+					Vout:           0,
+					Amount:         100000000,
+					EntitledAmount: 0,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1AllAddr",
+					},
+				}
+				unclaimed := types.UTXO{
+					Txid:           "2220000000000000000000000000000000000000000000000000000000000002",
+					Vout:           1,
+					Amount:         200000000,
+					EntitledAmount: 50000000,
+					ScriptPubKey: &types.ScriptPubKeyResult{
+						Hex:     "76a91488ac",
+						Type:    "pubkeyhash",
+						Address: "1AllAddr",
+					},
+				}
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, claimed.GetKey(), claimed))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, unclaimed.GetKey(), unclaimed))
+			},
+			req: &types.QueryUTXOsByAddressRequest{
+				BtcAddress: "1AllAddr",
+				Claimable:  false,
+			},
+			expectErr: false,
+			checkFunc: func(t *testing.T, resp *types.QueryUTXOsByAddressResponse) {
+				assert.Len(t, resp.Utxos, 2)
+				assert.Equal(t, uint64(2), resp.Pagination.Total)
+			},
+		},
+		{
 			name: "reflects entitled_amount changes after claim",
 			setup: func(t *testing.T, f *fixture) {
 				utxo := types.UTXO{
