@@ -9,6 +9,10 @@ import (
 )
 
 func (qs queryServer) UTXOsByAddress(ctx context.Context, req *types.QueryUTXOsByAddressRequest) (*types.QueryUTXOsByAddressResponse, error) {
+	if req == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("request cannot be nil")
+	}
+
 	if req.BtcAddress == "" {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("btc_address is required")
 	}
@@ -49,12 +53,12 @@ func (qs queryServer) UTXOsByAddress(ctx context.Context, req *types.QueryUTXOsB
 	}
 
 	total := uint64(len(matched))
-	end := offset + limit
-	if end > total {
-		end = total
-	}
 	if offset > total {
 		offset = total
+	}
+	end := offset + limit
+	if limit > total-offset {
+		end = total
 	}
 
 	utxos := matched[offset:end]
