@@ -10,12 +10,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark-crypto/ecc/bn254/kzg"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/plonk"
 	"github.com/consensys/gnark/constraint"
+	"github.com/consensys/gnark/constraint/solver"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/frontend/cs/scs"
 	"github.com/consensys/gnark/std/math/emulated"
@@ -531,8 +534,10 @@ func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create witness: %w", err)
 	}
 
-	// Generate the PLONK proof
-	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	// Generate the PLONK proof with explicit solver parallelism
+	proof, err := plonk.Prove(p.cs, p.pk, witness,
+		backend.WithSolverOptions(solver.WithNbTasks(runtime.NumCPU())),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate proof: %w", err)
 	}
@@ -630,7 +635,9 @@ func (p *SchnorrProver) GenerateProof(params SchnorrProofParams) (*Proof, error)
 		return nil, fmt.Errorf("failed to create witness: %w", err)
 	}
 
-	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	proof, err := plonk.Prove(p.cs, p.pk, witness,
+		backend.WithSolverOptions(solver.WithNbTasks(runtime.NumCPU())),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate proof: %w", err)
 	}
@@ -699,7 +706,9 @@ func (p *P2SHP2WPKHProver) GenerateProof(params P2SHP2WPKHProofParams) (*Proof, 
 		return nil, fmt.Errorf("failed to create witness: %w", err)
 	}
 
-	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	proof, err := plonk.Prove(p.cs, p.pk, witness,
+		backend.WithSolverOptions(solver.WithNbTasks(runtime.NumCPU())),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate proof: %w", err)
 	}
@@ -766,7 +775,9 @@ func (p *P2WSHSingleKeyProver) GenerateProof(params P2WSHSingleKeyProofParams) (
 		return nil, fmt.Errorf("failed to create witness: %w", err)
 	}
 
-	proof, err := plonk.Prove(p.cs, p.pk, witness)
+	proof, err := plonk.Prove(p.cs, p.pk, witness,
+		backend.WithSolverOptions(solver.WithNbTasks(runtime.NumCPU())),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate proof: %w", err)
 	}

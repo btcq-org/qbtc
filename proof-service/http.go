@@ -117,6 +117,7 @@ func (s *Service) handleProve(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	s.logger.Info().Str("claimer_address", req.ClaimerAddress).Msg("successfully generated proof")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.logger.Error().Err(err).Msg("failed to encode prove response")
 	}
