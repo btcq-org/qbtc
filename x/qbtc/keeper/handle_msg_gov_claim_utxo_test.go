@@ -222,7 +222,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a new fixture with a controlled bankKeeper
 			sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
-			sdk.GetConfig().SetBech32PrefixForValidator(common.AccountAddressPrefix+sdk.PrefixValidator, common.AccountAddressPrefix+sdk.PrefixPublic)
+			sdk.GetConfig().SetBech32PrefixForValidator(common.AccountAddressPrefix+sdk.PrefixValidator, common.AccountAddressPrefix+sdk.PrefixValidator+sdk.PrefixPublic)
 			encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
 			addressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix)
 			validatorAddressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix + sdk.PrefixValidator)
