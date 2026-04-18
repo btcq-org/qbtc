@@ -101,77 +101,50 @@ func (c *BTCSchnorrCircuit) Define(api frontend.API) error {
 		Y: c.PublicKeyY,
 	}
 
-	// Get generator point G
-	G := curve.Generator()
-
-	// Compute s*G
-	sG := curve.ScalarMul(G, &c.SignatureS)
-
-	// Compute e*P
-	eP := curve.ScalarMul(pubKey, &challengeScalar)
-
-	// Compute R' = s*G - e*P
-	// To subtract, we negate e*P (negate Y coordinate) and add
-	ePNeg := curve.Neg(eP)
-	rPrime := curve.Add(sG, ePNeg)
+	// Compute R' = [s]G - [e]P using JointScalarMulBase ([s1]G + [s2]P).
+	// This uses Shamir's trick + GLV endomorphism — roughly half the constraint
+	// cost of two separate ScalarMul calls.
+	// Note: pubKey must not be ±G and s, negChallenge must not be 0 — all hold
+	// for any valid Bitcoin Schnorr signature.
+	negChallenge := scalarField.Neg(&challengeScalar)
+	rPrime := curve.JointScalarMulBase(pubKey, negChallenge, &c.SignatureS)
 
 	// Verify R'.x == SignatureR
-	// Both are base field elements (Secp256k1Fp), so we compare directly
-	// This is cryptographically correct per BIP-340: R.x can be any valid x-coordinate
 	baseField.AssertIsEqual(&rPrime.X, &c.SignatureR)
 
-	// BIP-340 also requires R to have even y-coordinate
-	rPrimeYBits := baseField.ToBits(&rPrime.Y)
-	api.AssertIsEqual(rPrimeYBits[0], 0)
+	// BIP-340: R must have even y-coordinate.
+	// The parity of a Secp256k1Fp element equals the parity of its LSB limb —
+	// avoids decomposing all 256 bits just to read 1.
+	api.AssertIsEqual(api.ToBinary(rPrime.Y.Limbs[0], 1)[0], 0)
 
 	// ========================================
 	// Step 4: Verify Y coordinate has even parity (BIP-340 requirement)
 	// ========================================
-	// In BIP-340, the public key Y must have even parity
-	yBits := baseField.ToBits(&c.PublicKeyY)
-	// The LSB determines parity - must be 0 (even)
-	api.AssertIsEqual(yBits[0], 0)
+	api.AssertIsEqual(api.ToBinary(c.PublicKeyY.Limbs[0], 1)[0], 0)
 
 	return nil
 }
 
-// bytesToScalar converts a byte array to a scalar field element
+// bytesToScalar converts big-endian bytes to a Secp256k1Fr scalar element.
+// Assembles 4×64-bit limbs directly via constant-shift arithmetic, avoiding
+// api.ToBinary on each byte (the inputs are SHA-256 outputs already range-checked
+// by gnark's uints gadget).
 func (c *BTCSchnorrCircuit) bytesToScalar(
 	api frontend.API,
-	field *emulated.Field[Secp256k1Fr],
+	_ *emulated.Field[Secp256k1Fr],
 	bytes []frontend.Variable,
 ) emulated.Element[Secp256k1Fr] {
-	// Convert bytes to bits (big-endian)
-	bits := make([]frontend.Variable, len(bytes)*8)
-	for i, b := range bytes {
-		byteBits := api.ToBinary(b, 8)
-		// Reverse bit order within byte for big-endian
-		for j := 0; j < 8; j++ {
-			bits[i*8+j] = byteBits[7-j]
+	limbs := make([]frontend.Variable, 4)
+	for i := range 4 {
+		var limb frontend.Variable = 0
+		for j := range 8 {
+			byteIdx := (3-i)*8 + j
+			shift := uint64(1) << uint(8*(7-j))
+			limb = api.Add(limb, api.Mul(bytes[byteIdx], shift))
 		}
+		limbs[i] = limb
 	}
-
-	// Build the scalar from bits
-	limbSize := 64
-	numLimbs := 4
-	limbs := make([]frontend.Variable, numLimbs)
-
-	for limbIdx := 0; limbIdx < numLimbs; limbIdx++ {
-		limbBits := make([]frontend.Variable, limbSize)
-		for bitIdx := 0; bitIdx < limbSize; bitIdx++ {
-			globalBitIdx := (numLimbs-1-limbIdx)*limbSize + (limbSize - 1 - bitIdx)
-			if globalBitIdx < len(bits) {
-				limbBits[bitIdx] = bits[globalBitIdx]
-			} else {
-				limbBits[bitIdx] = 0
-			}
-		}
-		limbs[limbIdx] = api.FromBinary(limbBits...)
-	}
-
-	return emulated.Element[Secp256k1Fr]{
-		Limbs: limbs,
-	}
+	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
 // elementToBytes32 converts a base field element to 32 bytes (big-endian)

@@ -111,47 +111,26 @@ func (c *BTCSignatureCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-// bytesToScalar converts a byte array to a scalar field element
+// bytesToScalar converts big-endian bytes to a Secp256k1Fr scalar element.
+// Assembles 4×64-bit limbs directly via constant-shift arithmetic, avoiding
+// api.ToBinary on each byte (MessageHash is a public input — range is enforced
+// by the verifier, not the circuit).
 func (c *BTCSignatureCircuit) bytesToScalar(
 	api frontend.API,
-	field *emulated.Field[Secp256k1Fr],
+	_ *emulated.Field[Secp256k1Fr],
 	bytes []frontend.Variable,
 ) emulated.Element[Secp256k1Fr] {
-	// Convert bytes to bits (big-endian)
-	bits := make([]frontend.Variable, len(bytes)*8)
-	for i, b := range bytes {
-		byteBits := api.ToBinary(b, 8)
-		// Reverse bit order within byte for big-endian
-		for j := 0; j < 8; j++ {
-			bits[i*8+j] = byteBits[7-j]
+	limbs := make([]frontend.Variable, 4)
+	for i := range 4 {
+		var limb frontend.Variable = 0
+		for j := range 8 {
+			byteIdx := (3-i)*8 + j
+			shift := uint64(1) << uint(8*(7-j))
+			limb = api.Add(limb, api.Mul(bytes[byteIdx], shift))
 		}
+		limbs[i] = limb
 	}
-
-	// Build the scalar from bits
-	// We need to construct limbs for the emulated field element
-	// secp256k1 Fr uses 4 limbs of 64 bits each
-	limbSize := 64
-	numLimbs := 4
-	limbs := make([]frontend.Variable, numLimbs)
-
-	for limbIdx := 0; limbIdx < numLimbs; limbIdx++ {
-		limbBits := make([]frontend.Variable, limbSize)
-		for bitIdx := 0; bitIdx < limbSize; bitIdx++ {
-			// Map from our bits array to limb bits
-			// Limbs are little-endian, bits within limb are little-endian
-			globalBitIdx := (numLimbs-1-limbIdx)*limbSize + (limbSize - 1 - bitIdx)
-			if globalBitIdx < len(bits) {
-				limbBits[bitIdx] = bits[globalBitIdx]
-			} else {
-				limbBits[bitIdx] = 0
-			}
-		}
-		limbs[limbIdx] = api.FromBinary(limbBits...)
-	}
-
-	return emulated.Element[Secp256k1Fr]{
-		Limbs: limbs,
-	}
+	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
 // compressPubKeyFromPoint computes the compressed public key (33 bytes) from a point
@@ -166,12 +145,9 @@ func (c *BTCSignatureCircuit) compressPubKeyFromPoint(
 	// field.ToBits returns bits in little-endian order: bit[0] is LSB
 	xBits := field.ToBits(&pubKey.X)
 
-	// Extract y coordinate to determine prefix
-	yBits := field.ToBits(&pubKey.Y)
-
-	// Prefix is 0x02 if y is even, 0x03 if y is odd
-	// The LSB of y determines parity
-	yParity := yBits[0]
+	// Parity of Y equals the parity of its least-significant limb —
+	// avoids decomposing all 256 bits of Y just to read 1 bit.
+	yParity := api.ToBinary(pubKey.Y.Limbs[0], 1)[0]
 
 	// Construct prefix byte: 0x02 + yParity = 0x02 or 0x03
 	result[0] = api.Add(2, yParity)

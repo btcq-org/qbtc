@@ -105,40 +105,26 @@ func (c *BTCP2SHP2WPKHCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-// bytesToScalar converts a byte array to a scalar field element
+// bytesToScalar converts big-endian bytes to a Secp256k1Fr scalar element.
+// Assembles 4×64-bit limbs directly via constant-shift arithmetic, avoiding
+// api.ToBinary on each byte (MessageHash is a public input — range is enforced
+// by the verifier, not the circuit).
 func (c *BTCP2SHP2WPKHCircuit) bytesToScalar(
 	api frontend.API,
-	field *emulated.Field[Secp256k1Fr],
+	_ *emulated.Field[Secp256k1Fr],
 	bytes []frontend.Variable,
 ) emulated.Element[Secp256k1Fr] {
-	bits := make([]frontend.Variable, len(bytes)*8)
-	for i, b := range bytes {
-		byteBits := api.ToBinary(b, 8)
-		for j := 0; j < 8; j++ {
-			bits[i*8+j] = byteBits[7-j]
+	limbs := make([]frontend.Variable, 4)
+	for i := range 4 {
+		var limb frontend.Variable = 0
+		for j := range 8 {
+			byteIdx := (3-i)*8 + j
+			shift := uint64(1) << uint(8*(7-j))
+			limb = api.Add(limb, api.Mul(bytes[byteIdx], shift))
 		}
+		limbs[i] = limb
 	}
-
-	limbSize := 64
-	numLimbs := 4
-	limbs := make([]frontend.Variable, numLimbs)
-
-	for limbIdx := 0; limbIdx < numLimbs; limbIdx++ {
-		limbBits := make([]frontend.Variable, limbSize)
-		for bitIdx := 0; bitIdx < limbSize; bitIdx++ {
-			globalBitIdx := (numLimbs-1-limbIdx)*limbSize + (limbSize - 1 - bitIdx)
-			if globalBitIdx < len(bits) {
-				limbBits[bitIdx] = bits[globalBitIdx]
-			} else {
-				limbBits[bitIdx] = 0
-			}
-		}
-		limbs[limbIdx] = api.FromBinary(limbBits...)
-	}
-
-	return emulated.Element[Secp256k1Fr]{
-		Limbs: limbs,
-	}
+	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
 // compressPubKeyFromPoint computes the compressed public key (33 bytes) from a point
@@ -150,8 +136,7 @@ func (c *BTCP2SHP2WPKHCircuit) compressPubKeyFromPoint(
 	var result [33]frontend.Variable
 
 	xBits := field.ToBits(&pubKey.X)
-	yBits := field.ToBits(&pubKey.Y)
-	yParity := yBits[0]
+	yParity := api.ToBinary(pubKey.Y.Limbs[0], 1)[0]
 
 	result[0] = api.Add(2, yParity)
 
