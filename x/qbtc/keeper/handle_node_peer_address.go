@@ -2,10 +2,10 @@ package keeper
 
 import (
 	"context"
-	"errors"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
@@ -30,7 +30,7 @@ func (s *msgServer) SetNodePeerAddress(ctx context.Context, msg *types.MsgSetNod
 
 	// Check if the validator is bonded (Active)
 	if validator.Status != stakingtypes.Bonded {
-		return nil, errors.New("validator is not bonded")
+		return nil, sdkerrors.ErrUnauthorized.Wrap("validator is not bonded")
 	}
 
 	// Set the IP address
