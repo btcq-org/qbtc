@@ -10,6 +10,9 @@ import (
 )
 
 func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
+	s.logger.Info().Str("claimer_address", req.ClaimerAddress).
+		Int("num_utxos", len(req.UTXOs)).
+		Msg("received proof generation request")
 	// 1. Validate required fields
 	if req.SignatureR == "" || req.SignatureS == "" {
 		return nil, http.StatusBadRequest, &ErrorResponse{
@@ -94,6 +97,7 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 
 	// 8. Compute message hash
 	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
+	s.logger.Info().Str("message_hash", hex.EncodeToString(messageHash[:])).Msg("computed message hash")
 
 	// 9. Create prover and generate proof
 	prover := zk.NewProver(s.cs, s.pk)
@@ -108,6 +112,7 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 		QBTCAddressHash: qbtcAddressHash,
 		ChainID:         chainIDHash,
 	})
+	s.logger.Info().Msg("generated proof")
 	if err != nil {
 		s.logger.Error().Err(err).Msg("proof generation failed")
 		return nil, http.StatusInternalServerError, &ErrorResponse{
