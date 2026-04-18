@@ -542,24 +542,11 @@ func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 		return nil, fmt.Errorf("failed to generate proof: %w", err)
 	}
 
-	// Serialize the proof
-	var proofBuf bytes.Buffer
-	_, err = proof.WriteTo(&proofBuf)
+	// Serialize the proof (~1-2KB for PLONK on BN254)
+	proofBuf := bytes.NewBuffer(make([]byte, 0, 4096))
+	_, err = proof.WriteTo(proofBuf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize proof: %w", err)
-	}
-
-	// Get public witness
-	publicWitness, err := witness.Public()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get public witness: %w", err)
-	}
-
-	// Serialize public inputs
-	var publicBuf bytes.Buffer
-	_, err = publicWitness.WriteTo(&publicBuf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize public inputs: %w", err)
 	}
 	return proofBuf.Bytes(), nil
 }

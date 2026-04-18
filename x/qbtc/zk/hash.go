@@ -105,144 +105,133 @@ var ripemd160KR = [5]uint32{
 	0x00000000,
 }
 
-// computeRIPEMD160Circuit computes RIPEMD160 hash in the circuit
-// This implementation follows the RIPEMD-160 specification exactly
-func computeRIPEMD160Circuit(api frontend.API, data []frontend.Variable) [20]frontend.Variable {
-	// Pad the message
-	padded := padMessage(api, data)
+// bits32 stores a 32-bit word as individual bits with bit[0] = LSB.
+// Keeping state in this form avoids repeated ToBinary/FromBinary round-trips
+// across chained bitwise operations — the dominant constraint overhead in the
+// original implementation.
+type bits32 [32]frontend.Variable
 
-	// Initialize hash state with IV
-	h0 := frontend.Variable(ripemd160IV[0])
-	h1 := frontend.Variable(ripemd160IV[1])
-	h2 := frontend.Variable(ripemd160IV[2])
-	h3 := frontend.Variable(ripemd160IV[3])
-	h4 := frontend.Variable(ripemd160IV[4])
-
-	// Process each 64-byte block
-	for blockIdx := 0; blockIdx < len(padded)/64; blockIdx++ {
-		block := padded[blockIdx*64 : (blockIdx+1)*64]
-
-		// Parse block into 16 32-bit words (little-endian)
-		var x [16]frontend.Variable
-		for i := 0; i < 16; i++ {
-			x[i] = bytesToWord32LE(api, block[i*4:(i+1)*4])
+// bits32FromUint converts a compile-time constant to bits32 with zero circuit constraints.
+func bits32FromUint(v uint32) bits32 {
+	var b bits32
+	for i := range 32 {
+		if (v>>i)&1 == 1 {
+			b[i] = 1
+		} else {
+			b[i] = 0
 		}
-
-		// Initialize working variables
-		al, bl, cl, dl, el := h0, h1, h2, h3, h4
-		ar, br, cr, dr, er := h0, h1, h2, h3, h4
-
-		// 80 rounds for left line
-		for j := 0; j < 80; j++ {
-			round := j / 16
-			f := ripemdF(api, round, bl, cl, dl)
-			k := frontend.Variable(ripemd160KL[round])
-			r := ripemd160RL[j]
-			s := ripemd160SL[j]
-
-			t := add32Mod(api, al, f)
-			t = add32Mod(api, t, x[r])
-			t = add32Mod(api, t, k)
-			t = rotateLeft32(api, t, s)
-			t = add32Mod(api, t, el)
-
-			al = el
-			el = dl
-			dl = rotateLeft32(api, cl, 10)
-			cl = bl
-			bl = t
-		}
-
-		// 80 rounds for right line
-		for j := 0; j < 80; j++ {
-			round := j / 16
-			f := ripemdF(api, 4-round, br, cr, dr) // Note: reversed round order for right line
-			k := frontend.Variable(ripemd160KR[round])
-			r := ripemd160RR[j]
-			s := ripemd160SR[j]
-
-			t := add32Mod(api, ar, f)
-			t = add32Mod(api, t, x[r])
-			t = add32Mod(api, t, k)
-			t = rotateLeft32(api, t, s)
-			t = add32Mod(api, t, er)
-
-			ar = er
-			er = dr
-			dr = rotateLeft32(api, cr, 10)
-			cr = br
-			br = t
-		}
-
-		// Final addition
-		t := add32Mod(api, h1, add32Mod(api, cl, dr))
-		h1 = add32Mod(api, h2, add32Mod(api, dl, er))
-		h2 = add32Mod(api, h3, add32Mod(api, el, ar))
-		h3 = add32Mod(api, h4, add32Mod(api, al, br))
-		h4 = add32Mod(api, h0, add32Mod(api, bl, cr))
-		h0 = t
 	}
-
-	// Convert hash words to bytes (little-endian)
-	return wordsToBytes20LE(api, h0, h1, h2, h3, h4)
+	return b
 }
 
-// ripemdF computes the round function f for RIPEMD-160
-func ripemdF(api frontend.API, round int, x, y, z frontend.Variable) frontend.Variable {
+// decompose32 decomposes a field element into bits32 (LSB first). Costs 32 constraints.
+func decompose32(api frontend.API, v frontend.Variable) bits32 {
+	raw := api.ToBinary(v, 32)
+	var b bits32
+	copy(b[:], raw)
+	return b
+}
+
+// recompose32 packs bits32 back into a field element. Zero constraints (linear combination).
+func recompose32(api frontend.API, b bits32) frontend.Variable {
+	return api.FromBinary(b[:]...)
+}
+
+// xor32 bitwise XOR on bits32. Costs 32 multiplication constraints; no ToBinary needed.
+func xor32(api frontend.API, a, b bits32) bits32 {
+	var r bits32
+	for i := range 32 {
+		ab := api.Mul(a[i], b[i])
+		r[i] = api.Sub(api.Add(a[i], b[i]), api.Mul(2, ab))
+	}
+	return r
+}
+
+// and32 bitwise AND on bits32. Costs 32 multiplication constraints.
+func and32(api frontend.API, a, b bits32) bits32 {
+	var r bits32
+	for i := range 32 {
+		r[i] = api.Mul(a[i], b[i])
+	}
+	return r
+}
+
+// or32 bitwise OR on bits32. Costs 32 multiplication constraints.
+func or32(api frontend.API, a, b bits32) bits32 {
+	var r bits32
+	for i := range 32 {
+		r[i] = api.Sub(api.Add(a[i], b[i]), api.Mul(a[i], b[i]))
+	}
+	return r
+}
+
+// not32 bitwise NOT on bits32. Zero constraints (all linear).
+func not32(api frontend.API, a bits32) bits32 {
+	var r bits32
+	for i := range 32 {
+		r[i] = api.Sub(1, a[i])
+	}
+	return r
+}
+
+// rotateLeft32 left-rotates bits32 by n positions. Zero constraints (bit reordering only).
+func rotateLeft32(a bits32, n int) bits32 {
+	var r bits32
+	for i := range 32 {
+		r[i] = a[(i-n+32)%32]
+	}
+	return r
+}
+
+// add32Mod adds two bits32 values modulo 2^32. Costs 33 constraints (ToBinary of the sum).
+func add32Mod(api frontend.API, a, b bits32) bits32 {
+	sum := api.Add(recompose32(api, a), recompose32(api, b))
+	raw := api.ToBinary(sum, 33)
+	var r bits32
+	copy(r[:], raw[:32])
+	return r
+}
+
+// ripemdF computes the RIPEMD-160 round function on bits32 values.
+// All operands are already decomposed so no ToBinary is needed here.
+func ripemdF(api frontend.API, round int, x, y, z bits32) bits32 {
 	switch round {
 	case 0:
-		// f(x, y, z) = x XOR y XOR z
 		return xor32(api, xor32(api, x, y), z)
 	case 1:
-		// f(x, y, z) = (x AND y) OR (NOT x AND z)
 		return or32(api, and32(api, x, y), and32(api, not32(api, x), z))
 	case 2:
-		// f(x, y, z) = (x OR NOT y) XOR z
 		return xor32(api, or32(api, x, not32(api, y)), z)
 	case 3:
-		// f(x, y, z) = (x AND z) OR (y AND NOT z)
 		return or32(api, and32(api, x, z), and32(api, y, not32(api, z)))
 	case 4:
-		// f(x, y, z) = x XOR (y OR NOT z)
 		return xor32(api, x, or32(api, y, not32(api, z)))
 	default:
 		panic("invalid round")
 	}
 }
 
-// padMessage pads the input message according to RIPEMD-160 spec
+// padMessage pads the input message according to RIPEMD-160 spec.
 func padMessage(api frontend.API, data []frontend.Variable) []frontend.Variable {
 	msgLen := len(data)
-	// Padding: add 1 bit (0x80), then zeros, then 64-bit length
-	// Total length must be multiple of 64 bytes
-
-	// Calculate padded length
 	paddedLen := ((msgLen + 9 + 63) / 64) * 64
 	padded := make([]frontend.Variable, paddedLen)
 
-	// Copy original data
 	for i := 0; i < msgLen; i++ {
 		padded[i] = data[i]
 	}
-
-	// Add 0x80 byte
 	padded[msgLen] = frontend.Variable(0x80)
-
-	// Fill with zeros (already zero in Go)
 	for i := msgLen + 1; i < paddedLen-8; i++ {
 		padded[i] = frontend.Variable(0)
 	}
-
-	// Add length in bits as 64-bit little-endian
 	lenBits := uint64(msgLen) * 8
 	for i := 0; i < 8; i++ {
 		padded[paddedLen-8+i] = frontend.Variable((lenBits >> (i * 8)) & 0xFF)
 	}
-
 	return padded
 }
 
-// bytesToWord32LE converts 4 bytes to a 32-bit word (little-endian)
+// bytesToWord32LE converts 4 bytes to a 32-bit word (little-endian).
 func bytesToWord32LE(api frontend.API, bytes []frontend.Variable) frontend.Variable {
 	result := bytes[0]
 	result = api.Add(result, api.Mul(bytes[1], 256))
@@ -251,86 +240,92 @@ func bytesToWord32LE(api frontend.API, bytes []frontend.Variable) frontend.Varia
 	return result
 }
 
-// wordsToBytes20LE converts 5 32-bit words to 20 bytes (little-endian)
-func wordsToBytes20LE(api frontend.API, h0, h1, h2, h3, h4 frontend.Variable) [20]frontend.Variable {
+// computeRIPEMD160Circuit computes RIPEMD160 hash in the circuit.
+// All working state is maintained as bits32 to eliminate the redundant ToBinary/FromBinary
+// calls that occurred when chaining bitwise operations on packed field elements.
+func computeRIPEMD160Circuit(api frontend.API, data []frontend.Variable) [20]frontend.Variable {
+	padded := padMessage(api, data)
+
+	// IV as constant bits32 — no circuit constraints.
+	h := [5]bits32{
+		bits32FromUint(ripemd160IV[0]),
+		bits32FromUint(ripemd160IV[1]),
+		bits32FromUint(ripemd160IV[2]),
+		bits32FromUint(ripemd160IV[3]),
+		bits32FromUint(ripemd160IV[4]),
+	}
+
+	for blockIdx := 0; blockIdx < len(padded)/64; blockIdx++ {
+		block := padded[blockIdx*64 : (blockIdx+1)*64]
+
+		// Decompose all 16 message words to bits32 once per block.
+		// This avoids re-decomposing x[r] inside each add32Mod call.
+		var x [16]bits32
+		for i := range 16 {
+			x[i] = decompose32(api, bytesToWord32LE(api, block[i*4:(i+1)*4]))
+		}
+
+		al, bl, cl, dl, el := h[0], h[1], h[2], h[3], h[4]
+		ar, br, cr, dr, er := h[0], h[1], h[2], h[3], h[4]
+
+		// Left line: 80 rounds
+		for j := range 80 {
+			round := j / 16
+			f := ripemdF(api, round, bl, cl, dl)
+			k := bits32FromUint(ripemd160KL[round])
+			r := ripemd160RL[j]
+			s := ripemd160SL[j]
+
+			t := add32Mod(api, al, f)
+			t = add32Mod(api, t, x[r])
+			t = add32Mod(api, t, k)
+			t = rotateLeft32(t, s)
+			t = add32Mod(api, t, el)
+
+			al = el
+			el = dl
+			dl = rotateLeft32(cl, 10)
+			cl = bl
+			bl = t
+		}
+
+		// Right line: 80 rounds
+		for j := range 80 {
+			round := j / 16
+			f := ripemdF(api, 4-round, br, cr, dr)
+			k := bits32FromUint(ripemd160KR[round])
+			r := ripemd160RR[j]
+			s := ripemd160SR[j]
+
+			t := add32Mod(api, ar, f)
+			t = add32Mod(api, t, x[r])
+			t = add32Mod(api, t, k)
+			t = rotateLeft32(t, s)
+			t = add32Mod(api, t, er)
+
+			ar = er
+			er = dr
+			dr = rotateLeft32(cr, 10)
+			cr = br
+			br = t
+		}
+
+		// Final mixing
+		t := add32Mod(api, h[1], add32Mod(api, cl, dr))
+		h[1] = add32Mod(api, h[2], add32Mod(api, dl, er))
+		h[2] = add32Mod(api, h[3], add32Mod(api, el, ar))
+		h[3] = add32Mod(api, h[4], add32Mod(api, al, br))
+		h[4] = add32Mod(api, h[0], add32Mod(api, bl, cr))
+		h[0] = t
+	}
+
+	// Serialise hash words to bytes (little-endian).
+	// The bits are already decomposed so FromBinary costs zero constraints.
 	var result [20]frontend.Variable
-	words := []frontend.Variable{h0, h1, h2, h3, h4}
-	for i, w := range words {
-		for j := 0; j < 4; j++ {
-			result[i*4+j] = extractByte32(api, w, j)
+	for i, w := range h {
+		for j := range 4 {
+			result[i*4+j] = api.FromBinary(w[j*8 : (j+1)*8]...)
 		}
 	}
 	return result
-}
-
-// add32Mod performs 32-bit addition with modular wrap
-func add32Mod(api frontend.API, a, b frontend.Variable) frontend.Variable {
-	sum := api.Add(a, b)
-	// Take modulo 2^32
-	bits := api.ToBinary(sum, 33)
-	return api.FromBinary(bits[:32]...)
-}
-
-// rotateLeft32 performs 32-bit left rotation
-func rotateLeft32(api frontend.API, x frontend.Variable, n int) frontend.Variable {
-	bits := api.ToBinary(x, 32)
-	rotated := make([]frontend.Variable, 32)
-	for i := 0; i < 32; i++ {
-		srcIdx := (i - n + 32) % 32
-		rotated[i] = bits[srcIdx]
-	}
-	return api.FromBinary(rotated...)
-}
-
-// xor32 performs bitwise XOR on 32-bit values
-func xor32(api frontend.API, a, b frontend.Variable) frontend.Variable {
-	aBits := api.ToBinary(a, 32)
-	bBits := api.ToBinary(b, 32)
-	resultBits := make([]frontend.Variable, 32)
-	for i := 0; i < 32; i++ {
-		// XOR: a + b - 2*a*b (works for bits 0,1)
-		ab := api.Mul(aBits[i], bBits[i])
-		resultBits[i] = api.Sub(api.Add(aBits[i], bBits[i]), api.Mul(2, ab))
-	}
-	return api.FromBinary(resultBits...)
-}
-
-// and32 performs bitwise AND on 32-bit values
-func and32(api frontend.API, a, b frontend.Variable) frontend.Variable {
-	aBits := api.ToBinary(a, 32)
-	bBits := api.ToBinary(b, 32)
-	resultBits := make([]frontend.Variable, 32)
-	for i := 0; i < 32; i++ {
-		resultBits[i] = api.Mul(aBits[i], bBits[i])
-	}
-	return api.FromBinary(resultBits...)
-}
-
-// or32 performs bitwise OR on 32-bit values
-func or32(api frontend.API, a, b frontend.Variable) frontend.Variable {
-	aBits := api.ToBinary(a, 32)
-	bBits := api.ToBinary(b, 32)
-	resultBits := make([]frontend.Variable, 32)
-	for i := 0; i < 32; i++ {
-		// OR: a + b - a*b (works for bits 0,1)
-		resultBits[i] = api.Sub(api.Add(aBits[i], bBits[i]), api.Mul(aBits[i], bBits[i]))
-	}
-	return api.FromBinary(resultBits...)
-}
-
-// not32 performs bitwise NOT on a 32-bit value
-func not32(api frontend.API, a frontend.Variable) frontend.Variable {
-	aBits := api.ToBinary(a, 32)
-	resultBits := make([]frontend.Variable, 32)
-	for i := 0; i < 32; i++ {
-		resultBits[i] = api.Sub(1, aBits[i])
-	}
-	return api.FromBinary(resultBits...)
-}
-
-// extractByte32 extracts byte n from a 32-bit word (little-endian)
-func extractByte32(api frontend.API, word frontend.Variable, n int) frontend.Variable {
-	bits := api.ToBinary(word, 32)
-	byteBits := bits[n*8 : (n+1)*8]
-	return api.FromBinary(byteBits...)
 }
