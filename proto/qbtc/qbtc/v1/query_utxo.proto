@@ -7,7 +7,8 @@ import "qbtc/qbtc/v1/type_utxo.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 option (gogoproto.marshaler_all) = true;
 
-// QueryUTXORequest requests a single UTXO by its transaction ID and output index.
+// QueryUTXORequest requests a single UTXO by its transaction ID and output
+// index.
 message QueryUTXORequest {
   // txid is the Bitcoin transaction ID.
   string txid = 1;
