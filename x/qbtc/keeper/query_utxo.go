@@ -3,7 +3,6 @@ package keeper
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -18,7 +17,7 @@ func (qs queryServer) UTXO(ctx context.Context, req *types.QueryUTXORequest) (*t
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("txid is required")
 	}
 
-	key := fmt.Sprintf("%s-%d", req.Txid, req.Vout)
+	key := getUTXOKey(req.Txid, req.Vout)
 	utxo, err := qs.k.Utxoes.Get(ctx, key)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
