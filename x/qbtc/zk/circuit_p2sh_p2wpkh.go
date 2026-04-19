@@ -73,8 +73,8 @@ func (c *BTCP2SHP2WPKHCircuit) Define(api frontend.API) error {
 		Y: c.PublicKeyY,
 	}
 
-	compressedPubKey := c.compressPubKeyFromPoint(api, baseField, pubKeyPoint)
-	pubkeyHash160 := c.computeHash160(api, compressedPubKey[:])
+	compressedPubKey := compressPubKeyFromPoint(api, baseField, pubKeyPoint)
+	pubkeyHash160 := computeHash160(api, compressedPubKey[:])
 
 	// ========================================
 	// Step 3: Compute script hash and verify
@@ -89,7 +89,7 @@ func (c *BTCP2SHP2WPKHCircuit) Define(api frontend.API) error {
 	}
 
 	// Compute Hash160 of the redeem script
-	expectedScriptHash := c.computeHash160(api, redeemScript)
+	expectedScriptHash := computeHash160(api, redeemScript)
 
 	// Assert expected script hash equals the claimed script hash
 	for i := 0; i < 20; i++ {
@@ -99,39 +99,6 @@ func (c *BTCP2SHP2WPKHCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-// compressPubKeyFromPoint computes the compressed public key (33 bytes) from a point
-func (c *BTCP2SHP2WPKHCircuit) compressPubKeyFromPoint(
-	api frontend.API,
-	field *emulated.Field[Secp256k1Fp],
-	pubKey *sw_emulated.AffinePoint[Secp256k1Fp],
-) [33]frontend.Variable {
-	var result [33]frontend.Variable
-
-	xBits := field.ToBits(&pubKey.X)
-	yParity := api.ToBinary(pubKey.Y.Limbs[0], 1)[0]
-
-	result[0] = api.Add(2, yParity)
-
-	for byteIdx := 0; byteIdx < 32; byteIdx++ {
-		var byteVal frontend.Variable = 0
-		for bitIdx := 0; bitIdx < 8; bitIdx++ {
-			srcBitIdx := (31-byteIdx)*8 + bitIdx
-			if srcBitIdx < len(xBits) {
-				bit := xBits[srcBitIdx]
-				byteVal = api.Add(byteVal, api.Mul(bit, 1<<bitIdx))
-			}
-		}
-		result[1+byteIdx] = byteVal
-	}
-
-	return result
-}
-
-// computeHash160 computes RIPEMD160(SHA256(data))
-func (c *BTCP2SHP2WPKHCircuit) computeHash160(api frontend.API, data []frontend.Variable) [20]frontend.Variable {
-	sha256Result := computeSHA256Circuit(api, data)
-	return computeRIPEMD160Circuit(api, sha256Result[:])
-}
 
 // NewBTCP2SHP2WPKHCircuitPlaceholder creates an empty circuit for compilation.
 func NewBTCP2SHP2WPKHCircuitPlaceholder() *BTCP2SHP2WPKHCircuit {

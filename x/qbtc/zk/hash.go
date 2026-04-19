@@ -2,6 +2,7 @@ package zk
 
 import (
 	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
 	"github.com/consensys/gnark/std/hash/ripemd160"
 	"github.com/consensys/gnark/std/hash/sha2"
 	"github.com/consensys/gnark/std/math/emulated"
@@ -22,6 +23,39 @@ func bytesToScalar(api frontend.API, bytes []frontend.Variable) emulated.Element
 		limbs[i] = limb
 	}
 	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
+}
+
+// compressPubKeyFromPoint returns the 33-byte SEC-compressed encoding of a secp256k1 point.
+// Prefix byte is 0x02 (even Y) or 0x03 (odd Y); X is big-endian 32 bytes.
+func compressPubKeyFromPoint(
+	api frontend.API,
+	field *emulated.Field[Secp256k1Fp],
+	pubKey *sw_emulated.AffinePoint[Secp256k1Fp],
+) [33]frontend.Variable {
+	var result [33]frontend.Variable
+	// field.ToBits returns bits in little-endian order: bit[0] is LSB
+	xBits := field.ToBits(&pubKey.X)
+	// Parity of Y equals the parity of its least-significant limb —
+	// avoids decomposing all 256 bits of Y just to read 1 bit.
+	yParity := api.ToBinary(pubKey.Y.Limbs[0], 1)[0]
+	result[0] = api.Add(2, yParity)
+	for byteIdx := 0; byteIdx < 32; byteIdx++ {
+		var byteVal frontend.Variable = 0
+		for bitIdx := 0; bitIdx < 8; bitIdx++ {
+			srcBitIdx := (31-byteIdx)*8 + bitIdx
+			if srcBitIdx < len(xBits) {
+				byteVal = api.Add(byteVal, api.Mul(xBits[srcBitIdx], 1<<bitIdx))
+			}
+		}
+		result[1+byteIdx] = byteVal
+	}
+	return result
+}
+
+// computeHash160 computes RIPEMD160(SHA256(data)).
+func computeHash160(api frontend.API, data []frontend.Variable) [20]frontend.Variable {
+	sha256Result := computeSHA256Circuit(api, data)
+	return computeRIPEMD160Circuit(api, sha256Result[:])
 }
 
 // computeSHA256Circuit computes SHA256 hash in the circuit using gnark's standard library

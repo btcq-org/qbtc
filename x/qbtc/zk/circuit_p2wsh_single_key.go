@@ -82,7 +82,7 @@ func (c *BTCP2WSHSingleKeyCircuit) Define(api frontend.API) error {
 		Y: c.PublicKeyY,
 	}
 
-	compressedPubKey := c.compressPubKeyFromPoint(api, baseField, pubKeyPoint)
+	compressedPubKey := compressPubKeyFromPoint(api, baseField, pubKeyPoint)
 
 	// Build the witness script (35 bytes total)
 	witnessScript := make([]frontend.Variable, 35)
@@ -103,33 +103,6 @@ func (c *BTCP2WSHSingleKeyCircuit) Define(api frontend.API) error {
 	return nil
 }
 
-// compressPubKeyFromPoint computes the compressed public key (33 bytes) from a point
-func (c *BTCP2WSHSingleKeyCircuit) compressPubKeyFromPoint(
-	api frontend.API,
-	field *emulated.Field[Secp256k1Fp],
-	pubKey *sw_emulated.AffinePoint[Secp256k1Fp],
-) [33]frontend.Variable {
-	var result [33]frontend.Variable
-
-	xBits := field.ToBits(&pubKey.X)
-	yParity := api.ToBinary(pubKey.Y.Limbs[0], 1)[0]
-
-	result[0] = api.Add(2, yParity)
-
-	for byteIdx := 0; byteIdx < 32; byteIdx++ {
-		var byteVal frontend.Variable = 0
-		for bitIdx := 0; bitIdx < 8; bitIdx++ {
-			srcBitIdx := (31-byteIdx)*8 + bitIdx
-			if srcBitIdx < len(xBits) {
-				bit := xBits[srcBitIdx]
-				byteVal = api.Add(byteVal, api.Mul(bit, 1<<bitIdx))
-			}
-		}
-		result[1+byteIdx] = byteVal
-	}
-
-	return result
-}
 
 // NewBTCP2WSHSingleKeyCircuitPlaceholder creates an empty circuit for compilation.
 func NewBTCP2WSHSingleKeyCircuitPlaceholder() *BTCP2WSHSingleKeyCircuit {
