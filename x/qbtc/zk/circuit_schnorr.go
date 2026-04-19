@@ -86,7 +86,7 @@ func (c *BTCSchnorrCircuit) Define(api frontend.API) error {
 	challenge := computeBIP340ChallengeCircuit(api, rXBytes, pubKeyXBytes, c.MessageHash)
 
 	// Convert challenge bytes to scalar
-	challengeScalar := c.bytesToScalar(api, scalarField, challenge[:])
+	challengeScalar := bytesToScalar(api, challenge[:])
 
 	// ========================================
 	// Step 3: Verify Schnorr signature
@@ -123,28 +123,6 @@ func (c *BTCSchnorrCircuit) Define(api frontend.API) error {
 	api.AssertIsEqual(api.ToBinary(c.PublicKeyY.Limbs[0], 1)[0], 0)
 
 	return nil
-}
-
-// bytesToScalar converts big-endian bytes to a Secp256k1Fr scalar element.
-// Assembles 4×64-bit limbs directly via constant-shift arithmetic, avoiding
-// api.ToBinary on each byte (the inputs are SHA-256 outputs already range-checked
-// by gnark's uints gadget).
-func (c *BTCSchnorrCircuit) bytesToScalar(
-	api frontend.API,
-	_ *emulated.Field[Secp256k1Fr],
-	bytes []frontend.Variable,
-) emulated.Element[Secp256k1Fr] {
-	limbs := make([]frontend.Variable, 4)
-	for i := range 4 {
-		var limb frontend.Variable = 0
-		for j := range 8 {
-			byteIdx := (3-i)*8 + j
-			shift := uint64(1) << uint(8*(7-j))
-			limb = api.Add(limb, api.Mul(bytes[byteIdx], shift))
-		}
-		limbs[i] = limb
-	}
-	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
 // elementToBytes32 converts a base field element to 32 bytes (big-endian)

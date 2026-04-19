@@ -54,12 +54,6 @@ func (c *BTCSignatureCircuit) Define(api frontend.API) error {
 		return err
 	}
 
-	// Get the scalar field for message hash conversion
-	scalarField, err := emulated.NewField[Secp256k1Fr](api)
-	if err != nil {
-		return err
-	}
-
 	// ========================================
 	// Step 1: Verify ECDSA signature using gnark's standard gadget
 	// ========================================
@@ -76,7 +70,7 @@ func (c *BTCSignatureCircuit) Define(api frontend.API) error {
 	}
 
 	// Convert message hash bytes to scalar
-	messageScalar := c.bytesToScalar(api, scalarField, c.MessageHash[:])
+	messageScalar := bytesToScalar(api, c.MessageHash[:])
 
 	// Verify ECDSA signature using gnark's standard implementation
 	pubKey.Verify(api, sw_emulated.GetSecp256k1Params(), &messageScalar, sig)
@@ -109,28 +103,6 @@ func (c *BTCSignatureCircuit) Define(api frontend.API) error {
 	// This is done outside the circuit by the verifier
 
 	return nil
-}
-
-// bytesToScalar converts big-endian bytes to a Secp256k1Fr scalar element.
-// Assembles 4×64-bit limbs directly via constant-shift arithmetic, avoiding
-// api.ToBinary on each byte (MessageHash is a public input — range is enforced
-// by the verifier, not the circuit).
-func (c *BTCSignatureCircuit) bytesToScalar(
-	api frontend.API,
-	_ *emulated.Field[Secp256k1Fr],
-	bytes []frontend.Variable,
-) emulated.Element[Secp256k1Fr] {
-	limbs := make([]frontend.Variable, 4)
-	for i := range 4 {
-		var limb frontend.Variable = 0
-		for j := range 8 {
-			byteIdx := (3-i)*8 + j
-			shift := uint64(1) << uint(8*(7-j))
-			limb = api.Add(limb, api.Mul(bytes[byteIdx], shift))
-		}
-		limbs[i] = limb
-	}
-	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
 // compressPubKeyFromPoint computes the compressed public key (33 bytes) from a point

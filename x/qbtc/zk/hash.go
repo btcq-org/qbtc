@@ -4,8 +4,25 @@ import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/hash/ripemd160"
 	"github.com/consensys/gnark/std/hash/sha2"
+	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/std/math/uints"
 )
+
+// bytesToScalar converts 32 big-endian bytes to a Secp256k1Fr scalar element using
+// 4×64-bit limbs. Avoids api.ToBinary per byte — range is enforced by the verifier.
+func bytesToScalar(api frontend.API, bytes []frontend.Variable) emulated.Element[Secp256k1Fr] {
+	limbs := make([]frontend.Variable, 4)
+	for i := range 4 {
+		var limb frontend.Variable = 0
+		for j := range 8 {
+			byteIdx := (3-i)*8 + j
+			shift := uint64(1) << uint(8*(7-j))
+			limb = api.Add(limb, api.Mul(bytes[byteIdx], shift))
+		}
+		limbs[i] = limb
+	}
+	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
+}
 
 // computeSHA256Circuit computes SHA256 hash in the circuit using gnark's standard library
 func computeSHA256Circuit(api frontend.API, data []frontend.Variable) [32]frontend.Variable {
