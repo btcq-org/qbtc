@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	apiFile   = "/static/openapi.json"
-	indexFile = "template/index.tpl"
+	apiFile         = "/static/openapi.json"
+	apiFileRelative = "static/openapi.json"
+	indexFile       = "template/index.tpl"
 )
 
 //go:embed static
@@ -34,7 +35,7 @@ func handler(title string) http.HandlerFunc {
 			URL   string
 		}{
 			title,
-			apiFile,
+			apiFileRelative,
 		})
 	}
 }
