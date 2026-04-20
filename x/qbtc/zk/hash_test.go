@@ -52,8 +52,8 @@ func (c *TestHash160Circuit) Define(api frontend.API) error {
 	return nil
 }
 
-// computeHash160 computes RIPEMD160(SHA256(data)) using standard Go libraries
-func computeHash160(data []byte) []byte {
+// nativeHash160 computes RIPEMD160(SHA256(data)) using standard Go libraries
+func nativeHash160(data []byte) []byte {
 	sha := sha256.Sum256(data)
 	ripemd := ripemd160.New()
 	ripemd.Write(sha[:])
@@ -111,7 +111,7 @@ func TestHash160_StandardLibrary(t *testing.T) {
 	// This is the compressed pubkey for private key = 1
 	compressedPubKey, _ := hex.DecodeString("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
 
-	hash160 := computeHash160(compressedPubKey)
+	hash160 := nativeHash160(compressedPubKey)
 	t.Logf("Hash160 of pubkey for privkey=1: %s", hex.EncodeToString(hash160))
 
 	require.Len(t, hash160, 20)
@@ -162,7 +162,7 @@ func TestHash160CircuitCorrectness(t *testing.T) {
 	}
 
 	// Compute expected result using standard library
-	expected := computeHash160(input)
+	expected := nativeHash160(input)
 
 	// Create circuit assignment
 	var circuit TestHash160Circuit
@@ -188,7 +188,7 @@ func TestHash160CircuitWithRealPubkey(t *testing.T) {
 	compressedPubKey, _ := hex.DecodeString("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
 
 	// Compute expected Hash160
-	expected := computeHash160(compressedPubKey)
+	expected := nativeHash160(compressedPubKey)
 	t.Logf("Expected Hash160: %s", hex.EncodeToString(expected))
 
 	// Create circuit assignment

@@ -35,9 +35,8 @@ func compressPubKeyFromPoint(
 	var result [33]frontend.Variable
 	// field.ToBits returns bits in little-endian order: bit[0] is LSB
 	xBits := field.ToBits(&pubKey.X)
-	// Parity of Y equals the parity of its least-significant limb —
-	// avoids decomposing all 256 bits of Y just to read 1 bit.
-	yParity := api.ToBinary(pubKey.Y.Limbs[0], 1)[0]
+	yBits := field.ToBits(&pubKey.Y)
+	yParity := yBits[0]
 	result[0] = api.Add(2, yParity)
 	for byteIdx := 0; byteIdx < 32; byteIdx++ {
 		var byteVal frontend.Variable = 0
