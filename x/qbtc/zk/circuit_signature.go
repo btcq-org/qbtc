@@ -9,7 +9,7 @@ import (
 	"github.com/consensys/gnark/std/signature/ecdsa"
 )
 
-// BTCSignatureCircuit is the ZK circuit that proves ownership of a Bitcoin address
+// BTCAddressOwnershipCircuit is the ZK circuit that proves ownership of a Bitcoin address
 // using an ECDSA signature. It proves: "I have a valid signature from the key
 // that controls this Bitcoin address" without revealing the signature or public key.
 //
@@ -19,7 +19,7 @@ import (
 // 3. The signature is valid for the claimed public key
 //
 // This circuit is compatible with MPC/TSS signers that cannot reveal private keys.
-type BTCSignatureCircuit struct {
+type BTCAddressOwnershipCircuit struct {
 	// Private inputs (hidden in the proof)
 	// Signature R scalar (the x-coordinate of k·G reduced mod n)
 	SignatureR emulated.Element[Secp256k1Fr] `gnark:",secret"`
@@ -47,7 +47,7 @@ type BTCSignatureCircuit struct {
 // 1. The signature is valid for the given public key and message
 // 2. The public key hashes to the claimed Bitcoin address
 // 3. The proof is bound to the destination address and chain ID
-func (c *BTCSignatureCircuit) Define(api frontend.API) error {
+func (c *BTCAddressOwnershipCircuit) Define(api frontend.API) error {
 	// Get the base field for point operations
 	baseField, err := emulated.NewField[Secp256k1Fp](api)
 	if err != nil {
@@ -106,8 +106,8 @@ func (c *BTCSignatureCircuit) Define(api frontend.API) error {
 }
 
 
-// NewBTCSignatureCircuitPlaceholder creates an empty circuit for compilation.
+// NewBTCAddressOwnershipCircuitPlaceholder creates an empty circuit for compilation.
 // This is used during setup to generate the constraint system.
-func NewBTCSignatureCircuitPlaceholder() *BTCSignatureCircuit {
-	return &BTCSignatureCircuit{}
+func NewBTCAddressOwnershipCircuitPlaceholder() *BTCAddressOwnershipCircuit {
+	return &BTCAddressOwnershipCircuit{}
 }

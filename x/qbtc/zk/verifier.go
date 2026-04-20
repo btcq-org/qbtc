@@ -53,7 +53,7 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	}
 
 	// Create the public witness with the expected values
-	assignment := &BTCSignatureCircuit{}
+	assignment := &BTCAddressOwnershipCircuit{}
 
 	// Set message hash
 	for i := range 32 {

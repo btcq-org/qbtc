@@ -174,13 +174,8 @@ func TestVerifierNotInitialized(t *testing.T) {
 	_, err := GetVerifier()
 	require.Error(t, err, "GetVerifier should fail when not initialized")
 
-	// Create a dummy proof
-	dummyProof := &Proof{
-		ProofData:    make([]byte, 200),
-		PublicInputs: make([]byte, 100),
-	}
-
-	err = VerifyProofGlobal(dummyProof.ProofData, VerificationParams{})
+	dummyProof := make([]byte, 200)
+	err = VerifyProofGlobal(dummyProof, VerificationParams{})
 	require.Error(t, err, "VerifyProofGlobal should fail when verifier not initialized")
 	require.Contains(t, err.Error(), "not initialized")
 }

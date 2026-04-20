@@ -38,7 +38,7 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set ZK verifying key: %w", err)
 		}
 
-		// Initialize the global verifier (for BTCSignatureCircuit - TSS compatible)
+		// Initialize the global verifier (for BTCAddressOwnershipCircuit - TSS compatible)
 		if err := k.EnsureZKVerifierInitialized(ctx); err != nil {
 			sdkCtx.Logger().Error("failed to initialize ZK verifier from genesis", "error", err)
 			return fmt.Errorf("failed to initialize ZK verifier: %w", err)

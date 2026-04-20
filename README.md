@@ -16,10 +16,6 @@
 |--------------|--------|--------|
 | P2PKH | `1...` | ✅ Supported |
 | P2WPKH (Native SegWit) | `bc1q...` (42 chars) | ✅ Supported |
-| P2TR (Taproot) | `bc1p...` | ✅ Supported |
-| P2SH-P2WPKH (Wrapped SegWit) | `3...` | ✅ Supported |
-| P2PK (Legacy) | Raw script | ✅ Supported |
-| P2WSH (Single-key) | `bc1q...` (62 chars) | ✅ Supported |
 
 ## Architecture
 
@@ -153,19 +149,15 @@ qbtc/
 The ZK system uses PLONK proofs with KZG commitments to verify Bitcoin address ownership:
 
 - **Proof System**: PLONK with BN254 pairing curve
-- **Signature Schemes**: ECDSA (secp256k1), Schnorr (BIP-340)
-- **Hash Functions**: SHA-256, RIPEMD-160, BIP-340 Tagged Hash
+- **Signature Scheme**: ECDSA (secp256k1)
+- **Hash Functions**: SHA-256, RIPEMD-160
 - **Trusted Setup**: Hermez/Polygon Powers of Tau ceremony
 
-### Circuits
+### Circuit
 
 | Circuit | Script Types | Signature |
 |---------|--------------|-----------|
-| `BTCSignatureCircuit` | P2PKH, P2WPKH | ECDSA |
-| `BTCSchnorrCircuit` | P2TR (key-path) | Schnorr |
-| `BTCP2SHP2WPKHCircuit` | P2SH-P2WPKH | ECDSA |
-| `BTCP2PKCircuit` | P2PK | ECDSA |
-| `BTCP2WSHSingleKeyCircuit` | P2WSH (single-key) | ECDSA |
+| `BTCAddressOwnershipCircuit` | P2PKH, P2WPKH | ECDSA |
 
 ## Security
 
