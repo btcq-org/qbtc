@@ -1,0 +1,23 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+import "qbtc/qbtc/v1/type_utxo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.marshaler_all) = true;
+
+// QueryUTXORequest requests a single UTXO by its transaction ID and output
+// index.
+message QueryUTXORequest {
+  // txid is the Bitcoin transaction ID.
+  string txid = 1;
+  // vout is the output index within the transaction.
+  uint32 vout = 2;
+}
+
+// QueryUTXOResponse contains the requested UTXO.
+message QueryUTXOResponse {
+  // utxo is the requested UTXO.
+  UTXO utxo = 1 [ (gogoproto.nullable) = false ];
+}

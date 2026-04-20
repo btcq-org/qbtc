@@ -23,7 +23,8 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// QueryLastProcessedBlockRequest is the request type for the Query/LastProcessedBlock RPC method.
+// QueryLastProcessedBlockRequest is the request type for the
+// Query/LastProcessedBlock RPC method.
 type QueryLastProcessedBlockRequest struct {
 }
 
@@ -60,7 +61,8 @@ func (m *QueryLastProcessedBlockRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueryLastProcessedBlockRequest proto.InternalMessageInfo
 
-// QueryLastProcessedBlockResponse is the response type for the Query/LastProcessedBlock RPC method.
+// QueryLastProcessedBlockResponse is the response type for the
+// Query/LastProcessedBlock RPC method.
 type QueryLastProcessedBlockResponse struct {
 	Height uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
 }
