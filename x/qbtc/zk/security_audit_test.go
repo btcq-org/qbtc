@@ -273,17 +273,17 @@ func (s *SecurityAuditTestSuite) TestVerifier_ImmutabilityAfterInit() {
 	vkBytes, err := SerializeVerifyingKey(s.setup.VerifyingKey)
 	s.Require().NoError(err)
 	// First registration succeeds
-	err = RegisterVerifier(vkBytes)
+	err = InitializeVerifier(vkBytes)
 	s.Require().NoError(err)
 	s.Require().True(IsVerifierInitialized())
 
 	// Second registration fails
-	err = RegisterVerifier([]byte{0x00, 0x01, 0x02}) // Invalid VK bytes
+	err = InitializeVerifier([]byte{0x00, 0x01, 0x02}) // Invalid VK bytes
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, ErrVerifierAlreadyInitialized)
 
 	// Even with the same VK
-	err = RegisterVerifier(vkBytes)
+	err = InitializeVerifier(vkBytes)
 	s.Require().Error(err)
 }
 

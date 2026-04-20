@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
-	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -39,12 +38,12 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set ZK verifying key: %w", err)
 		}
 
-		// Register the global verifier (for BTCSignatureCircuit - TSS compatible)
-		if err := zk.RegisterVerifier(genState.ZkVerifyingKey); err != nil {
-			sdkCtx.Logger().Error("failed to register ZK verifier from genesis", "error", err)
-			return fmt.Errorf("failed to register ZK verifier: %w", err)
+		// Initialize the global verifier (for BTCSignatureCircuit - TSS compatible)
+		if err := k.EnsureZKVerifierInitialized(ctx); err != nil {
+			sdkCtx.Logger().Error("failed to initialize ZK verifier from genesis", "error", err)
+			return fmt.Errorf("failed to initialize ZK verifier: %w", err)
 		}
-		sdkCtx.Logger().Info("ZK PLONK verifier registered from genesis")
+		sdkCtx.Logger().Info("ZK PLONK verifier initialized from genesis")
 	} else {
 		sdkCtx.Logger().Warn("no ZK verifying key in genesis - airdrop claims will fail until VK is set")
 	}

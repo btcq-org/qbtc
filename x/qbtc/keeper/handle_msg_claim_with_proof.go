@@ -30,7 +30,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 
 	// Ensure the ZK verifier is initialized
 	if !zk.IsVerifierInitialized() {
-		return nil, sdkerror.ErrInvalidRequest.Wrap("ZK verifier not initialized - genesis VK not loaded")
+		return nil, sdkerror.ErrInvalidRequest.Wrap("ZK verifier not initialized")
 	}
 
 	// Parse the claimer address upfront

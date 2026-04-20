@@ -273,7 +273,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to serialize VK: %v", err)
 	}
-	if err := zk.RegisterVerifier(vkBytes); err != nil {
+	if err := zk.InitializeVerifier(vkBytes); err != nil {
 		log.Fatalf("Failed to register verifier: %v", err)
 	}
 	fmt.Println("  ✓ Verifier registered")
