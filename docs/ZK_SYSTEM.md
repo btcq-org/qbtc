@@ -185,11 +185,11 @@ The ZK system uses a single circuit, `BTCAddressOwnershipCircuit`, covering P2PK
 
 | Circuit                      | File                   | Script Types  | Signature |
 | ---------------------------- | ---------------------- | ------------- | --------- |
-| `BTCAddressOwnershipCircuit` | `circuit_signature.go` | P2PKH, P2WPKH | ECDSA     |
+| `BTCAddressOwnershipCircuit` | `circuit.go`           | P2PKH, P2WPKH | ECDSA     |
 
 ### 4.2 ECDSA Circuit (P2PKH/P2WPKH)
 
-**File**: `x/qbtc/zk/circuit_signature.go`
+**File**: `x/qbtc/zk/circuit.go`
 
 **Private Inputs** (hidden in proof):
 | Field | Type | Description |
@@ -550,7 +550,7 @@ Approximate constraint breakdown:
 
 | File                             | Purpose                                        |
 | -------------------------------- | ---------------------------------------------- |
-| `x/qbtc/zk/circuit_signature.go` | ECDSA ownership circuit (P2PKH/P2WPKH)         |
+| `x/qbtc/zk/circuit.go`           | ECDSA ownership circuit (P2PKH/P2WPKH)         |
 | `x/qbtc/zk/hash.go`              | SHA-256, RIPEMD-160 and helpers in-circuit     |
 | `x/qbtc/zk/message.go`           | Claim message construction                     |
 | `x/qbtc/zk/setup.go`             | PLONK setup and prover                         |
@@ -570,7 +570,7 @@ Approximate constraint breakdown:
 
 | File                                                | Coverage                       |
 | --------------------------------------------------- | ------------------------------ |
-| `x/qbtc/zk/circuit_signature_test.go`               | ECDSA circuit end-to-end tests |
+| `x/qbtc/zk/circuit_test.go`                         | ECDSA circuit end-to-end tests |
 | `x/qbtc/zk/integration_test.go`                     | Full claim flow simulation     |
 | `x/qbtc/zk/security_audit_test.go`                  | Security property verification |
 | `x/qbtc/keeper/handle_msg_claim_with_proof_test.go` | Handler integration tests      |
@@ -659,6 +659,6 @@ Other script types (P2TR, P2SH, P2WSH, P2PK, multisig, script-path Taproot, arbi
 
 ```
 x/qbtc/zk/security_audit_test.go     - Security property tests
-x/qbtc/zk/circuit_signature_test.go  - ECDSA circuit tests
+x/qbtc/zk/circuit_test.go            - ECDSA circuit tests
 x/qbtc/zk/integration_test.go        - Full flow tests
 ```

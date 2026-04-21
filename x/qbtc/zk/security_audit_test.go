@@ -513,7 +513,7 @@ func TestAudit_MessageBindingComplete(t *testing.T) {
 //    - Invalid proof format rejection
 //
 // CIRCUIT COVERAGE:
-// - BTCCircuit (P2PKH, P2WPKH via ECDSA + Hash160)
+// - BTCAddressOwnershipCircuit (P2PKH, P2WPKH via ECDSA + Hash160)
 //
 // TRUST ASSUMPTIONS:
 // 1. Trusted setup ceremony was honest (1-of-N)
