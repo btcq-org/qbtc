@@ -385,7 +385,7 @@ func (s *CircuitSignatureTestSuite) TestMessageVersioning() {
 	msg := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
 	// Manually compute expected hash (including type prefix)
-	prefix := []byte(TypePrefixECDSA)
+	prefix := []byte(ClaimTagECDSAHash160)
 	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
 	data = append(data, prefix...)
 	data = append(data, addressHash[:]...)
