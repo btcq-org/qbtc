@@ -39,6 +39,17 @@ func (fcd FreeClaimDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bo
 		return next(ctx, tx, simulate)
 	}
 
+	// A free-claim tx must carry exactly one MsgClaimWithProof. Bundling many
+	// lets an attacker pre-create an account per message at zero cost: each
+	// proof only needs to pass ValidateBasic's structural checks, and ante
+	// writes persist even when the handler later rejects the proofs. Batch
+	// claiming across UTXOs is supported inside a single MsgClaimWithProof
+	// via Utxos, so this limit doesn't block any legitimate flow.
+	if len(tx.GetMsgs()) != 1 {
+		return ctx, errorsmod.Wrap(sdkerrors.ErrInvalidRequest,
+			"free-claim tx must contain exactly one MsgClaimWithProof")
+	}
+
 	ctx = ctx.
 		WithGasMeter(storetypes.NewInfiniteGasMeter()).
 		WithMinGasPrices(sdk.DecCoins{})

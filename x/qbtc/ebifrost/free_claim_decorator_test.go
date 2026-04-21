@@ -109,6 +109,36 @@ func TestFreeClaimDecorator_PreservesExistingAccount(t *testing.T) {
 	require.Equal(t, uint64(42), acc.GetAccountNumber(), "existing account must not be overwritten")
 }
 
+func TestFreeClaimDecorator_RejectsMultiMsgClaimTx(t *testing.T) {
+	claimerA := sdk.AccAddress([]byte("multi-claimer-addr-aaaaaaa"))
+	claimerB := sdk.AccAddress([]byte("multi-claimer-addr-bbbbbbb"))
+
+	ak := newFakeAccountKeeper()
+	decorator := ebifrost.NewFreeClaimDecorator(ak)
+
+	tx := fakeTx{
+		msgs: []sdk.Msg{
+			&types.MsgClaimWithProof{Claimer: claimerA.String()},
+			&types.MsgClaimWithProof{Claimer: claimerB.String()},
+		},
+		signers: [][]byte{claimerA, claimerB},
+		payer:   claimerA,
+	}
+
+	nextCalled := false
+	_, err := decorator.AnteHandle(sdk.Context{}, tx, false, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
+		nextCalled = true
+		return ctx, nil
+	})
+
+	require.Error(t, err, "multi-msg claim tx must be rejected")
+	require.False(t, nextCalled, "next decorator must not run when ante rejects")
+	require.Nil(t, ak.GetAccount(context.Background(), claimerA),
+		"no accounts must be pre-created for a rejected multi-msg claim tx")
+	require.Nil(t, ak.GetAccount(context.Background(), claimerB),
+		"no accounts must be pre-created for a rejected multi-msg claim tx")
+}
+
 func TestFreeClaimDecorator_SkipsNonClaimTx(t *testing.T) {
 	sender := sdk.AccAddress([]byte("bank-sender-addr-1234567890"))
 
