@@ -321,7 +321,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureVerifierGlobalFlow() {
 	s.Require().NoError(err)
 
 	// Register global verifier
-	err = RegisterVerifier(vkBytes)
+	err = InitializeVerifier(vkBytes)
 	s.Require().NoError(err)
 
 	// Create prover

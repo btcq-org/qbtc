@@ -108,7 +108,7 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// Register verifier
 	vkBytes, err := zk.SerializeVerifyingKey(setup.VerifyingKey)
 	require.NoError(t, err)
-	err = zk.RegisterVerifier(vkBytes)
+	err = zk.InitializeVerifier(vkBytes)
 	require.NoError(t, err, "verifier registration should succeed")
 
 	prover := zk.ProverFromSetup(setup)
@@ -270,7 +270,7 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 
 	vkBytes, err := zk.SerializeVerifyingKey(setup.VerifyingKey)
 	require.NoError(t, err)
-	err = zk.RegisterVerifier(vkBytes)
+	err = zk.InitializeVerifier(vkBytes)
 	require.NoError(t, err)
 
 	prover := zk.ProverFromSetup(setup)

@@ -112,19 +112,20 @@ type globalVerifierState struct {
 var globalState = &globalVerifierState{}
 
 // ErrVerifierAlreadyInitialized is returned when attempting to re-register the verifier.
-var ErrVerifierAlreadyInitialized = fmt.Errorf("verifier already initialized - cannot re-register VK")
+var ErrVerifierAlreadyInitialized = fmt.Errorf("verifier already initialized - cannot re-initialize VK")
 
-// RegisterVerifier registers the global verifier from VK bytes.
-// This should be called once at node startup from genesis.
+// InitializeVerifier initializes the global verifier from VK bytes.
+// This should be called once at node startup.
 // Thread-safe: uses mutex for concurrent access.
 //
-// SECURITY: This function can only be called once. Subsequent calls will return
-// ErrVerifierAlreadyInitialized. This prevents malicious VK replacement attacks.
-func RegisterVerifier(vkBytes []byte) error {
+// SECURITY: This function can only be called once per process. Subsequent calls
+// will return ErrVerifierAlreadyInitialized. This prevents malicious VK
+// replacement attacks.
+func InitializeVerifier(vkBytes []byte) error {
 	globalState.mu.Lock()
 	defer globalState.mu.Unlock()
 
-	// SECURITY: Prevent re-registration of verifier
+	// SECURITY: Prevent re-initialization of verifier
 	if globalState.initialized {
 		return ErrVerifierAlreadyInitialized
 	}
@@ -139,16 +140,17 @@ func RegisterVerifier(vkBytes []byte) error {
 	return nil
 }
 
-// RegisterVerifierFromVK registers the global verifier from a VK object.
+// InitializeVerifierFromVK initializes the global verifier from a VK object.
 // Thread-safe: uses mutex for concurrent access.
 //
-// SECURITY: This function can only be called once. Subsequent calls will return
-// ErrVerifierAlreadyInitialized. This prevents malicious VK replacement attacks.
-func RegisterVerifierFromVK(vk plonk.VerifyingKey) error {
+// SECURITY: This function can only be called once per process. Subsequent calls
+// will return ErrVerifierAlreadyInitialized. This prevents malicious VK
+// replacement attacks.
+func InitializeVerifierFromVK(vk plonk.VerifyingKey) error {
 	globalState.mu.Lock()
 	defer globalState.mu.Unlock()
 
-	// SECURITY: Prevent re-registration of verifier
+	// SECURITY: Prevent re-initialization of verifier
 	if globalState.initialized {
 		return ErrVerifierAlreadyInitialized
 	}
@@ -170,7 +172,7 @@ func GetVerifier() (*Verifier, error) {
 	return globalState.verifier, nil
 }
 
-// IsVerifierInitialized returns true if the global verifier has been registered.
+// IsVerifierInitialized returns true if the global verifier has been initialized.
 // Thread-safe: uses read lock for concurrent access.
 func IsVerifierInitialized() bool {
 	globalState.mu.RLock()

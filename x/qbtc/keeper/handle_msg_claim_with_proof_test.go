@@ -58,7 +58,7 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	vkBytes, err := zk.SerializeVerifyingKey(setup.VerifyingKey)
 	require.NoError(t, err, "VK serialization should succeed")
 
-	err = zk.RegisterVerifier(vkBytes)
+	err = zk.InitializeVerifier(vkBytes)
 	if err != nil && !errors.Is(err, zk.ErrVerifierAlreadyInitialized) {
 		t.Fatalf("verifier registration failed: %v", err)
 	}

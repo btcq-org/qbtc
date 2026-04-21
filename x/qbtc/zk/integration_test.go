@@ -39,7 +39,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	require.NoError(t, err, "VK serialization should succeed")
 
 	// Register verifier from VK bytes (as done in InitGenesis)
-	err = RegisterVerifier(vkBytes)
+	err = InitializeVerifier(vkBytes)
 	require.NoError(t, err, "verifier registration should succeed")
 
 	// Create prover (this would be done by the zkprover tool)

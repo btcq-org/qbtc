@@ -150,6 +150,13 @@ func (AppModule) ConsensusVersion() uint64 { return 1 }
 // The begin block implementation is optional.
 func (am AppModule) BeginBlock(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	// Rehydrate the process-local ZK verifier singleton from chain state.
+	// InitGenesis only runs on a fresh chain, so without this a restarted
+	// node would have no verifier initialized. After the first successful
+	// initialization this call is a cheap no-op.
+	if err := am.keeper.EnsureZKVerifierInitialized(ctx); err != nil {
+		sdkCtx.Logger().Error("failed to ensure ZK verifier is initialized", "error", err)
+	}
 	utxoLoader := NewUtxoLoader(am.dataDir)
 	if sdkCtx.BlockHeight() <= 0 {
 		return nil
