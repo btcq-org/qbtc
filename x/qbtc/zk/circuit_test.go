@@ -396,3 +396,84 @@ func (s *CircuitSignatureTestSuite) TestMessageVersioning() {
 
 	s.Require().Equal(expected, msg, "message should match expected format")
 }
+
+// BenchmarkProofGeneration measures end-to-end PLONK proof generation time
+// for the BTCAddressOwnershipCircuit. Setup (circuit compilation + key gen)
+// runs once outside the timed loop, so each iteration times only the
+// witness-assignment + Prove call that a user would run locally.
+//
+// Gated behind the `testing` build tag (inherited from this file) so it is
+// not compiled into `make bench` (which omits -tags=testing) and is never
+// executed by `make test` / `make test-all` / CI (none pass -bench).
+// Run explicitly with:
+//
+//	go test -tags=testing -bench=BenchmarkProofGeneration -run=^$ -benchtime=3x ./x/qbtc/zk/
+func BenchmarkProofGeneration(b *testing.B) {
+	ClearVerifierForTesting()
+
+	setup, err := SetupWithOptions(TestSetupOptions())
+	if err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	prover := ProverFromSetup(setup)
+
+	privateKeyBytes, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000003039")
+	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
+
+	addressHash, err := PublicKeyToAddressHash(pubKey.SerializeCompressed())
+	if err != nil {
+		b.Fatalf("address hash: %v", err)
+	}
+	qbtcAddressHash := HashQBTCAddress("qbtc1benchaddress")
+	chainIDHash := ComputeChainIDHash("qbtc-bench-1")
+	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
+
+	sig := btcecdsa.Sign(privKey, messageHash[:])
+	sigBytes := sig.Serialize()
+	rLen := int(sigBytes[3])
+	rBytes := sigBytes[4 : 4+rLen]
+	sLen := int(sigBytes[4+rLen+1])
+	sBytes := sigBytes[4+rLen+2 : 4+rLen+2+sLen]
+	if len(rBytes) > 0 && rBytes[0] == 0 {
+		rBytes = rBytes[1:]
+	}
+	if len(sBytes) > 0 && sBytes[0] == 0 {
+		sBytes = sBytes[1:]
+	}
+
+	params := ProofParams{
+		SignatureR:      new(big.Int).SetBytes(rBytes),
+		SignatureS:      new(big.Int).SetBytes(sBytes),
+		PublicKeyX:      pubKey.X(),
+		PublicKeyY:      pubKey.Y(),
+		MessageHash:     messageHash,
+		AddressHash:     addressHash,
+		QBTCAddressHash: qbtcAddressHash,
+		ChainID:         chainIDHash,
+	}
+
+	// Warm-up proof so one-time allocations don't skew the first sample,
+	// and capture the proof size for reporting.
+	proof, err := prover.GenerateProof(params)
+	if err != nil {
+		b.Fatalf("warm-up proof failed: %v", err)
+	}
+	proofSize := len(proof)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		p, err := prover.GenerateProof(params)
+		if err != nil {
+			b.Fatalf("proof generation failed: %v", err)
+		}
+		if len(p) == 0 {
+			b.Fatal("empty proof")
+		}
+	}
+
+	b.StopTimer()
+	b.ReportMetric(float64(proofSize), "proof_bytes")
+	b.ReportMetric(float64(setup.ConstraintSystem.GetNbConstraints()), "constraints")
+}
