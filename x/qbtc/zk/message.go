@@ -40,26 +40,6 @@ func ComputeClaimMessage(addressHash [20]byte, qbtcAddressHash [32]byte, chainID
 	return sha256.Sum256(data)
 }
 
-// ComputeClaimMessageFromStrings is a convenience function that computes the
-// claim message from string inputs. It's useful for CLI tools.
-func ComputeClaimMessageFromStrings(addressHashHex string, qbtcAddress string, chainID string) ([32]byte, error) {
-	var result [32]byte
-
-	// Parse address hash
-	addressHash, err := AddressHashFromHex(addressHashHex)
-	if err != nil {
-		return result, err
-	}
-
-	// Hash the btcq address
-	qbtcAddressHash := HashQBTCAddress(qbtcAddress)
-
-	// Hash the chain ID
-	chainIDHash := ComputeChainIDHash(chainID)
-
-	return ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash), nil
-}
-
 // VerifyClaimMessage checks that a message hash matches the expected claim message.
 // This is used by the verifier to ensure the proof is bound to the correct parameters.
 func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, qbtcAddressHash [32]byte, chainID [8]byte) bool {

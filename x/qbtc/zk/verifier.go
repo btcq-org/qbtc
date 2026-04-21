@@ -90,16 +90,6 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	return nil
 }
 
-// GetVerifyingKey returns the verifying key
-func (v *Verifier) GetVerifyingKey() plonk.VerifyingKey {
-	return v.vk
-}
-
-// GetVerifyingKeyBytes returns the serialized verifying key
-func (v *Verifier) GetVerifyingKeyBytes() ([]byte, error) {
-	return SerializeVerifyingKey(v.vk)
-}
-
 // globalVerifierState holds the global verifier state with thread-safe access.
 // SECURITY: Once initialized, the verifier is immutable to prevent VK replacement attacks.
 type globalVerifierState struct {

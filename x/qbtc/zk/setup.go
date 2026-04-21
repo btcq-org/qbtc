@@ -49,18 +49,6 @@ type Secp256k1Fp = emulated.Secp256k1Fp
 // Secp256k1Fr is the scalar field of secp256k1
 type Secp256k1Fr = emulated.Secp256k1Fr
 
-// CircuitParams contains the curve and proof system parameters
-type CircuitParams struct {
-	Curve ecc.ID
-}
-
-// DefaultCircuitParams returns default parameters for the circuit
-func DefaultCircuitParams() CircuitParams {
-	return CircuitParams{
-		Curve: ecc.BN254, // Use BN254 for PLONK
-	}
-}
-
 // SetupResult contains the compiled circuit and keys from PLONK setup
 type SetupResult struct {
 	ConstraintSystem constraint.ConstraintSystem
