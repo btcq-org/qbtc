@@ -116,9 +116,9 @@ This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge 
 
 2. **Signature**: TSS/MPC system signs the message hash with ECDSA on secp256k1
 
-3. **Proof Generation**: zkprover creates PLONK proof with private inputs (signature, public key) and public inputs (message hash, address hash, btcq address hash, chain ID)
+3. **Proof Generation**: zkprover creates PLONK proof with private inputs (signature, public key) and public inputs (message hash, `PubKeyHashSHA256` = SHA256 of the SEC-compressed pubkey, btcq address hash, chain ID)
 
-4. **On-chain Verification**: Handler verifies proof against expected public inputs
+4. **On-chain Verification**: Handler verifies the PLONK proof against the expected public inputs and natively checks `RIPEMD160(PubKeyHashSHA256) == AddressHash` to close the Hash160 binding to the 20-byte Bitcoin address
 
 5. **Claim Execution**: Tokens minted to claimer, UTXO marked as claimed
 
@@ -150,8 +150,9 @@ This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge 
 
 #### RIPEMD-160
 
-- **In-circuit**: Custom implementation following the RIPEMD-160 specification
-- **Used for**: Bitcoin address computation (Hash160 = RIPEMD160(SHA256(pubkey)))
+- **Native (verifier-side)**: `golang.org/x/crypto/ripemd160`, applied to the circuit's `PubKeyHashSHA256` public input
+- **Used for**: Closing the Hash160 binding — verifier asserts `RIPEMD160(PubKeyHashSHA256) == AddressHash`
+- **Not in-circuit**: the in-circuit RIPEMD-160 gadget was removed; running it natively costs microseconds and cut ~320K constraints from the SNARK
 
 ### 3.3 ECDSA Signature Scheme
 
@@ -249,9 +250,7 @@ The circuit extracts bits from X and Y coordinates, determines Y parity from the
 - **SHA-256** runs in-circuit via gnark's `std/hash/sha2` and commits the compressed pubkey to the public input `PubKeyHashSHA256`.
 - **RIPEMD-160** runs natively in the verifier via `golang.org/x/crypto/ripemd160`, closing the binding to the 20-byte `AddressHash`.
 
-This split preserves full Hash160 soundness (RIPEMD160 is collision-resistant) while cutting out ~320K constraints that a prior in-circuit RIPEMD160 gadget added.
-
-**Constraint cost**: RIPEMD-160 is the most expensive part of the circuit due to bitwise operations on 32-bit words.
+This split preserves full Hash160 soundness (RIPEMD160 is collision-resistant) while cutting out ~320K constraints that a prior in-circuit RIPEMD160 gadget added. The dominant in-circuit cost is now ECDSA verification (~800K constraints); SHA-256 over the 33-byte compressed pubkey contributes ~170K.
 
 ### 4.6 Byte-to-Scalar Conversion
 
