@@ -512,9 +512,11 @@ func testBigIntToLimbs(n *big.Int) []interface{} {
 func TestAudit_NoSecretInputLeakage(t *testing.T) {
 	// This is a compile-time check via gnark tags on BTCPubKeyOwnershipCircuit:
 	//   secret: SignatureR, SignatureS, PublicKeyX, PublicKeyY
-	//   public: MessageHash, PubKeyHashSHA256, QBTCAddressHash, ChainID
-	// The 20-byte Bitcoin AddressHash is NOT a circuit public input — the
-	// verifier natively checks RIPEMD160(PubKeyHashSHA256) against it.
+	//   public: MessageHash, PubKeyHashSHA256
+	// QBTCAddressHash, ChainID, and the 20-byte Bitcoin AddressHash are NOT
+	// circuit public inputs. The verifier re-derives MessageHash natively from
+	// (AddressHash, QBTCAddressHash, ChainID, version) and natively checks
+	// RIPEMD160(PubKeyHashSHA256) against AddressHash.
 	t.Log("ECDSA circuit has proper secret/public separation")
 }
 
