@@ -174,14 +174,11 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 
 	// Generate the ZK proof
 	proof, err := f.prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     f.addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
 	require.NotEmpty(t, proof)

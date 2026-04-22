@@ -93,14 +93,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	t.Log("Step 3: Generating proof...")
 	pubKey := btcPrivKey.PubKey()
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
 

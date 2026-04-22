@@ -80,12 +80,6 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	for i := range 32 {
 		assignment.PubKeyHashSHA256[i] = params.PubKeyHashSHA256[i]
 	}
-	for i := range 32 {
-		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
-	}
-	for i := 0; i < 8; i++ {
-		assignment.ChainID[i] = params.ChainID[i]
-	}
 
 	// Create witness from assignment (public only)
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField(), frontend.PublicOnly())

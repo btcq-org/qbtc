@@ -435,25 +435,13 @@ func ProverFromSetup(setup *SetupResult) *Prover {
 }
 
 // ProofParams contains all parameters needed to generate a signature-based proof.
-//
-// AddressHash is retained for pre-verification sanity (the prover can check that
-// the supplied pubkey actually hashes to it), but it is not a public input to
-// the circuit — the circuit's public input is PubKeyHashSHA256, which
-// GenerateProof computes from the supplied (PublicKeyX, PublicKeyY) when zero.
 type ProofParams struct {
-	// Signature components (both are scalars in ECDSA)
-	SignatureR *big.Int // r scalar (x-coordinate of k·G reduced mod n)
-	SignatureS *big.Int // s scalar
-
-	// Public key (uncompressed coordinates)
+	SignatureR *big.Int
+	SignatureS *big.Int
 	PublicKeyX *big.Int
 	PublicKeyY *big.Int
 
-	// Public inputs
-	MessageHash     [32]byte // The signed message hash
-	AddressHash     [20]byte // Hash160 of the public key; natively checked by verifier
-	QBTCAddressHash [32]byte // H(claimer_address)
-	ChainID         [8]byte  // First 8 bytes of H(chain_id)
+	MessageHash [32]byte
 }
 
 // GenerateProof generates a PLONK proof that proves ownership of a Bitcoin address
@@ -490,16 +478,6 @@ func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 	// Set the SHA256(compressed pubkey) public input
 	for i := 0; i < 32; i++ {
 		assignment.PubKeyHashSHA256[i] = pubKeyHashSHA256[i]
-	}
-
-	// Set the QBTC address hash (public input)
-	for i := 0; i < 32; i++ {
-		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
-	}
-
-	// Set the chain ID (public input)
-	for i := 0; i < 8; i++ {
-		assignment.ChainID[i] = params.ChainID[i]
 	}
 
 	// Create the full witness

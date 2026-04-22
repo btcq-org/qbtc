@@ -290,14 +290,11 @@ The proof proves ownership without revealing the signature or public key.`,
 			// Generate the proof
 			fmt.Println("Generating PLONK proof...")
 			proof, err := prover.GenerateProof(zk.ProofParams{
-				SignatureR:      sigR,
-				SignatureS:      sigS,
-				PublicKeyX:      pubKeyX,
-				PublicKeyY:      pubKeyY,
-				MessageHash:     messageHash,
-				AddressHash:     addressHash,
-				QBTCAddressHash: qbtcAddressHash,
-				ChainID:         chainIDHash,
+				SignatureR:  sigR,
+				SignatureS:  sigS,
+				PublicKeyX:  pubKeyX,
+				PublicKeyY:  pubKeyY,
+				MessageHash: messageHash,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to generate proof: %w", err)

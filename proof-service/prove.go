@@ -114,14 +114,11 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 	prover := zk.NewProver(s.cs, s.pk)
 
 	proofBytes, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	s.logger.Info().Msg("generated proof")
 	if err != nil {

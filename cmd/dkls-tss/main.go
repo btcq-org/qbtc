@@ -281,14 +281,11 @@ func main() {
 	// Create prover and generate proof
 	prover := zk.ProverFromSetup(setup)
 	proof, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKeyX,
-		PublicKeyY:      pubKeyY,
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKeyX,
+		PublicKeyY:  pubKeyY,
+		MessageHash: messageHash,
 	})
 	if err != nil {
 		log.Fatalf("Proof generation failed: %v", err)

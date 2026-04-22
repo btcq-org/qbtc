@@ -93,14 +93,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 	s.T().Run("valid signature proof should verify", func(t *testing.T) {
 		// Generate proof
 		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:      sigR,
-			SignatureS:      sigS,
-			PublicKeyX:      pubKey.X(),
-			PublicKeyY:      pubKey.Y(),
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			SignatureR:  sigR,
+			SignatureS:  sigS,
+			PublicKeyX:  pubKey.X(),
+			PublicKeyY:  pubKey.Y(),
+			MessageHash: messageHash,
 		})
 		require.NoError(t, err, "proof generation should succeed")
 		require.NotEmpty(t, proof, "proof data should not be empty")
@@ -119,14 +116,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 	s.T().Run("proof with wrong message hash should fail", func(t *testing.T) {
 		// Generate valid proof
 		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:      sigR,
-			SignatureS:      sigS,
-			PublicKeyX:      pubKey.X(),
-			PublicKeyY:      pubKey.Y(),
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			SignatureR:  sigR,
+			SignatureS:  sigS,
+			PublicKeyX:  pubKey.X(),
+			PublicKeyY:  pubKey.Y(),
+			MessageHash: messageHash,
 		})
 		require.NoError(t, err)
 
@@ -146,14 +140,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 
 	s.T().Run("proof with wrong address hash should fail", func(t *testing.T) {
 		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:      sigR,
-			SignatureS:      sigS,
-			PublicKeyX:      pubKey.X(),
-			PublicKeyY:      pubKey.Y(),
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			SignatureR:  sigR,
+			SignatureS:  sigS,
+			PublicKeyX:  pubKey.X(),
+			PublicKeyY:  pubKey.Y(),
+			MessageHash: messageHash,
 		})
 		require.NoError(t, err)
 
@@ -172,14 +163,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 
 	s.T().Run("front-running attack should fail", func(t *testing.T) {
 		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:      sigR,
-			SignatureS:      sigS,
-			PublicKeyX:      pubKey.X(),
-			PublicKeyY:      pubKey.Y(),
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			SignatureR:  sigR,
+			SignatureS:  sigS,
+			PublicKeyX:  pubKey.X(),
+			PublicKeyY:  pubKey.Y(),
+			MessageHash: messageHash,
 		})
 		require.NoError(t, err)
 
@@ -198,14 +186,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 
 	s.T().Run("cross-chain replay should fail", func(t *testing.T) {
 		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:      sigR,
-			SignatureS:      sigS,
-			PublicKeyX:      pubKey.X(),
-			PublicKeyY:      pubKey.Y(),
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			SignatureR:  sigR,
+			SignatureS:  sigS,
+			PublicKeyX:  pubKey.X(),
+			PublicKeyY:  pubKey.Y(),
+			MessageHash: messageHash,
 		})
 		require.NoError(t, err)
 
@@ -305,14 +290,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureProofSerialization() {
 	}
 
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      new(big.Int).SetBytes(rBytes),
-		SignatureS:      new(big.Int).SetBytes(sBytes),
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  new(big.Int).SetBytes(rBytes),
+		SignatureS:  new(big.Int).SetBytes(sBytes),
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(proof)
@@ -360,14 +342,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureVerifierGlobalFlow() {
 	}
 
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      new(big.Int).SetBytes(rBytes),
-		SignatureS:      new(big.Int).SetBytes(sBytes),
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  new(big.Int).SetBytes(rBytes),
+		SignatureS:  new(big.Int).SetBytes(sBytes),
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	s.Require().NoError(err)
 
@@ -452,14 +431,11 @@ func BenchmarkProofGeneration(b *testing.B) {
 	}
 
 	params := ProofParams{
-		SignatureR:      new(big.Int).SetBytes(rBytes),
-		SignatureS:      new(big.Int).SetBytes(sBytes),
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  new(big.Int).SetBytes(rBytes),
+		SignatureS:  new(big.Int).SetBytes(sBytes),
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	}
 
 	// Warm-up proof so one-time allocations don't skew the first sample,

@@ -84,14 +84,11 @@ func (s *SecurityAuditTestSuite) TestSoundness_WrongPrivateKey() {
 
 	// This should work (attacker proving their own address)
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      attackerR,
-		SignatureS:      attackerS,
-		PublicKeyX:      attackerKey.PubKey().X(),
-		PublicKeyY:      attackerKey.PubKey().Y(),
-		MessageHash:     attackerMessageHash,
-		AddressHash:     attackerAddressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  attackerR,
+		SignatureS:  attackerS,
+		PublicKeyX:  attackerKey.PubKey().X(),
+		PublicKeyY:  attackerKey.PubKey().Y(),
+		MessageHash: attackerMessageHash,
 	})
 	require.NoError(s.T(), err, "attacker should be able to prove their own address")
 
@@ -148,14 +145,11 @@ func (s *SecurityAuditTestSuite) TestSoundness_InvalidSignature() {
 
 	// Proof generation should fail with invalid signature
 	_, err := prover.GenerateProof(ProofParams{
-		SignatureR:      invalidR,
-		SignatureS:      invalidS,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  invalidR,
+		SignatureS:  invalidS,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	require.Error(s.T(), err, "proof generation should fail with invalid signature")
 }
@@ -190,14 +184,11 @@ func (s *SecurityAuditTestSuite) TestBinding_FrontRunningProtection() {
 	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      r,
-		SignatureS:      signature,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  r,
+		SignatureS:  signature,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	require.NoError(s.T(), err)
 
@@ -255,14 +246,11 @@ func (s *SecurityAuditTestSuite) TestBinding_Hash160NativeCheck() {
 	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      r,
-		SignatureS:      signature,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  r,
+		SignatureS:  signature,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	s.Require().NoError(err)
 
@@ -321,14 +309,11 @@ func (s *SecurityAuditTestSuite) TestBinding_CrossChainReplayProtection() {
 	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proofA, err := prover.GenerateProof(ProofParams{
-		SignatureR:      r,
-		SignatureS:      signature,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHashA,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainAHash,
+		SignatureR:  r,
+		SignatureS:  signature,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHashA,
 	})
 	require.NoError(s.T(), err)
 
@@ -452,14 +437,11 @@ func (s *SecurityAuditTestSuite) TestCompleteness_ValidProofAccepted() {
 	r, signature := parseDERSignature(s.T(), sig.Serialize())
 
 	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:      r,
-		SignatureS:      signature,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  r,
+		SignatureS:  signature,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	s.Require().NoError(err, "proof generation should succeed for valid inputs")
 

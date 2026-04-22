@@ -55,10 +55,6 @@ type BTCPubKeyOwnershipCircuit struct {
 	// The verifier natively applies RIPEMD160 to this value and compares against
 	// the claimed 20-byte Bitcoin AddressHash, completing the Hash160 binding.
 	PubKeyHashSHA256 [32]frontend.Variable `gnark:",public"`
-	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
-	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
-	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
-	ChainID [8]frontend.Variable `gnark:",public"`
 }
 
 // Define implements the gnark circuit interface.
