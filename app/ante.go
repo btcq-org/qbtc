@@ -21,6 +21,10 @@ type HandlerOptions struct {
 	QbtcKeeper            *keeper.Keeper
 	WasmConfig            *wasmtypes.WasmConfig
 	TXCounterStoreService corestoretypes.KVStoreService
+	// AuthKeeper is a superset of ante.AccountKeeper that also exposes
+	// NewAccountWithAddress, required by FreeClaimDecorator to pre-create
+	// first-time claimers' accounts.
+	AuthKeeper ebifrost.AccountKeeper
 }
 
 // NewAnteHandler returns an AnteHandler that checks and increments sequence
@@ -29,6 +33,10 @@ type HandlerOptions struct {
 func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 	if options.AccountKeeper == nil {
 		return nil, errors.New("account keeper is required for ante builder")
+	}
+
+	if options.AuthKeeper == nil {
+		return nil, errors.New("auth keeper is required for ante builder")
 	}
 
 	if options.BankKeeper == nil {
@@ -51,7 +59,7 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		// outermost AnteDecorator. SetUpContext must be called first
 		ante.NewSetUpContextDecorator(),
 		// free gas for MsgClaimWithProof txs — must be after SetUpContext
-		ebifrost.NewFreeClaimDecorator(),
+		ebifrost.NewFreeClaimDecorator(options.AuthKeeper),
 		ante.NewExtensionOptionsDecorator(options.ExtensionOptionChecker),
 		ante.NewValidateBasicDecorator(),
 		ante.NewTxTimeoutHeightDecorator(),
@@ -85,6 +93,7 @@ func (app *App) setAnteHandler(txConfig client.TxConfig) {
 			QbtcKeeper:            app.QbtcKeeper,
 			WasmConfig:            &wasmConfig,
 			TXCounterStoreService: runtime.NewKVStoreService(app.GetKey(wasmtypes.StoreKey)), // TX counter uses main store, not transient
+			AuthKeeper:            app.AuthKeeper,
 		},
 	)
 	if err != nil {
