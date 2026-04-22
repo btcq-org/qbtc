@@ -330,12 +330,6 @@ func (s *SecurityAuditTestSuite) TestDeterminism_SameInputsSameOutput() {
 	msg2 := ComputeClaimMessage(addressHash, qbtcHash, chainHash)
 
 	s.Require().Equal(msg1, msg2, "message computation should be deterministic")
-
-	// Hash160 should be deterministic
-	data := []byte("test data for hashing")
-	h1 := Hash160(data)
-	h2 := Hash160(data)
-	s.Require().Equal(h1, h2, "Hash160 should be deterministic")
 }
 
 // -----------------------------------------------------------------------------
@@ -388,54 +382,6 @@ func (s *SecurityAuditTestSuite) TestCompleteness_ValidProofAccepted() {
 		ChainID:         chainIDHash,
 	})
 	s.Require().NoError(err, "valid proof should be accepted")
-}
-
-// -----------------------------------------------------------------------------
-// ADDRESS TYPE COVERAGE TESTS
-// -----------------------------------------------------------------------------
-
-// TestCoverage_AllAddressTypesDetected verifies address type detection.
-func TestCoverage_AllAddressTypesDetected(t *testing.T) {
-	testCases := []struct {
-		name     string
-		address  string
-		expected AddressType
-	}{
-		{"P2PKH", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", AddressTypeP2PKH},
-		{"P2WPKH", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", AddressTypeP2WPKH},
-		{"P2SH", "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", AddressTypeP2SH},
-		{"P2TR", "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", AddressTypeP2TR},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			detected := DetectAddressType(tc.address)
-			require.Equal(t, tc.expected, detected,
-				"address %s should be detected as %s", tc.address, tc.expected)
-		})
-	}
-}
-
-// TestCoverage_CircuitTypeMapping verifies circuit type mapping.
-func TestCoverage_CircuitTypeMapping(t *testing.T) {
-	testCases := []struct {
-		addrType    AddressType
-		circuitType CircuitType
-	}{
-		{AddressTypeP2PKH, CircuitTypeECDSA},
-		{AddressTypeP2WPKH, CircuitTypeECDSA},
-		{AddressTypeP2SH, CircuitTypeP2SHP2WPKH},
-		{AddressTypeP2TR, CircuitTypeSchnorr},
-		{AddressTypeP2PK, CircuitTypeP2PK},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.addrType.String(), func(t *testing.T) {
-			ct, err := CircuitTypeForAddressType(tc.addrType)
-			require.NoError(t, err)
-			require.Equal(t, tc.circuitType, ct)
-		})
-	}
 }
 
 // -----------------------------------------------------------------------------
@@ -494,18 +440,10 @@ func testBigIntToLimbs(n *big.Int) []interface{} {
 // TestAudit_NoSecretInputLeakage verifies secret inputs are properly marked.
 func TestAudit_NoSecretInputLeakage(t *testing.T) {
 	// This is a compile-time check via gnark tags
-	// Verify the circuit struct has correct tags
-
-	t.Run("ECDSA circuit secrets", func(t *testing.T) {
-		// SignatureR, SignatureS, PublicKeyX, PublicKeyY should all be secret
-		// MessageHash, AddressHash, QBTCAddressHash, ChainID should be public
-		// This is enforced by gnark tags in the struct definition
-		t.Log("ECDSA circuit has proper secret/public separation")
-	})
-
-	t.Run("Schnorr circuit secrets", func(t *testing.T) {
-		t.Log("Schnorr circuit has proper secret/public separation")
-	})
+	// SignatureR, SignatureS, PublicKeyX, PublicKeyY should all be secret
+	// MessageHash, AddressHash, QBTCAddressHash, ChainID should be public
+	// This is enforced by gnark tags in the struct definition
+	t.Log("ECDSA circuit has proper secret/public separation")
 }
 
 // TestAudit_MessageBindingComplete verifies all binding components are included.
@@ -543,23 +481,6 @@ func TestAudit_MessageBindingComplete(t *testing.T) {
 	})
 }
 
-// TestAudit_ProofSizeLimits verifies proof size constraints are enforced.
-func TestAudit_ProofSizeLimits(t *testing.T) {
-	require.Equal(t, 100, MinProofDataLen, "minimum proof length should be 100")
-	require.Equal(t, 1024*1024, MaxProofDataLen, "maximum proof length should be 1MB")
-
-	t.Run("reject too small proof", func(t *testing.T) {
-		smallData := make([]byte, 50)
-		smallData[0] = 0
-		smallData[1] = 0
-		smallData[2] = 0
-		smallData[3] = byte(MinProofDataLen - 1) // Below minimum
-
-		_, err := ProofFromProtoZKProof(smallData)
-		require.Error(t, err)
-	})
-}
-
 // =============================================================================
 // AUDIT SUMMARY
 // =============================================================================
@@ -588,21 +509,16 @@ func TestAudit_ProofSizeLimits(t *testing.T) {
 //    - VK replacement attacks are prevented
 //
 // 5. INPUT VALIDATION:
-//    - Proof size limits enforced
 //    - Nil proof rejection
 //    - Invalid proof format rejection
 //
 // CIRCUIT COVERAGE:
-// - BTCSignatureCircuit (P2PKH, P2WPKH)
-// - BTCSchnorrCircuit (P2TR)
-// - BTCP2SHP2WPKHCircuit (P2SH-wrapped SegWit)
-// - BTCP2PKCircuit (Legacy P2PK)
-// - BTCP2WSHSingleKeyCircuit (P2WSH single-key)
+// - BTCAddressOwnershipCircuit (P2PKH, P2WPKH via ECDSA + Hash160)
 //
 // TRUST ASSUMPTIONS:
 // 1. Trusted setup ceremony was honest (1-of-N)
 // 2. gnark library is correctly implemented
-// 3. ECDSA/Schnorr are cryptographically secure
+// 3. ECDSA is cryptographically secure
 // 4. SHA-256, RIPEMD-160 are collision-resistant
 // 5. BN254 pairing is secure
 //

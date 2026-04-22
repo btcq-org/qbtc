@@ -53,7 +53,7 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	}
 
 	// Create the public witness with the expected values
-	assignment := &BTCSignatureCircuit{}
+	assignment := &BTCAddressOwnershipCircuit{}
 
 	// Set message hash
 	for i := range 32 {
@@ -88,16 +88,6 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	}
 
 	return nil
-}
-
-// GetVerifyingKey returns the verifying key
-func (v *Verifier) GetVerifyingKey() plonk.VerifyingKey {
-	return v.vk
-}
-
-// GetVerifyingKeyBytes returns the serialized verifying key
-func (v *Verifier) GetVerifyingKeyBytes() ([]byte, error) {
-	return SerializeVerifyingKey(v.vk)
 }
 
 // globalVerifierState holds the global verifier state with thread-safe access.

@@ -54,7 +54,7 @@ func TestComputeClaimMessage_FormatCorrectness(t *testing.T) {
 
 	// Verify by manually computing expected hash (including type prefix)
 	var expected []byte
-	expected = append(expected, []byte(TypePrefixECDSA)...) // "ecdsa:"
+	expected = append(expected, []byte(ClaimTagECDSAHash160)...)
 	expected = append(expected, addressHash[:]...)
 	expected = append(expected, qbtcAddressHash[:]...)
 	expected = append(expected, chainIDHash[:]...)

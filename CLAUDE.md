@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**qbtc** is a Cosmos SDK blockchain that lets Bitcoin holders claim tokens by proving ownership of their Bitcoin addresses using zero-knowledge proofs (PLONK). It supports all major Bitcoin script types: P2PKH, P2WPKH, P2TR, P2SH-P2WPKH, P2PK, and P2WSH. The ZK approach is TSS/MPC-compatible — users only need a signature (r, s, pubkey), not direct private key access.
+**qbtc** is a Cosmos SDK blockchain that lets Bitcoin holders claim tokens by proving ownership of their Bitcoin addresses using zero-knowledge proofs (PLONK). It supports P2PKH and P2WPKH Bitcoin addresses. The ZK approach is TSS/MPC-compatible — users only need a signature (r, s, pubkey), not direct private key access.
 
 ## Commands
 
@@ -52,7 +52,7 @@ make setup-prover
 
 ```
 Off-chain:
-  TSS/MPC Signer → ECDSA/Schnorr signature
+  TSS/MPC Signer → ECDSA signature
   zkprover CLI   → PLONK proof (hides sig & pubkey)
                           ↓
 On-chain (x/qbtc module):
@@ -77,14 +77,7 @@ Background:
 
 ### ZK Circuit Design
 
-Five circuits live in `x/qbtc/zk/`, one per Bitcoin script type:
-- `BTCSignatureCircuit` — P2PKH, P2WPKH (ECDSA secp256k1)
-- `BTCSchnorrCircuit` — P2TR key-path (Schnorr)
-- `BTCP2SHP2WPKHCircuit` — P2SH-P2WPKH (ECDSA)
-- `BTCP2PKCircuit` — P2PK (ECDSA)
-- `BTCP2WSHSingleKeyCircuit` — P2WSH single-key (ECDSA)
-
-All circuits use **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). Proofs are bound to `(destination address, chain ID, version)` to prevent replay and front-running.
+`BTCAddressOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). Proofs are bound to `(destination address, chain ID, version)` to prevent replay and front-running.
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 
