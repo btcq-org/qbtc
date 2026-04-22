@@ -179,13 +179,13 @@ Signature is valid iff `R'.x mod n = r`
 
 ## 4. Circuit Design
 
-The ZK system uses a single circuit, `BTCAddressOwnershipCircuit`, covering P2PKH and P2WPKH addresses via ECDSA + Hash160.
+The ZK system uses a single circuit, `BTCPubKeyOwnershipCircuit`, covering P2PKH and P2WPKH addresses via ECDSA + Hash160.
 
 ### 4.1 Circuit Overview
 
 | Circuit                      | File                   | Script Types  | Signature |
 | ---------------------------- | ---------------------- | ------------- | --------- |
-| `BTCAddressOwnershipCircuit` | `circuit.go`           | P2PKH, P2WPKH | ECDSA     |
+| `BTCPubKeyOwnershipCircuit` | `circuit.go`           | P2PKH, P2WPKH | ECDSA     |
 
 ### 4.2 ECDSA Circuit (P2PKH/P2WPKH)
 
@@ -203,13 +203,15 @@ The ZK system uses a single circuit, `BTCAddressOwnershipCircuit`, covering P2PK
 | Field | Size | Description |
 |-------|------|-------------|
 | `MessageHash` | 32 bytes | SHA256 of the claim message |
-| `AddressHash` | 20 bytes | Hash160 of Bitcoin public key |
+| `PubKeyHashSHA256` | 32 bytes | SHA256 of the 33-byte SEC-compressed pubkey |
 | `QBTCAddressHash` | 32 bytes | SHA256 of destination qbtc address |
 | `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
 
+The 20-byte Bitcoin `AddressHash` is *not* a circuit public input. It is supplied alongside the proof and checked natively by the verifier: `RIPEMD160(PubKeyHashSHA256) == AddressHash`. Keeping RIPEMD160 out of the circuit roughly halves prover time.
+
 ### 4.3 Circuit Constraints Detail
 
-The `Define()` method enforces three constraint groups:
+The `Define()` method enforces two constraint groups. A third binding — message derivation — is completed natively by the verifier.
 
 #### Constraint Group 1: Signature Verification
 
@@ -217,13 +219,13 @@ gnark's standard `ecdsa.Verify` gadget verifies the ECDSA signature against the 
 
 **What this proves**: The prover knows a valid signature for `MessageHash` under the claimed public key.
 
-#### Constraint Group 2: Public Key to Address Binding
+#### Constraint Group 2: Public Key Commitment
 
-Hash160(compressed_pubkey) == AddressHash.
+`SHA256(SEC-compressed pubkey) == PubKeyHashSHA256`.
 
-**What this proves**: The public key corresponds to the claimed Bitcoin address.
+**What this proves**: The public key used to verify the signature matches the claimed SHA256 commitment. The verifier then natively applies RIPEMD160 to recover the Bitcoin `AddressHash`.
 
-#### Constraint Group 3: Message Binding (Verified by Verifier)
+#### Constraint Group 3: Message Binding (Native in Verifier)
 
 The verifier independently computes the expected message hash from the claim parameters. If the computed message doesn't match `MessageHash`, verification fails.
 
@@ -240,24 +242,14 @@ Bitcoin uses compressed public keys (33 bytes):
 
 The circuit extracts bits from X and Y coordinates, determines Y parity from the LSB, constructs the prefix byte, and packs X bits into 32 big-endian bytes.
 
-### 4.5 Hash160 Implementation (In-Circuit)
+### 4.5 Pubkey Hashing (Split Between Circuit and Verifier)
 
-**File**: `x/qbtc/zk/hash.go`
+**File**: `x/qbtc/zk/hash.go` (in-circuit); `x/qbtc/zk/verifier.go` (native).
 
-#### SHA-256
+- **SHA-256** runs in-circuit via gnark's `std/hash/sha2` and commits the compressed pubkey to the public input `PubKeyHashSHA256`.
+- **RIPEMD-160** runs natively in the verifier via `golang.org/x/crypto/ripemd160`, closing the binding to the 20-byte `AddressHash`.
 
-Uses gnark's standard library implementation (`std/hash/sha2`).
-
-#### RIPEMD-160
-
-Custom implementation following the RIPEMD-160 specification:
-
-- 5 × 32-bit state words (160 bits total)
-- 80 rounds per block (two parallel lines)
-- 5 different boolean functions per round
-- Message padding with length encoding
-
-**Key operations**: Round function selection, 32-bit modular addition, bit rotation, and bitwise XOR/AND/OR/NOT operations.
+This split preserves full Hash160 soundness (RIPEMD160 is collision-resistant) while cutting out ~320K constraints that a prior in-circuit RIPEMD160 gadget added.
 
 **Constraint cost**: RIPEMD-160 is the most expensive part of the circuit due to bitwise operations on 32-bit words.
 
@@ -523,24 +515,28 @@ secp256k1 operations are emulated over BN254's scalar field using gnark's `std/m
 
 ### 10.2 Constraint Count
 
-Approximate constraint breakdown:
+Approximate constraint breakdown (after moving RIPEMD160 out of the circuit):
 
 | Component              | Constraints  |
 | ---------------------- | ------------ |
 | ECDSA verification     | ~800,000     |
 | Public key compression | ~5,000       |
-| SHA-256 (in Hash160)   | ~30,000      |
-| RIPEMD-160             | ~50,000      |
-| **Total**              | **~900,000** |
+| SHA-256 (in circuit)   | ~170,000     |
+| RIPEMD-160             | native (~µs) |
+| **Total**              | **~979,000** |
 
 ### 10.3 Performance Characteristics
 
-| Operation           | Time | Memory |
-| ------------------- | ---- | ------ |
-| Circuit compilation | ~30s | ~2 GB  |
-| Proof generation    | ~60s | ~8 GB  |
-| Proof verification  | ~3ms | ~50 MB |
-| Proof size          | -    | ~1 KB  |
+Measured on an Intel i7-6700 @ 3.40GHz, 8 threads, PLONK/BN254, test SRS:
+
+| Operation           | Time    | Memory  |
+| ------------------- | ------- | ------- |
+| Circuit compilation | ~30s    | ~2 GB   |
+| Proof generation    | ~18s    | ~3 GB   |
+| Proof verification  | ~3 ms   | ~50 MB  |
+| Proof size          | 584 B   | —       |
+
+Prior to the RIPEMD160-out-of-circuit change: ~1.3M constraints, ~36s proof, ~5 GB. See PR history for the benchmark comparison.
 
 ---
 
@@ -551,7 +547,7 @@ Approximate constraint breakdown:
 | File                             | Purpose                                        |
 | -------------------------------- | ---------------------------------------------- |
 | `x/qbtc/zk/circuit.go`           | ECDSA ownership circuit (P2PKH/P2WPKH)         |
-| `x/qbtc/zk/hash.go`              | SHA-256, RIPEMD-160 and helpers in-circuit     |
+| `x/qbtc/zk/hash.go`              | SHA-256 and pubkey-compression helpers in-circuit |
 | `x/qbtc/zk/message.go`           | Claim message construction                     |
 | `x/qbtc/zk/setup.go`             | PLONK setup and prover                         |
 | `x/qbtc/zk/verifier.go`          | Global verifier and verification               |
@@ -616,14 +612,14 @@ tss-emulator --port :8080 --private-key <32-byte-hex>
 
 - **Address format**: `1...` (Base58Check, mainnet)
 - **Script**: `OP_DUP OP_HASH160 <pubkeyHash> OP_EQUALVERIFY OP_CHECKSIG`
-- **Circuit**: `BTCAddressOwnershipCircuit`
+- **Circuit**: `BTCPubKeyOwnershipCircuit`
 - **Binding**: Hash160(compressed_pubkey) == AddressHash
 
 #### P2WPKH (Pay-to-Witness-Public-Key-Hash)
 
 - **Address format**: `bc1q...` (Bech32, 42 characters)
 - **Script**: `OP_0 <20-byte-pubkeyHash>`
-- **Circuit**: `BTCAddressOwnershipCircuit`
+- **Circuit**: `BTCPubKeyOwnershipCircuit`
 - **Binding**: Hash160(compressed_pubkey) == AddressHash
 
 ### 12.2 Not Supported

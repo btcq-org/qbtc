@@ -58,6 +58,8 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 	compressedPubKey := pubKey.SerializeCompressed()
 	addressHash, err := PublicKeyToAddressHash(compressedPubKey)
 	s.Require().NoError(err, "should compute address hash")
+	pubKeyHashSHA256, err := PubKeyHashSHA256(compressedPubKey)
+	s.Require().NoError(err, "should compute pubkey SHA256")
 
 	// Compute binding values
 	qbtcAddressHash := HashQBTCAddress(qbtcAddress)
@@ -105,10 +107,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 
 		// Verify proof
 		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			MessageHash:      messageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          chainIDHash,
 		})
 		require.NoError(t, err, "valid proof should verify")
 	})
@@ -132,10 +135,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 		wrongMessageHash[0] ^= 0xFF
 
 		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:     wrongMessageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			MessageHash:      wrongMessageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "proof with wrong message hash should fail")
 	})
@@ -157,10 +161,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 		wrongAddressHash[0] ^= 0xFF
 
 		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:     messageHash,
-			AddressHash:     wrongAddressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			MessageHash:      messageHash,
+			AddressHash:      wrongAddressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "proof with wrong address hash should fail")
 	})
@@ -182,10 +187,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 		attackerHash := HashQBTCAddress("qbtc1attacker")
 
 		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: attackerHash,
-			ChainID:         chainIDHash,
+			MessageHash:      messageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  attackerHash,
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "front-running attack should fail")
 	})
@@ -206,10 +212,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 		wrongChainIDHash := ComputeChainIDHash("other-chain-1")
 
 		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:     messageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         wrongChainIDHash,
+			MessageHash:      messageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          wrongChainIDHash,
 		})
 		require.Error(t, err, "cross-chain replay should fail")
 	})
@@ -333,6 +340,8 @@ func (s *CircuitSignatureTestSuite) TestSignatureVerifierGlobalFlow() {
 
 	compressedPubKey := pubKey.SerializeCompressed()
 	addressHash, _ := PublicKeyToAddressHash(compressedPubKey)
+	pubKeyHashSHA256, err := PubKeyHashSHA256(compressedPubKey)
+	s.Require().NoError(err)
 	qbtcAddressHash := HashQBTCAddress("qbtc1global_test")
 	chainIDHash := ComputeChainIDHash("qbtc-1")
 	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
@@ -364,10 +373,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureVerifierGlobalFlow() {
 
 	// Verify using global verifier
 	err = VerifyProofGlobal(proof, VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		MessageHash:      messageHash,
+		AddressHash:      addressHash,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+		QBTCAddressHash:  qbtcAddressHash,
+		ChainID:          chainIDHash,
 	})
 	s.Require().NoError(err, "global verification should succeed")
 }
@@ -398,7 +408,7 @@ func (s *CircuitSignatureTestSuite) TestMessageVersioning() {
 }
 
 // BenchmarkProofGeneration measures end-to-end PLONK proof generation time
-// for the BTCAddressOwnershipCircuit. Setup (circuit compilation + key gen)
+// for the BTCPubKeyOwnershipCircuit. Setup (circuit compilation + key gen)
 // runs once outside the timed loop, so each iteration times only the
 // witness-assignment + Prove call that a user would run locally.
 //

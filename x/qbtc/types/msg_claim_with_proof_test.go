@@ -77,6 +77,16 @@ func makeValidQBTCAddressHash() string {
 	h := sha256.Sum256([]byte(validBech32Address))
 	return hex.EncodeToString(h[:])
 }
+
+// makeValidPubKeyHashSHA256 creates a valid 64-character hex value (32 bytes)
+// for the SHA256(SEC-compressed pubkey) public input to the ZK circuit.
+func makeValidPubKeyHashSHA256() string {
+	hash := make([]byte, 32)
+	if _, err := rand.Read(hash); err != nil {
+		panic(fmt.Sprintf("failed to generate random pubkey hash: %v", err))
+	}
+	return hex.EncodeToString(hash)
+}
 func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
 	testCases := []struct {
@@ -94,7 +104,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: false,
@@ -110,7 +121,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: false,
@@ -122,7 +134,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos:           makeValidUTXORefs(MaxBatchClaimUTXOs),
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: false,
@@ -136,7 +149,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -151,7 +165,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -164,7 +179,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos:           []UTXORef{},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -177,7 +193,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos:           makeValidUTXORefs(MaxBatchClaimUTXOs + 1),
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -204,7 +221,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -219,7 +237,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -235,7 +254,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -250,7 +270,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           "",
 			},
 			expectErr: true,
@@ -265,7 +286,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           "d6aa", // too small
 			},
 			expectErr: true,
@@ -280,7 +302,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     makeValidMessageHash(),
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeProofBiggerThanMax(),
 			},
 			expectErr: true,
@@ -295,7 +318,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				},
 				MessageHash:     "",
 				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: makeValidQBTCAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:           makeValidProof(),
 			},
 			expectErr: true,
@@ -308,13 +332,30 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				MessageHash:     makeValidMessageHash(),
-				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash: "",
-				Proof:           makeValidProof(),
+				MessageHash:      makeValidMessageHash(),
+				AddressHash:      makeValidAddressHash(),
+				QbtcAddressHash:  "",
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeValidProof(),
 			},
 			expectErr: true,
 			errMsg:    "qbtc_address_hash is required",
+		},
+		{
+			name: "invalid message - no pub_key_hash_sha256",
+			msg: &MsgClaimWithProof{
+				Claimer: validBech32Address,
+				Utxos: []UTXORef{
+					{Txid: validBitcoinTxID, Vout: 0},
+				},
+				MessageHash:      makeValidMessageHash(),
+				AddressHash:      makeValidAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: "",
+				Proof:            makeValidProof(),
+			},
+			expectErr: true,
+			errMsg:    "pub_key_hash_sha256 must be 64 hex characters",
 		},
 	}
 

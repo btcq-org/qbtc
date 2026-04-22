@@ -157,7 +157,7 @@ The ZK system uses PLONK proofs with KZG commitments to verify Bitcoin address o
 
 | Circuit | Script Types | Signature |
 |---------|--------------|-----------|
-| `BTCAddressOwnershipCircuit` | P2PKH, P2WPKH | ECDSA |
+| `BTCPubKeyOwnershipCircuit` | P2PKH, P2WPKH | ECDSA |
 
 ## Security
 

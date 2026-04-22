@@ -113,5 +113,11 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	if _, err := hex.DecodeString(m.QbtcAddressHash); err != nil {
 		return se.ErrInvalidRequest.Wrapf("qbtc_address_hash is not valid hex: %v", err)
 	}
+	if len(m.PubKeyHashSha256) != 64 {
+		return se.ErrInvalidRequest.Wrapf("pub_key_hash_sha256 must be 64 hex characters, got %d", len(m.PubKeyHashSha256))
+	}
+	if _, err := hex.DecodeString(m.PubKeyHashSha256); err != nil {
+		return se.ErrInvalidRequest.Wrapf("pub_key_hash_sha256 is not valid hex: %v", err)
+	}
 	return nil
 }

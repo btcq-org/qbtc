@@ -1,6 +1,7 @@
 package zk
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 
@@ -8,6 +9,18 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 )
+
+// PubKeyHashSHA256 returns SHA256 of the 33-byte SEC-compressed public key.
+// This is the public input to the ZK circuit that commits to the pubkey; the
+// verifier additionally applies RIPEMD160 natively to recover the Hash160
+// Bitcoin AddressHash.
+func PubKeyHashSHA256(compressedPubKey []byte) ([32]byte, error) {
+	var result [32]byte
+	if len(compressedPubKey) != 33 {
+		return result, fmt.Errorf("invalid compressed public key length: %d", len(compressedPubKey))
+	}
+	return sha256.Sum256(compressedPubKey), nil
+}
 
 // PrivateKeyToAddressHash computes the Bitcoin address hash (Hash160) from a private key.
 // Returns an error if the private key is not in the valid range [1, n-1].

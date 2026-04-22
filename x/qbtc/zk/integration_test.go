@@ -56,8 +56,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	chainID := "qbtc-mainnet-1"
 
 	// Compute derived values
-	addressHash, err := PublicKeyToAddressHash(btcPrivKey.PubKey().SerializeCompressed())
+	compressedPubKey := btcPrivKey.PubKey().SerializeCompressed()
+	addressHash, err := PublicKeyToAddressHash(compressedPubKey)
 	require.NoError(t, err, "should compute address hash")
+	pubKeyHashSHA256, err := PubKeyHashSHA256(compressedPubKey)
+	require.NoError(t, err, "should compute pubkey SHA256")
 	qbtcAddressHash := HashQBTCAddress(claimerAddress)
 	chainIDHash := ComputeChainIDHash(chainID)
 
@@ -108,10 +111,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 	// Step 5: Verify proof using global verifier (as done by handler)
 	t.Log("Step 5: Verifying proof...")
 	err = VerifyProofGlobal(proof, VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		MessageHash:      messageHash,
+		AddressHash:      addressHash,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+		QBTCAddressHash:  qbtcAddressHash,
+		ChainID:          chainIDHash,
 	})
 	require.NoError(t, err, "valid proof should verify via global verifier")
 
@@ -126,10 +130,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		attackerMessageHash := ComputeClaimMessage(addressHash, attackerAddressHash, chainIDHash)
 
 		err := VerifyProofGlobal(proof, VerificationParams{
-			MessageHash:     attackerMessageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: attackerAddressHash, // Different claimer
-			ChainID:         chainIDHash,
+			MessageHash:      attackerMessageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  attackerAddressHash, // Different claimer
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "front-running attack should fail")
 	})
@@ -140,10 +145,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		differentMessageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainHash)
 
 		err := VerifyProofGlobal(proof, VerificationParams{
-			MessageHash:     differentMessageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         differentChainHash, // Different chain
+			MessageHash:      differentMessageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          differentChainHash, // Different chain
 		})
 		require.Error(t, err, "cross-chain replay should fail")
 	})
@@ -155,10 +161,11 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 		differentMessageHash := ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 
 		err := VerifyProofGlobal(proof, VerificationParams{
-			MessageHash:     differentMessageHash,
-			AddressHash:     differentAddressHash, // Different BTC address
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			MessageHash:      differentMessageHash,
+			AddressHash:      differentAddressHash, // Different BTC address
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "claiming different BTC address should fail")
 	})
