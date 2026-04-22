@@ -116,9 +116,9 @@ This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge 
 
 2. **Signature**: TSS/MPC system signs the message hash with ECDSA on secp256k1
 
-3. **Proof Generation**: zkprover creates PLONK proof with private inputs (signature, public key) and public inputs (message hash, `PubKeyHashSHA256` = SHA256 of the SEC-compressed pubkey, btcq address hash, chain ID)
+3. **Proof Generation**: zkprover creates a PLONK proof with private inputs (signature, public key) and only two public inputs: `MessageHash` and `PubKeyHashSHA256` (SHA256 of the SEC-compressed pubkey). `QBTCAddressHash`, `ChainID`, and the 20-byte `AddressHash` are *not* circuit public inputs — they bind to the proof via `MessageHash` and the native RIPEMD160 check, both re-derived by the verifier.
 
-4. **On-chain Verification**: Handler verifies the PLONK proof against the expected public inputs and natively checks `RIPEMD160(PubKeyHashSHA256) == AddressHash` to close the Hash160 binding to the 20-byte Bitcoin address
+4. **On-chain Verification**: Handler verifies the PLONK proof against the two circuit public inputs (`MessageHash`, `PubKeyHashSHA256`) and natively checks `MessageHash == SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")` and `RIPEMD160(PubKeyHashSHA256) == AddressHash` to bind the proof to the destination qbtc address, chain, and Bitcoin address.
 
 5. **Claim Execution**: Tokens minted to claimer, UTXO marked as claimed
 
@@ -205,10 +205,13 @@ The ZK system uses a single circuit, `BTCPubKeyOwnershipCircuit`, covering P2PKH
 |-------|------|-------------|
 | `MessageHash` | 32 bytes | SHA256 of the claim message |
 | `PubKeyHashSHA256` | 32 bytes | SHA256 of the 33-byte SEC-compressed pubkey |
-| `QBTCAddressHash` | 32 bytes | SHA256 of destination qbtc address |
-| `ChainID` | 8 bytes | First 8 bytes of SHA256(chain_id) |
 
-The 20-byte Bitcoin `AddressHash` is *not* a circuit public input. It is supplied alongside the proof and checked natively by the verifier: `RIPEMD160(PubKeyHashSHA256) == AddressHash`. Keeping RIPEMD160 out of the circuit roughly halves prover time.
+`QBTCAddressHash`, `ChainID`, and the 20-byte Bitcoin `AddressHash` are *not* circuit public inputs. They are supplied alongside the proof and bound natively by the verifier:
+
+- `MessageHash == SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")` ties `QBTCAddressHash` and `ChainID` to the proof.
+- `RIPEMD160(PubKeyHashSHA256) == AddressHash` closes the Hash160 binding to the 20-byte Bitcoin address.
+
+Keeping RIPEMD160 and the message-binding tuple out of the circuit roughly halves prover time.
 
 ### 4.3 Circuit Constraints Detail
 
@@ -356,10 +359,9 @@ The `Prover` struct holds the constraint system and proving key. The `ProofParam
 
 - Signature components (r, s as big integers)
 - Public key coordinates (x, y as big integers)
-- Message hash (32 bytes)
-- Address hash (20 bytes)
-- QBTC address hash (32 bytes)
-- Chain ID (8 bytes)
+- `MessageHash` (32 bytes)
+
+`QBTCAddressHash`, `ChainID`, and `AddressHash` are not prover inputs — they bind to the proof via `MessageHash` (re-derived natively by the verifier) and via the native `RIPEMD160(PubKeyHashSHA256) == AddressHash` check.
 
 ### 7.2 Proof Generation Flow
 
@@ -452,10 +454,9 @@ All three are computationally infeasible.
 
 **Argument**:
 
-1. Proof commits to `QBTCAddressHash = SHA256(claimer_address)`
-2. Verifier recomputes expected message including QBTCAddressHash
-3. If attacker submits with different claimer, message hash won't match
-4. Proof verification fails
+1. Proof commits to `MessageHash`, which the verifier re-derives from `(AddressHash, QBTCAddressHash, ChainID, "qbtc-claim-v1")` where `QBTCAddressHash = SHA256(claimer_address)`
+2. If an attacker submits with a different claimer, the re-derived `MessageHash` won't match the one committed in the proof
+3. Proof verification fails
 
 #### 9.2.4 Replay Resistance
 
