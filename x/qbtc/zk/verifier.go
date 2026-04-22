@@ -2,7 +2,6 @@ package zk
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"fmt"
 	"sync"
 
@@ -54,12 +53,14 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 
 	// Native check #2: RIPEMD160(SHA256(pubkey)) equals the claimed AddressHash.
 	// The circuit binds SHA256(pubkey) to params.PubKeyHashSHA256; this step
-	// closes the Hash160 chain to the 20-byte Bitcoin address.
+	// closes the Hash160 chain to the 20-byte Bitcoin address. Plain equality
+	// is fine — both sides are public (on-chain AddressHash and public-input
+	// PubKeyHashSHA256), so there is no secret for a timing attacker to learn.
 	h := ripemd160.New()
 	h.Write(params.PubKeyHashSHA256[:])
 	var derivedHash160 [20]byte
 	copy(derivedHash160[:], h.Sum(nil))
-	if subtle.ConstantTimeCompare(derivedHash160[:], params.AddressHash[:]) != 1 {
+	if derivedHash160 != params.AddressHash {
 		return fmt.Errorf("address hash mismatch: RIPEMD160(PubKeyHashSHA256) does not match AddressHash")
 	}
 
