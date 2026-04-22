@@ -305,7 +305,8 @@ The proof proves ownership without revealing the signature or public key.`,
 
 			// Create the output
 			output := ProofOutput{
-				QBTCAddressHash:  hex.EncodeToString(addressHash[:]),
+				AddressHash:      hex.EncodeToString(addressHash[:]),
+				QBTCAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
 				QBTCAddress:      qbtcAddress,
 				ChainID:          chainID,
 				MessageHash:      hex.EncodeToString(messageHash[:]),
@@ -373,8 +374,13 @@ func addressCmd() *cobra.Command {
 	return cmd
 }
 
-// ProofOutput is the JSON output structure for a generated proof
+// ProofOutput is the JSON output structure for a generated proof. Fields map
+// 1:1 to MsgClaimWithProof so the caller can wire them in directly.
 type ProofOutput struct {
+	// AddressHash is the 20-byte Bitcoin Hash160 (hex). Populates
+	// MsgClaimWithProof.address_hash.
+	AddressHash string `json:"address_hash"`
+	// QBTCAddressHash is SHA256 of the destination qbtc address string (hex).
 	QBTCAddressHash  string `json:"qbtc_address_hash"`
 	QBTCAddress      string `json:"qbtc_address"`
 	ChainID          string `json:"chain_id"`
