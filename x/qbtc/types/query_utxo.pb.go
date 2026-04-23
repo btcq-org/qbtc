@@ -23,7 +23,8 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// QueryUTXORequest requests a single UTXO by its transaction ID and output index.
+// QueryUTXORequest requests a single UTXO by its transaction ID and output
+// index.
 type QueryUTXORequest struct {
 	// txid is the Bitcoin transaction ID.
 	Txid string `protobuf:"bytes,1,opt,name=txid,proto3" json:"txid,omitempty"`

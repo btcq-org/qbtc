@@ -43,6 +43,11 @@ type ProveResponse struct {
 	// AddressHash is the hex-encoded Bitcoin address hash - Hash160 (40 chars, 20 bytes).
 	AddressHash string `json:"address_hash"`
 
+	// PubKeyHashSHA256 is the hex-encoded SHA256 of the SEC-compressed pubkey
+	// (64 chars, 32 bytes). The chain's verifier natively applies RIPEMD160 to
+	// it to recover AddressHash, so MsgClaimWithProof must carry this value.
+	PubKeyHashSHA256 string `json:"pub_key_hash_sha256"`
+
 	// QBTCAddressHash is the hex-encoded QBTC address hash (64 chars, 32 bytes).
 	QBTCAddressHash string `json:"qbtc_address_hash"`
 

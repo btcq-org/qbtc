@@ -1,5 +1,7 @@
 // Package zk implements zero-knowledge proof generation and verification
-// for Bitcoin address ownership using ECDSA signatures.
+// for Bitcoin pubkey ownership using ECDSA signatures. The 20-byte Bitcoin
+// address binding (Hash160 = RIPEMD160 ∘ SHA256) is completed natively by
+// the verifier; see Verifier.VerifyProof.
 package zk
 
 import (
@@ -9,17 +11,32 @@ import (
 	"github.com/consensys/gnark/std/signature/ecdsa"
 )
 
-// BTCAddressOwnershipCircuit is the ZK circuit that proves ownership of a Bitcoin address
-// using an ECDSA signature. It proves: "I have a valid signature from the key
-// that controls this Bitcoin address" without revealing the signature or public key.
+// BTCPubKeyOwnershipCircuit is the ZK circuit that proves ownership of a
+// Bitcoin secp256k1 public key via an ECDSA signature, without revealing the
+// signature or the pubkey itself. It commits to SHA256(SEC-compressed pubkey);
+// the verifier natively applies RIPEMD160 to recover the Bitcoin AddressHash
+// and complete the Hash160 binding.
+//
+// Name: the circuit alone proves *pubkey* ownership (ECDSA sig + SHA256
+// commitment). The *address* binding (RIPEMD160 step) lives outside the
+// circuit, so "PubKeyOwnership" is the honest scope. Together with the
+// verifier's native RIPEMD160 check, the system proves Bitcoin address
+// ownership end-to-end.
 //
 // SECURITY: The proof is bound to:
-// 1. The Bitcoin address (via Hash160 of the public key)
-// 2. The message being signed (includes destination and chain binding)
-// 3. The signature is valid for the claimed public key
+//  1. PubKeyHashSHA256 = SHA256(SEC-compressed pubkey) (public input). The
+//     verifier natively checks RIPEMD160(PubKeyHashSHA256) equals the claimed
+//     20-byte Bitcoin AddressHash.
+//  2. The message being signed (includes destination and chain binding).
+//  3. The signature is valid for the claimed public key.
 //
 // This circuit is compatible with MPC/TSS signers that cannot reveal private keys.
-type BTCAddressOwnershipCircuit struct {
+//
+// RIPEMD160 is intentionally NOT computed in-circuit; it runs natively in the
+// verifier. Moving it out roughly halves prover time without weakening soundness
+// (RIPEMD160 is collision-resistant, so Hash160 = RIPEMD160 ∘ SHA256 binds the
+// pubkey just as tightly whether RIPEMD160 is inside or outside the SNARK).
+type BTCPubKeyOwnershipCircuit struct {
 	// Private inputs (hidden in the proof)
 	// Signature R scalar (the x-coordinate of k·G reduced mod n)
 	SignatureR emulated.Element[Secp256k1Fr] `gnark:",secret"`
@@ -31,23 +48,24 @@ type BTCAddressOwnershipCircuit struct {
 	PublicKeyY emulated.Element[Secp256k1Fp] `gnark:",secret"`
 
 	// Public inputs (visible to verifier)
-	// MessageHash is the hash of the message that was signed (32 bytes)
-	// This should be SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
+	// MessageHash is the hash of the message that was signed (32 bytes).
+	// The verifier natively re-derives this from (AddressHash, QBTCAddressHash, ChainID, version).
 	MessageHash [32]frontend.Variable `gnark:",public"`
-	// AddressHash is the Hash160 (RIPEMD160(SHA256(pubkey))) of the Bitcoin public key
-	AddressHash [20]frontend.Variable `gnark:",public"`
-	// QBTCAddressHash is the SHA256 hash of the destination address on qbtc
-	QBTCAddressHash [32]frontend.Variable `gnark:",public"`
-	// ChainID is a hash of the chain identifier (first 8 bytes of SHA256(chain_id))
-	ChainID [8]frontend.Variable `gnark:",public"`
+	// PubKeyHashSHA256 is SHA256 of the 33-byte SEC-compressed public key.
+	// The verifier natively applies RIPEMD160 to this value and compares against
+	// the claimed 20-byte Bitcoin AddressHash, completing the Hash160 binding.
+	PubKeyHashSHA256 [32]frontend.Variable `gnark:",public"`
 }
 
 // Define implements the gnark circuit interface.
 // The circuit proves:
-// 1. The signature is valid for the given public key and message
-// 2. The public key hashes to the claimed Bitcoin address
-// 3. The proof is bound to the destination address and chain ID
-func (c *BTCAddressOwnershipCircuit) Define(api frontend.API) error {
+//  1. The signature is valid for the given public key and message.
+//  2. SHA256 of the SEC-compressed public key equals PubKeyHashSHA256.
+//     (RIPEMD160 of PubKeyHashSHA256 vs. the Bitcoin AddressHash is checked
+//     natively by the verifier.)
+//  3. The proof is bound to the destination address and chain ID via
+//     MessageHash, which the verifier re-derives natively.
+func (c *BTCPubKeyOwnershipCircuit) Define(api frontend.API) error {
 	// Get the base field for point operations
 	baseField, err := emulated.NewField[Secp256k1Fp](api)
 	if err != nil {
@@ -57,57 +75,42 @@ func (c *BTCAddressOwnershipCircuit) Define(api frontend.API) error {
 	// ========================================
 	// Step 1: Verify ECDSA signature using gnark's standard gadget
 	// ========================================
-	// Construct the public key for gnark's ECDSA gadget
 	pubKey := ecdsa.PublicKey[Secp256k1Fp, Secp256k1Fr]{
 		X: c.PublicKeyX,
 		Y: c.PublicKeyY,
 	}
-
-	// Construct the signature
 	sig := &ecdsa.Signature[Secp256k1Fr]{
 		R: c.SignatureR,
 		S: c.SignatureS,
 	}
-
-	// Convert message hash bytes to scalar
 	messageScalar := bytesToScalar(api, c.MessageHash[:])
-
-	// Verify ECDSA signature using gnark's standard implementation
 	pubKey.Verify(api, sw_emulated.GetSecp256k1Params(), &messageScalar, sig)
 
 	// ========================================
-	// Step 2: Verify public key hashes to address
+	// Step 2: Bind the public key to PubKeyHashSHA256
 	// ========================================
-	// Compress the public key and compute Hash160
+	// SEC-compressed encoding is produced off-circuit by a hint and then
+	// fully constrained against (PublicKeyX, PublicKeyY) — see compressPubKeyFromPoint.
 	pubKeyPoint := &sw_emulated.AffinePoint[Secp256k1Fp]{
 		X: c.PublicKeyX,
 		Y: c.PublicKeyY,
 	}
-
-	// Get compressed public key bytes
 	compressedPubKey := compressPubKeyFromPoint(api, baseField, pubKeyPoint)
 
-	// Compute Hash160 = RIPEMD160(SHA256(compressedPubKey))
-	hash160 := computeHash160(api, compressedPubKey[:])
-
-	// Assert hash160 == addressHash
-	for i := 0; i < 20; i++ {
-		api.AssertIsEqual(hash160[i], c.AddressHash[i])
+	sha256Result := computeSHA256Circuit(api, compressedPubKey[:])
+	for i := 0; i < 32; i++ {
+		api.AssertIsEqual(sha256Result[i], c.PubKeyHashSHA256[i])
 	}
 
 	// ========================================
-	// Step 3: Verify message binding
+	// Step 3: Message binding is checked natively by the verifier
 	// ========================================
-	// The message hash is a public input that the verifier will check
-	// matches SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
-	// This is done outside the circuit by the verifier
 
 	return nil
 }
 
-
-// NewBTCAddressOwnershipCircuitPlaceholder creates an empty circuit for compilation.
+// NewBTCPubKeyOwnershipCircuitPlaceholder creates an empty circuit for compilation.
 // This is used during setup to generate the constraint system.
-func NewBTCAddressOwnershipCircuitPlaceholder() *BTCAddressOwnershipCircuit {
-	return &BTCAddressOwnershipCircuit{}
+func NewBTCPubKeyOwnershipCircuitPlaceholder() *BTCPubKeyOwnershipCircuit {
+	return &BTCPubKeyOwnershipCircuit{}
 }

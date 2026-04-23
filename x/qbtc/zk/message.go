@@ -9,7 +9,7 @@ import (
 const ClaimMessageVersion = "qbtc-claim-v1"
 
 // ClaimTagECDSAHash160 is the domain-separation prefix for claims proved by
-// the BTCAddressOwnershipCircuit: ECDSA signature over a Hash160 pubkey
+// the BTCPubKeyOwnershipCircuit: ECDSA signature over a Hash160 pubkey
 // commitment (covers P2PKH and P2WPKH). A future circuit over a different
 // pubkey commitment shape — e.g. Schnorr + x-only for Taproot, or ECDSA over
 // a script hash for P2SH/P2WSH — must use a distinct tag to prevent

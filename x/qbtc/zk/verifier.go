@@ -8,6 +8,7 @@ import (
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/plonk"
 	"github.com/consensys/gnark/frontend"
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck // Bitcoin address hash is defined in terms of RIPEMD160.
 )
 
 // Verifier handles ZK proof verification for signature-based proofs using PLONK.
@@ -31,18 +32,36 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 }
 
 // VerifyProof verifies a PLONK proof for a signature-based Bitcoin address claim.
-// It checks that:
-// 1. The proof is valid
-// 2. The message hash matches the expected value (computed from the claim parameters)
+//
+// Beyond the in-circuit checks, the verifier natively enforces:
+//  1. params.MessageHash == ComputeClaimMessage(AddressHash, QBTCAddressHash, ChainID)
+//  2. RIPEMD160(params.PubKeyHashSHA256) == params.AddressHash
+//
+// Both (1) and (2) close the binding between the proof's public inputs and
+// the 20-byte Bitcoin address being claimed. If (2) is ever skipped, any
+// AddressHash would be accepted — see TestBinding_Hash160NativeCheck.
 func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	if len(proof) == 0 {
 		return fmt.Errorf("proof cannot be nil")
 	}
 
-	// Verify the message hash matches expected
+	// Native check #1: message hash matches the binding tuple.
 	expectedMessage := ComputeClaimMessage(params.AddressHash, params.QBTCAddressHash, params.ChainID)
 	if expectedMessage != params.MessageHash {
 		return fmt.Errorf("message hash mismatch: proof was signed for different parameters")
+	}
+
+	// Native check #2: RIPEMD160(SHA256(pubkey)) equals the claimed AddressHash.
+	// The circuit binds SHA256(pubkey) to params.PubKeyHashSHA256; this step
+	// closes the Hash160 chain to the 20-byte Bitcoin address. Plain equality
+	// is fine — both sides are public (on-chain AddressHash and public-input
+	// PubKeyHashSHA256), so there is no secret for a timing attacker to learn.
+	h := ripemd160.New()
+	h.Write(params.PubKeyHashSHA256[:])
+	var derivedHash160 [20]byte
+	copy(derivedHash160[:], h.Sum(nil))
+	if derivedHash160 != params.AddressHash {
+		return fmt.Errorf("address hash mismatch: RIPEMD160(PubKeyHashSHA256) does not match AddressHash")
 	}
 
 	// Deserialize the proof
@@ -53,26 +72,13 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 	}
 
 	// Create the public witness with the expected values
-	assignment := &BTCAddressOwnershipCircuit{}
+	assignment := &BTCPubKeyOwnershipCircuit{}
 
-	// Set message hash
 	for i := range 32 {
 		assignment.MessageHash[i] = params.MessageHash[i]
 	}
-
-	// Set address hash
-	for i := range 20 {
-		assignment.AddressHash[i] = params.AddressHash[i]
-	}
-
-	// Set QBTC address hash
 	for i := range 32 {
-		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
-	}
-
-	// Set chain ID
-	for i := 0; i < 8; i++ {
-		assignment.ChainID[i] = params.ChainID[i]
+		assignment.PubKeyHashSHA256[i] = params.PubKeyHashSHA256[i]
 	}
 
 	// Create witness from assignment (public only)
@@ -81,9 +87,7 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 		return fmt.Errorf("failed to create public witness: %w", err)
 	}
 
-	// Verify the proof
-	err = plonk.Verify(plonkProof, v.vk, witness)
-	if err != nil {
+	if err := plonk.Verify(plonkProof, v.vk, witness); err != nil {
 		return fmt.Errorf("proof verification failed: %w", err)
 	}
 

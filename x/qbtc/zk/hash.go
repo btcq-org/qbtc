@@ -3,7 +3,6 @@ package zk
 import (
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
-	"github.com/consensys/gnark/std/hash/ripemd160"
 	"github.com/consensys/gnark/std/hash/sha2"
 	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/std/math/uints"
@@ -25,15 +24,24 @@ func bytesToScalar(api frontend.API, bytes []frontend.Variable) emulated.Element
 	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
-// compressPubKeyFromPoint returns the 33-byte SEC-compressed encoding of a secp256k1 point.
-// Prefix byte is 0x02 (even Y) or 0x03 (odd Y); X is big-endian 32 bytes.
+// compressPubKeyFromPoint returns the 33-byte SEC-compressed encoding of a
+// secp256k1 point: prefix byte (0x02 for even Y, 0x03 for odd Y) followed by
+// big-endian X. We decompose X and Y into bits via field.ToBits and repack X
+// into bytes; the bit-decomposition relation ties the bytes to pubKey.X
+// implicitly, so no extra equality check is needed.
+//
+// A hint-based variant (producing bytes off-circuit and then asserting
+// equality against pubKey.X) was benchmarked and came out ~1,200 constraints
+// more expensive: the AssertIsEqual + packLimbs range-checks + ToBitsCanonical
+// on Y together cost more than the single ToBits(X) they save. ToBits-based
+// compression is the cheaper construction for this circuit shape.
 func compressPubKeyFromPoint(
 	api frontend.API,
 	field *emulated.Field[Secp256k1Fp],
 	pubKey *sw_emulated.AffinePoint[Secp256k1Fp],
 ) [33]frontend.Variable {
 	var result [33]frontend.Variable
-	// field.ToBits returns bits in little-endian order: bit[0] is LSB
+	// field.ToBits returns bits in little-endian order: bit[0] is LSB.
 	xBits := field.ToBits(&pubKey.X)
 	yBits := field.ToBits(&pubKey.Y)
 	yParity := yBits[0]
@@ -51,71 +59,28 @@ func compressPubKeyFromPoint(
 	return result
 }
 
-// computeHash160 computes RIPEMD160(SHA256(data)).
-func computeHash160(api frontend.API, data []frontend.Variable) [20]frontend.Variable {
-	sha256Result := computeSHA256Circuit(api, data)
-	return computeRIPEMD160Circuit(api, sha256Result[:])
-}
-
-// computeSHA256Circuit computes SHA256 hash in the circuit using gnark's standard library
+// computeSHA256Circuit computes SHA256 hash in the circuit using gnark's standard library.
 func computeSHA256Circuit(api frontend.API, data []frontend.Variable) [32]frontend.Variable {
-	// Convert frontend.Variable slice to uints.U8 slice
 	uintAPI, err := uints.New[uints.U32](api)
 	if err != nil {
 		panic(err)
 	}
 
-	// Convert input data to U8 array
 	input := make([]uints.U8, len(data))
 	for i, v := range data {
 		input[i] = uintAPI.ByteValueOf(v)
 	}
 
-	// Create SHA256 hasher using gnark's standard implementation
 	hasher, err := sha2.New(api)
 	if err != nil {
 		panic(err)
 	}
-
-	// Write input data
 	hasher.Write(input)
-
-	// Get the hash result
 	hashResult := hasher.Sum()
 
-	// Convert back to frontend.Variable array
 	var result [32]frontend.Variable
 	for i := 0; i < 32; i++ {
 		result[i] = hashResult[i].Val
-	}
-
-	return result
-}
-
-
-// computeRIPEMD160Circuit computes RIPEMD160 hash in the circuit using gnark's standard library.
-// Uses uints.U32 with PLONK lookup tables internally — more efficient than multiplication-based ops.
-func computeRIPEMD160Circuit(api frontend.API, data []frontend.Variable) [20]frontend.Variable {
-	uintAPI, err := uints.New[uints.U32](api)
-	if err != nil {
-		panic(err)
-	}
-
-	input := make([]uints.U8, len(data))
-	for i, v := range data {
-		input[i] = uintAPI.ByteValueOf(v)
-	}
-
-	hasher, err := ripemd160.New(api)
-	if err != nil {
-		panic(err)
-	}
-	hasher.Write(input)
-	out := hasher.Sum()
-
-	var result [20]frontend.Variable
-	for i, b := range out {
-		result[i] = b.Val
 	}
 	return result
 }

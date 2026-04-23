@@ -141,6 +141,9 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	require.NoError(t, err, "should compute address hash")
 	t.Logf("  Bitcoin address hash: %x", addressHash)
 
+	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKeyBytes)
+	require.NoError(t, err, "should compute pubkey SHA256")
+
 	// Claim parameters
 	claimerAddress := "qbtc1dkls_integration_test_address"
 	chainID := "qbtc-mainnet-1"
@@ -176,14 +179,11 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// ========================================
 	t.Log("Step 5: Generating ZK proof...")
 	proof, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKeyX,
-		PublicKeyY:      pubKeyY,
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKeyX,
+		PublicKeyY:  pubKeyY,
+		MessageHash: messageHash,
 	})
 	require.NoError(t, err, "proof generation should succeed")
 	require.NotEmpty(t, proof)
@@ -194,10 +194,11 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// ========================================
 	t.Log("Step 6: Verifying ZK proof...")
 	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		MessageHash:      messageHash,
+		AddressHash:      addressHash,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+		QBTCAddressHash:  qbtcAddressHash,
+		ChainID:          chainIDHash,
 	})
 	require.NoError(t, err, "valid proof should verify")
 	t.Log("  ✓ Proof verified successfully!")
@@ -214,10 +215,11 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		attackerMessageHash := zk.ComputeClaimMessage(addressHash, attackerAddressHash, chainIDHash)
 
 		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
-			MessageHash:     attackerMessageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: attackerAddressHash,
-			ChainID:         chainIDHash,
+			MessageHash:      attackerMessageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  attackerAddressHash,
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "front-running attack should fail")
 	})
@@ -228,10 +230,11 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		differentMessageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainHash)
 
 		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
-			MessageHash:     differentMessageHash,
-			AddressHash:     addressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         differentChainHash,
+			MessageHash:      differentMessageHash,
+			AddressHash:      addressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          differentChainHash,
 		})
 		require.Error(t, err, "cross-chain replay should fail")
 	})
@@ -243,10 +246,11 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 		differentMessageHash := zk.ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
 
 		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
-			MessageHash:     differentMessageHash,
-			AddressHash:     differentAddressHash,
-			QBTCAddressHash: qbtcAddressHash,
-			ChainID:         chainIDHash,
+			MessageHash:      differentMessageHash,
+			AddressHash:      differentAddressHash,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+			QBTCAddressHash:  qbtcAddressHash,
+			ChainID:          chainIDHash,
 		})
 		require.Error(t, err, "claiming different BTC address should fail")
 	})
@@ -294,6 +298,9 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 	addressHash, err := zk.PublicKeyToAddressHash(pubKeyBytes)
 	require.NoError(t, err)
 
+	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKeyBytes)
+	require.NoError(t, err)
+
 	claimerAddress := "qbtc1tss_2of3_test"
 	chainID := "qbtc-mainnet-1"
 	qbtcAddressHash := zk.HashQBTCAddress(claimerAddress)
@@ -315,22 +322,20 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 	// Generate and verify proof
 	t.Log("Generating and verifying ZK proof...")
 	proof, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKeyX,
-		PublicKeyY:      pubKeyY,
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKeyX,
+		PublicKeyY:  pubKeyY,
+		MessageHash: messageHash,
 	})
 	require.NoError(t, err)
 
 	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		MessageHash:      messageHash,
+		AddressHash:      addressHash,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+		QBTCAddressHash:  qbtcAddressHash,
+		ChainID:          chainIDHash,
 	})
 	require.NoError(t, err, "2-of-3 TSS proof should verify")
 
@@ -344,22 +349,20 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 	sigS2 := new(big.Int).SetBytes(sig2[32:64])
 
 	proof2, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR2,
-		SignatureS:      sigS2,
-		PublicKeyX:      pubKeyX,
-		PublicKeyY:      pubKeyY,
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR2,
+		SignatureS:  sigS2,
+		PublicKeyX:  pubKeyX,
+		PublicKeyY:  pubKeyY,
+		MessageHash: messageHash,
 	})
 	require.NoError(t, err)
 
 	err = zk.VerifyProofGlobal(proof2, zk.VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		MessageHash:      messageHash,
+		AddressHash:      addressHash,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+		QBTCAddressHash:  qbtcAddressHash,
+		ChainID:          chainIDHash,
 	})
 	require.NoError(t, err, "different 2-of-3 combination should also verify")
 

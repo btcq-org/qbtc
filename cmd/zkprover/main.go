@@ -280,17 +280,21 @@ The proof proves ownership without revealing the signature or public key.`,
 			// Create prover
 			prover := zk.NewProver(cs, pk)
 
+			// SHA256(SEC-compressed pubkey) — the claim message on-chain must
+			// carry this so the verifier can natively apply RIPEMD160 to it.
+			pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKey.SerializeCompressed())
+			if err != nil {
+				return fmt.Errorf("failed to compute pubkey SHA256: %w", err)
+			}
+
 			// Generate the proof
 			fmt.Println("Generating PLONK proof...")
 			proof, err := prover.GenerateProof(zk.ProofParams{
-				SignatureR:      sigR,
-				SignatureS:      sigS,
-				PublicKeyX:      pubKeyX,
-				PublicKeyY:      pubKeyY,
-				MessageHash:     messageHash,
-				AddressHash:     addressHash,
-				QBTCAddressHash: qbtcAddressHash,
-				ChainID:         chainIDHash,
+				SignatureR:  sigR,
+				SignatureS:  sigS,
+				PublicKeyX:  pubKeyX,
+				PublicKeyY:  pubKeyY,
+				MessageHash: messageHash,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to generate proof: %w", err)
@@ -298,11 +302,13 @@ The proof proves ownership without revealing the signature or public key.`,
 
 			// Create the output
 			output := ProofOutput{
-				QBTCAddressHash: hex.EncodeToString(addressHash[:]),
-				QBTCAddress:     qbtcAddress,
-				ChainID:         chainID,
-				MessageHash:     hex.EncodeToString(messageHash[:]),
-				ProofData:       hex.EncodeToString(proof),
+				AddressHash:      hex.EncodeToString(addressHash[:]),
+				QBTCAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
+				QBTCAddress:      qbtcAddress,
+				ChainID:          chainID,
+				MessageHash:      hex.EncodeToString(messageHash[:]),
+				PubKeyHashSHA256: hex.EncodeToString(pubKeyHashSHA256[:]),
+				ProofData:        hex.EncodeToString(proof),
 			}
 
 			// Serialize to JSON
@@ -365,13 +371,19 @@ func addressCmd() *cobra.Command {
 	return cmd
 }
 
-// ProofOutput is the JSON output structure for a generated proof
+// ProofOutput is the JSON output structure for a generated proof. Fields map
+// 1:1 to MsgClaimWithProof so the caller can wire them in directly.
 type ProofOutput struct {
-	QBTCAddressHash string `json:"qbtc_address_hash"`
-	QBTCAddress     string `json:"qbtc_address"`
-	ChainID         string `json:"chain_id"`
-	MessageHash     string `json:"message_hash"`
-	ProofData       string `json:"proof_data"`
+	// AddressHash is the 20-byte Bitcoin Hash160 (hex). Populates
+	// MsgClaimWithProof.address_hash.
+	AddressHash string `json:"address_hash"`
+	// QBTCAddressHash is SHA256 of the destination qbtc address string (hex).
+	QBTCAddressHash  string `json:"qbtc_address_hash"`
+	QBTCAddress      string `json:"qbtc_address"`
+	ChainID          string `json:"chain_id"`
+	MessageHash      string `json:"message_hash"`
+	PubKeyHashSHA256 string `json:"pub_key_hash_sha256"`
+	ProofData        string `json:"proof_data"`
 }
 
 // TSSSignRequest is the request body for the TSS /sign endpoint

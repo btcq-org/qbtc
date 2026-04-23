@@ -204,6 +204,17 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 		return fmt.Errorf("proof data is not valid hex: %w", err)
 	}
 
+	// The claimer supplies SHA256 of their SEC-compressed pubkey; the verifier
+	// natively checks RIPEMD160 of it matches the UTXO's AddressHash. This
+	// replaces the in-circuit RIPEMD160 gadget with a ~microsecond native
+	// operation, and ValidateBasic has already enforced the hex/length shape.
+	pubKeyHashBytes, err := hex.DecodeString(msg.PubKeyHashSha256)
+	if err != nil {
+		return fmt.Errorf("pub_key_hash_sha256 is not valid hex: %w", err)
+	}
+	var pubKeyHashSHA256 [32]byte
+	copy(pubKeyHashSHA256[:], pubKeyHashBytes)
+
 	// Compute the btcq address hash for binding (prevents front-running)
 	qbtcAddressHash := zk.HashQBTCAddress(msg.Claimer)
 
@@ -216,10 +227,11 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 
 	// Build verification params
 	params := zk.VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		MessageHash:      messageHash,
+		AddressHash:      addressHash,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+		QBTCAddressHash:  qbtcAddressHash,
+		ChainID:          chainIDHash,
 	}
 
 	// Verify the proof using the global verifier

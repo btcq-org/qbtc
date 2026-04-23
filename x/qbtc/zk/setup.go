@@ -104,11 +104,11 @@ func TestSetupOptions() SetupOptions {
 	}
 }
 
-// SetupWithOptions performs PLONK setup for the BTCAddressOwnershipCircuit.
+// SetupWithOptions performs PLONK setup for the BTCPubKeyOwnershipCircuit.
 // This circuit is compatible with TSS/MPC signers.
 // For production, use SetupModeDownload to use the Hermez/Polygon Powers of Tau.
 func SetupWithOptions(opts SetupOptions) (*SetupResult, error) {
-	circuit := NewBTCAddressOwnershipCircuitPlaceholder()
+	circuit := NewBTCPubKeyOwnershipCircuitPlaceholder()
 	return SetupCircuitWithOptions(circuit, opts)
 }
 
@@ -434,28 +434,21 @@ func ProverFromSetup(setup *SetupResult) *Prover {
 	return NewProver(setup.ConstraintSystem, setup.ProvingKey)
 }
 
-// ProofParams contains all parameters needed to generate a signature-based proof
+// ProofParams contains all parameters needed to generate a signature-based proof.
 type ProofParams struct {
-	// Signature components (both are scalars in ECDSA)
-	SignatureR *big.Int // r scalar (x-coordinate of k·G reduced mod n)
-	SignatureS *big.Int // s scalar
-
-	// Public key (uncompressed coordinates)
+	SignatureR *big.Int
+	SignatureS *big.Int
 	PublicKeyX *big.Int
 	PublicKeyY *big.Int
 
-	// Public inputs
-	MessageHash     [32]byte // The signed message hash
-	AddressHash     [20]byte // Hash160 of the public key
-	QBTCAddressHash [32]byte // H(claimer_address)
-	ChainID         [8]byte  // First 8 bytes of H(chain_id)
+	MessageHash [32]byte
 }
 
 // GenerateProof generates a PLONK proof that proves ownership of a Bitcoin address
 // using an ECDSA signature. The signature and public key are private inputs.
 func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 	// Create witness assignment
-	assignment := &BTCAddressOwnershipCircuit{}
+	assignment := &BTCPubKeyOwnershipCircuit{}
 
 	// Set signature R scalar (the 'r' value in ECDSA, x-coord of k·G mod n)
 	assignment.SignatureR.Limbs = bigIntToLimbs(params.SignatureR)
@@ -469,24 +462,22 @@ func (p *Prover) GenerateProof(params ProofParams) ([]byte, error) {
 	// Set public key Y
 	assignment.PublicKeyY.Limbs = bigIntToLimbs(params.PublicKeyY)
 
+	// Compute SHA256 of the SEC-compressed public key — the circuit's public
+	// input that commits to the claimer's pubkey. RIPEMD160 of this value is
+	// natively checked against AddressHash by the verifier.
+	pubKeyHashSHA256, err := computePubKeyHashSHA256(params.PublicKeyX, params.PublicKeyY)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute SHA256(compressed pubkey): %w", err)
+	}
+
 	// Set the message hash (public input)
 	for i := 0; i < 32; i++ {
 		assignment.MessageHash[i] = params.MessageHash[i]
 	}
 
-	// Set the address hash (public input)
-	for i := 0; i < 20; i++ {
-		assignment.AddressHash[i] = params.AddressHash[i]
-	}
-
-	// Set the QBTC address hash (public input)
+	// Set the SHA256(compressed pubkey) public input
 	for i := 0; i < 32; i++ {
-		assignment.QBTCAddressHash[i] = params.QBTCAddressHash[i]
-	}
-
-	// Set the chain ID (public input)
-	for i := 0; i < 8; i++ {
-		assignment.ChainID[i] = params.ChainID[i]
+		assignment.PubKeyHashSHA256[i] = pubKeyHashSHA256[i]
 	}
 
 	// Create the full witness
@@ -544,12 +535,35 @@ func HashQBTCAddress(qbtcAddress string) [32]byte {
 	return sha256.Sum256([]byte(qbtcAddress))
 }
 
-// VerificationParams contains parameters needed for proof verification
+// VerificationParams contains parameters needed for proof verification.
+//
+// PubKeyHashSHA256 is the SHA256 of the 33-byte SEC-compressed public key. It
+// is a public input to the circuit, and the verifier additionally checks
+// RIPEMD160(PubKeyHashSHA256) == AddressHash natively to close the Hash160
+// binding. Callers must supply both AddressHash and PubKeyHashSHA256.
 type VerificationParams struct {
-	MessageHash     [32]byte // The message that was signed
-	AddressHash     [20]byte // Hash160 of BTC pubkey
-	QBTCAddressHash [32]byte // H(claimer_address)
-	ChainID         [8]byte  // First 8 bytes of H(chain_id)
+	MessageHash      [32]byte // The message that was signed
+	AddressHash      [20]byte // Hash160 of BTC pubkey (natively checked against RIPEMD160(PubKeyHashSHA256))
+	PubKeyHashSHA256 [32]byte // SHA256(SEC-compressed pubkey); public input to circuit
+	QBTCAddressHash  [32]byte // H(claimer_address)
+	ChainID          [8]byte  // First 8 bytes of H(chain_id)
+}
+
+// computePubKeyHashSHA256 returns SHA256 of the 33-byte SEC-compressed encoding
+// of the secp256k1 point (x, y). This value is a public input to the ZK circuit.
+func computePubKeyHashSHA256(x, y *big.Int) ([32]byte, error) {
+	var zero [32]byte
+	if x == nil || y == nil {
+		return zero, fmt.Errorf("nil pubkey coordinate")
+	}
+	var compressed [33]byte
+	if y.Bit(0) == 1 {
+		compressed[0] = 0x03
+	} else {
+		compressed[0] = 0x02
+	}
+	x.FillBytes(compressed[1:])
+	return sha256.Sum256(compressed[:]), nil
 }
 
 // ComputeChainIDHash computes the chain ID hash from a chain ID string.

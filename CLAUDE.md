@@ -77,7 +77,7 @@ Background:
 
 ### ZK Circuit Design
 
-`BTCAddressOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). Proofs are bound to `(destination address, chain ID, version)` to prevent replay and front-running.
+`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). Proofs are bound to `(destination address, chain ID, version)` to prevent replay and front-running.
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 

@@ -76,11 +76,22 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 		}
 	}
 
-	// 5. Compute address hash (Hash160 of compressed pubkey)
+	// 5. Compute address hash (Hash160 of compressed pubkey) and its SHA256
+	// intermediate. Both are part of the response so the claimer can build a
+	// MsgClaimWithProof whose pub_key_hash_sha256 matches the proof's public
+	// input.
 	addressHash, err := zk.PublicKeyToAddressHash(pubKeyBytes)
 	if err != nil {
 		return nil, http.StatusInternalServerError, &ErrorResponse{
 			Error:   "failed to compute address hash",
+			Code:    "PROOF_GENERATION_FAILED",
+			Details: err.Error(),
+		}
+	}
+	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKeyBytes)
+	if err != nil {
+		return nil, http.StatusInternalServerError, &ErrorResponse{
+			Error:   "failed to compute pubkey SHA256",
 			Code:    "PROOF_GENERATION_FAILED",
 			Details: err.Error(),
 		}
@@ -103,14 +114,11 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 	prover := zk.NewProver(s.cs, s.pk)
 
 	proofBytes, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:      sigR,
-		SignatureS:      sigS,
-		PublicKeyX:      pubKey.X(),
-		PublicKeyY:      pubKey.Y(),
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		SignatureR:  sigR,
+		SignatureS:  sigS,
+		PublicKeyX:  pubKey.X(),
+		PublicKeyY:  pubKey.Y(),
+		MessageHash: messageHash,
 	})
 	s.logger.Info().Msg("generated proof")
 	if err != nil {
@@ -124,11 +132,12 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 
 	// 10. Build response
 	return &ProveResponse{
-		Proof:           hex.EncodeToString(proofBytes),
-		MessageHash:     hex.EncodeToString(messageHash[:]),
-		AddressHash:     hex.EncodeToString(addressHash[:]),
-		QBTCAddressHash: hex.EncodeToString(qbtcAddressHash[:]),
-		UTXOs:           req.UTXOs,
-		ClaimerAddress:  req.ClaimerAddress,
+		Proof:            hex.EncodeToString(proofBytes),
+		MessageHash:      hex.EncodeToString(messageHash[:]),
+		AddressHash:      hex.EncodeToString(addressHash[:]),
+		PubKeyHashSHA256: hex.EncodeToString(pubKeyHashSHA256[:]),
+		QBTCAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
+		UTXOs:            req.UTXOs,
+		ClaimerAddress:   req.ClaimerAddress,
 	}, http.StatusOK, nil
 }
