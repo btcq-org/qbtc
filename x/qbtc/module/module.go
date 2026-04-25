@@ -12,8 +12,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/btcq-org/qbtc/x/qbtc/client/cli"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
@@ -81,6 +83,13 @@ func (AppModule) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *runtim
 // RegisterInterfaces registers a module's interface types and their concrete implementations as proto.Message.
 func (AppModule) RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 	types.RegisterInterfaces(registrar)
+}
+
+// GetTxCmd returns the root tx command for the qbtc module. The subcommands
+// cover flows that autocli cannot scaffold — e.g. claim-with-proof, which
+// takes a JSON file produced by zkprover rather than individual flags.
+func (AppModule) GetTxCmd() *cobra.Command {
+	return cli.GetTxCmd()
 }
 
 // RegisterServices registers a gRPC query service to respond to the module-specific gRPC queries
