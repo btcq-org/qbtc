@@ -88,9 +88,14 @@ func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *typ
 	chainIDHash := zk.ComputeChainIDHash(s.cfg.ChainID)
 	messageHash := zk.ComputeClaimMessage(s.addressHash, qbtcAddressHash, chainIDHash)
 
-	// TSS-equivalent ECDSA signature over the binding message.
+	// TSS-equivalent ECDSA signature over the binding message. Read the
+	// scalars straight off the signature object — going through Serialize +
+	// hand-rolled DER parsing would risk a panic on malformed input.
 	sig := ecdsa.Sign(s.btcPrivKey, messageHash[:])
-	sigR, sigS := parseDERSignature(sig.Serialize())
+	rScalar, sScalar := sig.R(), sig.S()
+	rBytes, sBytes := rScalar.Bytes(), sScalar.Bytes()
+	sigR := new(big.Int).SetBytes(rBytes[:])
+	sigS := new(big.Int).SetBytes(sBytes[:])
 
 	pubKey := s.btcPrivKey.PubKey()
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKey.SerializeCompressed())
@@ -159,24 +164,3 @@ func (s *E2ETestSuite) queryBalance(addr, denom string) sdkmath.Int {
 	return res.Balance.Amount
 }
 
-// parseDERSignature extracts (r, s) from a DER-encoded ECDSA signature. DER
-// uses signed integers, so any leading 0x00 padding must be stripped before
-// the scalars can be fed into the PLONK witness.
-func parseDERSignature(sig []byte) (*big.Int, *big.Int) {
-	if len(sig) < 8 || sig[0] != 0x30 {
-		panic(fmt.Sprintf("malformed DER signature: %x", sig))
-	}
-	rLen := int(sig[3])
-	rBytes := sig[4 : 4+rLen]
-	sLen := int(sig[4+rLen+1])
-	sBytes := sig[4+rLen+2 : 4+rLen+2+sLen]
-
-	if len(rBytes) > 0 && rBytes[0] == 0 {
-		rBytes = rBytes[1:]
-	}
-	if len(sBytes) > 0 && sBytes[0] == 0 {
-		sBytes = sBytes[1:]
-	}
-
-	return new(big.Int).SetBytes(rBytes), new(big.Int).SetBytes(sBytes)
-}
