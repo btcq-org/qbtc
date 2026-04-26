@@ -1,0 +1,66 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "google/api/annotations.proto";
+import "qbtc/lp/v1/genesis.proto";
+import "qbtc/lp/v1/types.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// Query defines the lp module's gRPC querier service.
+service Query {
+  rpc Pool(QueryPoolRequest) returns (QueryPoolResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/pool";
+  }
+  rpc LiquidityProvider(QueryLiquidityProviderRequest) returns (QueryLiquidityProviderResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/liquidity_providers/{node_id}";
+  }
+  rpc Bond(QueryBondRequest) returns (QueryBondResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/bonds/{node_id}";
+  }
+  rpc PendingAdd(QueryPendingAddRequest) returns (QueryPendingAddResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/pending_adds/{id}";
+  }
+  rpc PendingAdds(QueryPendingAddsRequest) returns (QueryPendingAddsResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/pending_adds";
+  }
+  rpc QuoteSwap(QueryQuoteSwapRequest) returns (QueryQuoteSwapResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/quote_swap";
+  }
+  rpc Param(QueryParamRequest) returns (QueryParamResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/params/{key}";
+  }
+  rpc AllParams(QueryAllParamsRequest) returns (QueryAllParamsResponse) {
+    option (google.api.http).get = "/qbtc/lp/v1/params";
+  }
+}
+
+message QueryPoolRequest {}
+message QueryPoolResponse { Pool pool = 1; }
+
+message QueryLiquidityProviderRequest { string node_id = 1; }
+message QueryLiquidityProviderResponse { LiquidityProvider lp = 1; }
+
+message QueryBondRequest { string node_id = 1; }
+message QueryBondResponse { Bond bond = 1; }
+
+message QueryPendingAddRequest { uint64 id = 1; }
+message QueryPendingAddResponse { PendingAdd pending = 1; }
+
+message QueryPendingAddsRequest {}
+message QueryPendingAddsResponse { repeated PendingAdd pending = 1; }
+
+message QueryQuoteSwapRequest {
+  string source_denom = 1;
+  string amount = 2;
+}
+message QueryQuoteSwapResponse {
+  string out_amount = 1;
+  uint32 slip_bps = 2;
+}
+
+message QueryParamRequest { string key = 1; }
+message QueryParamResponse { Param param = 1; }
+
+message QueryAllParamsRequest {}
+message QueryAllParamsResponse { repeated Param params = 1; }

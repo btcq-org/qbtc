@@ -1,0 +1,25 @@
+syntax = "proto3";
+package qbtc.secured.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "qbtc/secured/v1/types.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/secured/types";
+
+// MsgObservedTxOut closes a queued TxOutItem after bifrost has broadcast and
+// the signer set has confirmed enough Bitcoin confirmations.
+message MsgObservedTxOut {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "secured/MsgObservedTxOut";
+
+  string signer = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  uint64 tx_out_id = 2;
+  string broadcast_txid = 3;
+  uint64 btc_block_height = 4;
+  repeated Attestation attestations = 5 [ (gogoproto.nullable) = false ];
+}
+
+message MsgObservedTxOutResponse {}

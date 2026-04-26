@@ -1,0 +1,24 @@
+syntax = "proto3";
+package qbtc.secured.v1;
+
+import "cosmos/msg/v1/msg.proto";
+import "qbtc/secured/v1/msg_observed_tx_in.proto";
+import "qbtc/secured/v1/msg_observed_tx_out.proto";
+import "qbtc/secured/v1/msg_update_param.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/secured/types";
+
+// Msg defines the secured module's tx service.
+service Msg {
+  option (cosmos.msg.v1.service) = true;
+
+  // ObservedTxIn attests a batch of BTC inbound transactions to the vault.
+  rpc ObservedTxIn(MsgObservedTxIn) returns (MsgObservedTxInResponse);
+
+  // ObservedTxOut confirms a queued BTC outbound has been broadcast and is
+  // sufficiently buried.
+  rpc ObservedTxOut(MsgObservedTxOut) returns (MsgObservedTxOutResponse);
+
+  // UpdateParam mutates a single mimir-style parameter (authority-gated).
+  rpc UpdateParam(MsgUpdateParam) returns (MsgUpdateParamResponse);
+}

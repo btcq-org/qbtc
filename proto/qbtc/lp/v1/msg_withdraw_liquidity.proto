@@ -1,0 +1,27 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// MsgWithdrawLiquidity withdraws a basis-points fraction of an LP's free
+// (non-bonded) units. The qbtc side pays out on-chain; the BTC side is
+// enqueued as a TxOutItem in the secured module to the LP's already-proven
+// btc_address. Bonded units must be released via MsgUnbond first.
+message MsgWithdrawLiquidity {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "lp/MsgWithdrawLiquidity";
+
+  string signer = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string node_id = 2 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  uint32 basis_points = 3;            // 1..10000
+}
+
+message MsgWithdrawLiquidityResponse {
+  string qbtc_out = 1;
+  string sbtc_out = 2;
+  uint64 tx_out_id = 3;               // 0 if outbound disabled
+}

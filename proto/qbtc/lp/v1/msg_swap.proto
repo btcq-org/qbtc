@@ -1,0 +1,45 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// MsgSwap performs one of three on-chain swap pairs. The fourth pair (BTC L1
+// -> qbtc) is memo-driven and observed via x/secured.MsgObservedTxIn rather
+// than a user-signed MsgSwap.
+//
+//   source_denom -> dest_denom legal pairs:
+//     qbtc -> sbtc   (purely on-chain)
+//     qbtc -> btc    (queues a vault outbound; dest_address is BTC bech32)
+//     sbtc -> qbtc   (purely on-chain)
+//
+// No affiliate fields.
+message MsgSwap {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "lp/MsgSwap";
+
+  string signer = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string source_denom = 2;
+  string amount = 3 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string min_out = 4 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string dest_denom = 5;
+  string dest_address = 6;            // cosmos bech32 (qbtc/sbtc) or BTC bech32 (btc)
+}
+
+message MsgSwapResponse {
+  string out_amount = 1;
+  uint32 slip_bps = 2;
+  uint64 tx_out_id = 3;               // non-zero when dest_denom == "btc"
+}

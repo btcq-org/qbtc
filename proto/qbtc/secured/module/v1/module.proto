@@ -1,0 +1,19 @@
+syntax = "proto3";
+package qbtc.secured.module.v1;
+
+import "cosmos/app/v1alpha1/module.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/secured/types";
+
+// Module is the config object for the secured custody module. It owns the
+// DKLS-MPC vault state, the sbtc denom (mint/burn against attested BTC
+// observations), and the outbound TxOut queue consumed by bifrost.
+message Module {
+  option (cosmos.app.v1alpha1.module) = {
+    go_import : "qbtc/x/secured"
+  };
+
+  // authority defines the custom module authority; defaults to the governance
+  // module address when empty.
+  string authority = 1;
+}

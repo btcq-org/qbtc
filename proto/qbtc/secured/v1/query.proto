@@ -1,0 +1,51 @@
+syntax = "proto3";
+package qbtc.secured.v1;
+
+import "google/api/annotations.proto";
+import "qbtc/secured/v1/genesis.proto";
+import "qbtc/secured/v1/types.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/secured/types";
+
+// Query defines the secured module's gRPC querier service.
+service Query {
+  // Vault returns the current DKLS vault state.
+  rpc Vault(QueryVaultRequest) returns (QueryVaultResponse) {
+    option (google.api.http).get = "/qbtc/secured/v1/vault";
+  }
+
+  // TxOut returns a queued BTC outbound by id.
+  rpc TxOut(QueryTxOutRequest) returns (QueryTxOutResponse) {
+    option (google.api.http).get = "/qbtc/secured/v1/tx_out/{id}";
+  }
+
+  // TxOutQueue returns all currently-queued BTC outbounds.
+  rpc TxOutQueue(QueryTxOutQueueRequest) returns (QueryTxOutQueueResponse) {
+    option (google.api.http).get = "/qbtc/secured/v1/tx_out_queue";
+  }
+
+  // Param returns a single parameter.
+  rpc Param(QueryParamRequest) returns (QueryParamResponse) {
+    option (google.api.http).get = "/qbtc/secured/v1/params/{key}";
+  }
+
+  // AllParams returns every parameter.
+  rpc AllParams(QueryAllParamsRequest) returns (QueryAllParamsResponse) {
+    option (google.api.http).get = "/qbtc/secured/v1/params";
+  }
+}
+
+message QueryVaultRequest {}
+message QueryVaultResponse { Vault vault = 1; }
+
+message QueryTxOutRequest { uint64 id = 1; }
+message QueryTxOutResponse { TxOutItem tx_out = 1; }
+
+message QueryTxOutQueueRequest {}
+message QueryTxOutQueueResponse { repeated TxOutItem items = 1; }
+
+message QueryParamRequest { string key = 1; }
+message QueryParamResponse { Param param = 1; }
+
+message QueryAllParamsRequest {}
+message QueryAllParamsResponse { repeated Param params = 1; }

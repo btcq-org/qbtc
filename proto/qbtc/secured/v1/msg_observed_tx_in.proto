@@ -1,0 +1,26 @@
+syntax = "proto3";
+package qbtc.secured.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "qbtc/secured/v1/types.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/secured/types";
+
+// MsgObservedTxIn is submitted by a validator on behalf of the bifrost signer
+// set to attest one or more BTC inbound transactions to the vault. The handler
+// dedupes on (txid, vout), requires >= 2/3 stake-weighted attestations to
+// finalize, and on finalization mints sbtc to the holding account and routes
+// by memo to x/lp (add-liquidity match or memo-driven swap-in).
+message MsgObservedTxIn {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "secured/MsgObservedTxIn";
+
+  string signer = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  repeated ObservedTxIn observations = 2 [ (gogoproto.nullable) = false ];
+  repeated Attestation attestations = 3 [ (gogoproto.nullable) = false ];
+}
+
+message MsgObservedTxInResponse {}

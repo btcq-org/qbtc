@@ -1,0 +1,24 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "cosmos/msg/v1/msg.proto";
+import "qbtc/lp/v1/msg_add_liquidity.proto";
+import "qbtc/lp/v1/msg_withdraw_liquidity.proto";
+import "qbtc/lp/v1/msg_swap.proto";
+import "qbtc/lp/v1/msg_bond.proto";
+import "qbtc/lp/v1/msg_unbond.proto";
+import "qbtc/lp/v1/msg_update_param.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// Msg defines the lp module's tx service.
+service Msg {
+  option (cosmos.msg.v1.service) = true;
+
+  rpc AddLiquidity(MsgAddLiquidity) returns (MsgAddLiquidityResponse);
+  rpc WithdrawLiquidity(MsgWithdrawLiquidity) returns (MsgWithdrawLiquidityResponse);
+  rpc Swap(MsgSwap) returns (MsgSwapResponse);
+  rpc Bond(MsgBond) returns (MsgBondResponse);
+  rpc Unbond(MsgUnbond) returns (MsgUnbondResponse);
+  rpc UpdateParam(MsgUpdateParam) returns (MsgUpdateParamResponse);
+}

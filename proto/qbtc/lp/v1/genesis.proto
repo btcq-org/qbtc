@@ -1,0 +1,26 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "gogoproto/gogo.proto";
+import "qbtc/lp/v1/types.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// Param is a single mimir-style {key, value} entry stored in const-overrides.
+message Param {
+  string key = 1;
+  int64 value = 2;
+}
+
+// GenesisState is the lp module's genesis snapshot. The pool is seeded with
+// 1 sat of each side and 1 LP unit (held permanently in the lp_genesis_seed
+// module account) so the pool has a price from block 1 and the supply
+// invariant Pool.PoolUnits == bank.Supply("lp-btc-qbtc") holds.
+message GenesisState {
+  Pool pool = 1;
+  repeated LiquidityProvider liquidity_providers = 2 [ (gogoproto.nullable) = false ];
+  repeated Bond bonds = 3 [ (gogoproto.nullable) = false ];
+  repeated PendingAdd pending_adds = 4 [ (gogoproto.nullable) = false ];
+  uint64 pending_add_seq = 5;
+  repeated Param params = 6 [ (gogoproto.nullable) = false ];
+}

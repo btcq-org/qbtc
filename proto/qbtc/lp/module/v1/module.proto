@@ -1,0 +1,17 @@
+syntax = "proto3";
+package qbtc.lp.module.v1;
+
+import "cosmos/app/v1alpha1/module.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// Module is the config object for the lp module. It owns the single
+// hardcoded BTC<->qbtc CLP pool, node-only LP records, and bond accounting.
+message Module {
+  option (cosmos.app.v1alpha1.module) = {
+    go_import : "qbtc/x/lp"
+  };
+
+  // authority defines the custom module authority; defaults to gov when empty.
+  string authority = 1;
+}

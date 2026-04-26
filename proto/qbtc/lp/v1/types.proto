@@ -1,0 +1,129 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+option (gogoproto.goproto_getters_all) = false;
+
+// PoolStatus tracks whether the single BTC<->qbtc pool is open for swaps and
+// adds. Genesis seeds it as Available with 1 sat / 1 unit so the pool has a
+// price from block 1.
+enum PoolStatus {
+  POOL_STATUS_UNSPECIFIED = 0;
+  POOL_STATUS_STAGED = 1;
+  POOL_STATUS_AVAILABLE = 2;
+  POOL_STATUS_SUSPENDED = 3;
+}
+
+// PendingStatus is the lifecycle of a symmetric add intent waiting for the BTC
+// side to be observed at the vault.
+enum PendingStatus {
+  PENDING_STATUS_UNSPECIFIED = 0;
+  PENDING_STATUS_OPEN = 1;
+  PENDING_STATUS_MATCHED = 2;
+  PENDING_STATUS_EXPIRED = 3;
+  PENDING_STATUS_REFUNDED = 4;
+}
+
+// BondStatus tracks a node's bonded LP units.
+enum BondStatus {
+  BOND_STATUS_UNSPECIFIED = 0;
+  BOND_STATUS_STANDBY = 1;
+  BOND_STATUS_ACTIVE = 2;
+  BOND_STATUS_LEAVING = 3;
+  BOND_STATUS_SLASHED = 4;
+}
+
+// Pool is the single BTC<->qbtc CLP pool. There is exactly one Pool item.
+message Pool {
+  string balance_sbtc = 1 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string balance_qbtc = 2 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string pool_units = 3 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string pending_inbound_sbtc = 4 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string pending_inbound_qbtc = 5 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  PoolStatus status = 6;
+  int64 last_updated_height = 7;
+}
+
+// LiquidityProvider is one node's LP position. node_id is the bech32 cosmos
+// address of the node operator and serves as the map key.
+message LiquidityProvider {
+  string node_id = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string btc_address = 2;             // proven via ZK on first add; only legal withdraw destination
+  string units = 3 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  int64 last_add_height = 4;
+}
+
+// PendingAdd is a symmetric add intent. The qbtc side has been pulled into the
+// lp module account; the BTC side is expected at the vault within tolerance,
+// matched by id in the deposit memo.
+message PendingAdd {
+  uint64 id = 1;
+  string node_id = 2 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string btc_address = 3;
+  string qbtc_locked = 4 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  string expected_btc = 5 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  uint32 tolerance_bps = 6;
+  int64 created_height = 7;
+  int64 expires_at_height = 8;
+  PendingStatus status = 9;
+}
+
+// BondProvider is a co-bonder behind a node operator. units_share is the
+// caller's share of the node's bonded units.
+message BondProvider {
+  string address = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string units_share = 2 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+}
+
+// Bond is the bonded portion of a node's LP units. Bond and LiquidityProvider
+// share the same node_id key.
+message Bond {
+  string node_id = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string units_bonded = 2 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+  repeated BondProvider providers = 3 [ (gogoproto.nullable) = false ];
+  BondStatus status = 4;
+  int64 last_churn_height = 5;
+}

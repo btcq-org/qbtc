@@ -1,0 +1,27 @@
+syntax = "proto3";
+package qbtc.lp.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/lp/types";
+
+// MsgBond locks a portion of the caller's LP units behind a node, making them
+// the slashable bond. The caller must own the units (either as the node
+// operator or as a registered bond provider).
+message MsgBond {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "lp/MsgBond";
+
+  string signer = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string node_id = 2 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string units = 3 [
+    (cosmos_proto.scalar) = "cosmos.Uint",
+    (gogoproto.customtype) = "cosmossdk.io/math.Uint",
+    (gogoproto.nullable) = false
+  ];
+}
+
+message MsgBondResponse {}

@@ -1,0 +1,21 @@
+syntax = "proto3";
+package qbtc.secured.v1;
+
+import "gogoproto/gogo.proto";
+import "qbtc/secured/v1/types.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/secured/types";
+
+// Param is a single mimir-style {key, value} entry stored in const-overrides.
+message Param {
+  string key = 1;
+  int64 value = 2;
+}
+
+// GenesisState is the secured module's genesis snapshot.
+message GenesisState {
+  Vault vault = 1;
+  repeated TxOutItem tx_out_queue = 2 [ (gogoproto.nullable) = false ];
+  uint64 tx_out_seq = 3;
+  repeated Param params = 4 [ (gogoproto.nullable) = false ];
+}
