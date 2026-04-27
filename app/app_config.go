@@ -32,8 +32,12 @@ import (
 	_ "github.com/CosmWasm/wasmd/x/wasm" // import for side-effects
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/btcq-org/qbtc/common"
+	_ "github.com/btcq-org/qbtc/x/lp/module"
+	lpmoduletypes "github.com/btcq-org/qbtc/x/lp/types"
 	_ "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtcmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	_ "github.com/btcq-org/qbtc/x/secured/module"
+	securedmoduletypes "github.com/btcq-org/qbtc/x/secured/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	_ "github.com/cosmos/cosmos-sdk/x/auth/vesting" // import for side-effects
@@ -72,6 +76,13 @@ var (
 		{Account: icatypes.ModuleName},
 		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: qbtcmoduletypes.ModuleName, Permissions: []string{authtypes.Minter}},
+		{Account: securedmoduletypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
+		{Account: securedmoduletypes.HoldingAccountName},
+		// lp gets Minter perm for the one-time genesis seed only (1 sat sbtc
+		// + 1 sat qbtc). Handlers never mint outside of genesis.
+		{Account: lpmoduletypes.ModuleName, Permissions: []string{authtypes.Minter}},
+		{Account: lpmoduletypes.GenesisSeedAccountName},
+		{Account: lpmoduletypes.ReserveAccountName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: wasmtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: tokenfactorytypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
@@ -128,6 +139,12 @@ var (
 						feegrant.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
+						// secured must run before lp so the outbound queue
+						// dispatch sees pending items from this block's lp
+						// withdraws / swaps. lp's EndBlock is the pending-add
+						// expiry sweep which doesn't depend on secured.
+						securedmoduletypes.ModuleName,
+						lpmoduletypes.ModuleName,
 						// wasm module - must be after bank staking,and IBC
 						wasmtypes.ModuleName, //tokenfactory
 						tokenfactorytypes.ModuleName,
@@ -163,6 +180,11 @@ var (
 						icatypes.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
+						// secured must init before lp because lp's InitGenesis
+						// pulls 1 sat sbtc from the secured holding account to
+						// seed the pool.
+						securedmoduletypes.ModuleName,
+						lpmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
 						wasmtypes.ModuleName,
 						tokenfactorytypes.ModuleName,
@@ -244,6 +266,14 @@ var (
 			{
 				Name:   qbtcmoduletypes.ModuleName,
 				Config: appconfig.WrapAny(&qbtcmoduletypes.Module{}),
+			},
+			{
+				Name:   securedmoduletypes.ModuleName,
+				Config: appconfig.WrapAny(&securedmoduletypes.Module{}),
+			},
+			{
+				Name:   lpmoduletypes.ModuleName,
+				Config: appconfig.WrapAny(&lpmoduletypes.Module{}),
 			},
 			// this line is used by starport scaffolding # stargate/app/moduleConfig
 		},

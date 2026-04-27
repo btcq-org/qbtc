@@ -65,23 +65,25 @@ func (k *Keeper) InitGenesis(ctx context.Context, gs *types.GenesisState) error 
 	}
 
 	// Seed pool to 1 sat / 1 sat / 1 unit if still empty so swaps have a
-	// non-degenerate price from block 1. Funds come from the lp module
-	// account (genesis allocator deposits) and the secured holding account.
+	// non-degenerate price from block 1. The 1-sat sbtc + 1-sat qbtc seed is
+	// minted directly by the lp module (one-time at genesis only — handlers
+	// never call MintCoins). The seed is irretrievable in practice: the LP
+	// math never permits a withdraw that would drain the pool below zero
+	// units, so the genesis 1-unit anchor stays put forever.
 	pool, err := k.Pool.Get(ctx)
 	if err != nil {
 		return err
 	}
 	if pool.PoolUnits.IsZero() {
 		one := math.OneUint()
+		oneInt := math.OneInt()
 
-		// Take 1 sat sbtc out of the secured holding account.
-		if err := k.bankKeeper.SendCoinsFromModuleToModule(
-			ctx, securedtypes.HoldingAccountName, types.ModuleName,
-			sdk.NewCoins(sdk.NewCoin(securedtypes.DenomSecuredBTC, math.OneInt())),
-		); err != nil {
+		if err := k.bankKeeper.MintCoins(ctx, types.ModuleName, sdk.NewCoins(
+			sdk.NewCoin(securedtypes.DenomSecuredBTC, oneInt),
+			sdk.NewCoin(types.DenomQbtc, oneInt),
+		)); err != nil {
 			return err
 		}
-		// 1 qbtc and 1 sbtc are now in the lp module account.
 
 		pool.BalanceSbtc = pool.BalanceSbtc.Add(one)
 		pool.BalanceQbtc = pool.BalanceQbtc.Add(one)
