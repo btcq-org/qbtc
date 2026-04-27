@@ -12,9 +12,11 @@ import (
 	"github.com/btcq-org/qbtc/x/lp/types"
 )
 
-// WithdrawLiquidity burns a basis-points fraction of the caller's free
-// (non-bonded) units and pays out qbtc on-chain plus an L1 BTC outbound to the
-// LP's already-proven btc_address.
+// WithdrawLiquidity burns a basis-points fraction of the signer's *free*
+// lp/btc-qbtc balance and pays out qbtc on-chain plus an L1 BTC outbound to
+// the LP record's locked btc_address. Bonded units physically live in the
+// lp_bonded module account and are not in the signer's bank balance, so
+// "free" is exactly what the signer holds — no extra check is needed.
 func (s *msgServer) WithdrawLiquidity(
 	ctx context.Context,
 	msg *types.MsgWithdrawLiquidity,
@@ -27,37 +29,47 @@ func (s *msgServer) WithdrawLiquidity(
 			"signer %s != node_id %s", msg.Signer, msg.NodeId)
 	}
 
-	lp, err := s.k.LPs.Get(ctx, msg.NodeId)
-	if err != nil {
-		return nil, types.ErrLPNotFound.Wrap(msg.NodeId)
-	}
-	if lp.Units.IsZero() {
-		return nil, types.ErrLPNotFound.Wrapf("%s has zero units", msg.NodeId)
-	}
-
-	free, err := s.k.FreeUnits(ctx, msg.NodeId)
-	if err != nil {
-		return nil, err
-	}
-
-	pool := s.k.MustGetPool(ctx)
-	btcOut, qbtcOut, unitsBurned, err := types.CalcWithdrawAmounts(
-		lp.Units, uint64(msg.BasisPoints), pool.PoolUnits, pool.BalanceSbtc, pool.BalanceQbtc,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if unitsBurned.GT(free) {
-		return nil, types.ErrBondLockedWithdraw.Wrapf(
-			"requested burn %s exceeds free units %s; unbond first",
-			unitsBurned, free)
-	}
-
-	// Pay qbtc to the signer on-chain.
 	signer, err := sdk.AccAddressFromBech32(msg.Signer)
 	if err != nil {
 		return nil, se.ErrInvalidAddress.Wrap(err.Error())
 	}
+
+	// Look up the BTC withdraw destination from the LP record. Established
+	// on the first add and immutable thereafter.
+	lp, err := s.k.LPs.Get(ctx, msg.NodeId)
+	if err != nil {
+		return nil, types.ErrLPNotFound.Wrap(msg.NodeId)
+	}
+	if lp.BtcAddress == "" {
+		return nil, types.ErrLPNotFound.Wrapf("%s has no btc_address binding", msg.NodeId)
+	}
+
+	freeUnitsInt := s.k.bankKeeper.GetBalance(ctx, signer, types.DenomLPUnit).Amount
+	if freeUnitsInt.IsZero() {
+		return nil, types.ErrLPNotFound.Wrapf("%s has zero free units", msg.NodeId)
+	}
+	freeUnits := math.NewUintFromBigInt(freeUnitsInt.BigInt())
+
+	pool := s.k.MustGetPool(ctx)
+	btcOut, qbtcOut, unitsBurned, err := types.CalcWithdrawAmounts(
+		freeUnits, uint64(msg.BasisPoints), pool.PoolUnits, pool.BalanceSbtc, pool.BalanceQbtc,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pull units from signer to lp module and burn.
+	burnCoin := sdk.NewCoin(types.DenomLPUnit, math.NewIntFromBigInt(unitsBurned.BigInt()))
+	if err := s.k.bankKeeper.SendCoinsFromAccountToModule(
+		ctx, signer, types.ModuleName, sdk.NewCoins(burnCoin),
+	); err != nil {
+		return nil, err
+	}
+	if err := s.k.bankKeeper.BurnCoins(ctx, types.ModuleName, sdk.NewCoins(burnCoin)); err != nil {
+		return nil, err
+	}
+
+	// Pay qbtc to the signer on-chain.
 	if !qbtcOut.IsZero() {
 		if err := s.k.bankKeeper.SendCoinsFromModuleToAccount(
 			ctx, types.ModuleName, signer,
@@ -67,7 +79,8 @@ func (s *msgServer) WithdrawLiquidity(
 		}
 	}
 
-	// Burn LP's sbtc share via secured module: move sbtc lp -> secured first.
+	// Move sbtc lp -> secured and queue the L1 outbound to the LP's BTC
+	// address.
 	var txOutID uint64
 	if !btcOut.IsZero() {
 		if err := s.k.bankKeeper.SendCoinsFromModuleToModule(
@@ -89,17 +102,6 @@ func (s *msgServer) WithdrawLiquidity(
 		return nil, err
 	}
 
-	lp.Units = lp.Units.Sub(unitsBurned)
-	if lp.Units.IsZero() {
-		if err := s.k.LPs.Remove(ctx, lp.NodeId); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := s.k.SetLP(ctx, lp); err != nil {
-			return nil, err
-		}
-	}
-
 	sdk.UnwrapSDKContext(ctx).EventManager().EmitEvent(
 		sdk.NewEvent("lp_withdraw",
 			sdk.NewAttribute("node_id", msg.NodeId),
@@ -111,8 +113,8 @@ func (s *msgServer) WithdrawLiquidity(
 		),
 	)
 	return &types.MsgWithdrawLiquidityResponse{
-		QbtcOut:  qbtcOut.String(),
-		SbtcOut:  btcOut.String(),
-		TxOutId:  txOutID,
+		QbtcOut: qbtcOut.String(),
+		SbtcOut: btcOut.String(),
+		TxOutId: txOutID,
 	}, nil
 }

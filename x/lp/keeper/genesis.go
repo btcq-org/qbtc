@@ -78,10 +78,26 @@ func (k *Keeper) InitGenesis(ctx context.Context, gs *types.GenesisState) error 
 		one := math.OneUint()
 		oneInt := math.OneInt()
 
+		// Seed the pool's two-sided reserve in the lp module account.
 		if err := k.bankKeeper.MintCoins(ctx, types.ModuleName, sdk.NewCoins(
 			sdk.NewCoin(securedtypes.DenomSecuredBTC, oneInt),
 			sdk.NewCoin(types.DenomQbtc, oneInt),
 		)); err != nil {
+			return err
+		}
+
+		// Seed the 1-unit lp/btc-qbtc dust into the permanent genesis-seed
+		// account so bank.Supply(lp/btc-qbtc) starts at exactly Pool.PoolUnits
+		// and stays aligned forever after.
+		if err := k.bankKeeper.MintCoins(ctx, types.ModuleName, sdk.NewCoins(
+			sdk.NewCoin(types.DenomLPUnit, oneInt),
+		)); err != nil {
+			return err
+		}
+		if err := k.bankKeeper.SendCoinsFromModuleToModule(
+			ctx, types.ModuleName, types.GenesisSeedAccountName,
+			sdk.NewCoins(sdk.NewCoin(types.DenomLPUnit, oneInt)),
+		); err != nil {
 			return err
 		}
 

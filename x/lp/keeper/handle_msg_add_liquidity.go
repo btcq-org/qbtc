@@ -48,7 +48,6 @@ func (s *msgServer) AddLiquidity(
 	}
 	if lp.BtcAddress == "" {
 		lp.BtcAddress = msg.BtcAddress
-		lp.Units = math.ZeroUint()
 		if err := s.k.SetLP(ctx, lp); err != nil {
 			return nil, err
 		}

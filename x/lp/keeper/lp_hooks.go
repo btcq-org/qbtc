@@ -81,11 +81,28 @@ func (h LPHooks) OnObservedAddLiquidity(
 		return err
 	}
 
+	// Mint the LP units to the lp module account, then transfer to the node
+	// operator's bank account. Free balance of lp/btc-qbtc on the node's
+	// account is the source of truth for unit ownership; LiquidityProvider
+	// only stores the withdraw-destination binding.
+	nodeAddr, err := sdk.AccAddressFromBech32(pa.NodeId)
+	if err != nil {
+		return err
+	}
+	unitsCoin := sdk.NewCoin(types.DenomLPUnit, math.NewIntFromBigInt(units.BigInt()))
+	if err := h.k.bankKeeper.MintCoins(ctx, types.ModuleName, sdk.NewCoins(unitsCoin)); err != nil {
+		return err
+	}
+	if err := h.k.bankKeeper.SendCoinsFromModuleToAccount(
+		ctx, types.ModuleName, nodeAddr, sdk.NewCoins(unitsCoin),
+	); err != nil {
+		return err
+	}
+
 	lp, err := h.k.GetOrInitLP(ctx, pa.NodeId)
 	if err != nil {
 		return err
 	}
-	lp.Units = lp.Units.Add(units)
 	lp.LastAddHeight = sdk.UnwrapSDKContext(ctx).BlockHeight()
 	if err := h.k.SetLP(ctx, lp); err != nil {
 		return err

@@ -78,10 +78,15 @@ var (
 		{Account: qbtcmoduletypes.ModuleName, Permissions: []string{authtypes.Minter}},
 		{Account: securedmoduletypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: securedmoduletypes.HoldingAccountName},
-		// lp gets Minter perm for the one-time genesis seed only (1 sat sbtc
-		// + 1 sat qbtc). Handlers never mint outside of genesis.
-		{Account: lpmoduletypes.ModuleName, Permissions: []string{authtypes.Minter}},
+		// lp module: needs Minter+Burner for the lp/btc-qbtc denom (mint on
+		// observed add, burn on withdraw) and Minter for the one-time 1-sat
+		// genesis seed of sbtc + qbtc.
+		{Account: lpmoduletypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
+		// Permanent 1-unit dust account anchoring PoolUnits at genesis.
 		{Account: lpmoduletypes.GenesisSeedAccountName},
+		// Custody account for bonded LP units. Plain holding account; no
+		// mint/burn perms needed.
+		{Account: lpmoduletypes.BondedAccountName},
 		{Account: lpmoduletypes.ReserveAccountName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: wasmtypes.ModuleName, Permissions: []string{authtypes.Burner}},

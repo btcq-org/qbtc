@@ -12,7 +12,6 @@ var (
 	ErrPendingAddNotFound  = errors.Register(ModuleName, 1106, "pending add not found")
 	ErrPendingAddOpen      = errors.Register(ModuleName, 1107, "node already has an open pending add")
 	ErrBondInsufficient    = errors.Register(ModuleName, 1110, "bonded units below request")
-	ErrBondLockedWithdraw  = errors.Register(ModuleName, 1111, "withdraw exceeds free (non-bonded) units")
 	ErrBTCAddressMismatch  = errors.Register(ModuleName, 1112, "btc address does not match LP record")
 	ErrInvalidProof        = errors.Register(ModuleName, 1113, "zk proof verification failed")
 	ErrSignerNotNode       = errors.Register(ModuleName, 1114, "signer is not a node operator or bond provider")

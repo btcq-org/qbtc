@@ -11,7 +11,6 @@ const (
 	ParamMinAddQbtc              = "min_add_qbtc"
 	ParamRefundFeeReserveSats    = "refund_fee_reserve_sats"
 	ParamOutboundEnabled         = "outbound_enabled"
-	ParamBondLockedDuringChurn   = "bond_locked_during_churn"
 )
 
 // DefaultParams returns the default mimir values for the lp module.
@@ -24,7 +23,6 @@ func DefaultParams() map[string]int64 {
 		ParamMinAddQbtc:              10_000,
 		ParamRefundFeeReserveSats:    5_000,    // held back from refunds for BTC fee
 		ParamOutboundEnabled:         0,        // off by default until bifrost outbound is wired
-		ParamBondLockedDuringChurn:   1,
 	}
 }
 

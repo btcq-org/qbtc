@@ -3,14 +3,21 @@ package keeper
 import (
 	"context"
 
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	se "github.com/cosmos/cosmos-sdk/types/errors"
 
 	"github.com/btcq-org/qbtc/x/lp/types"
 )
 
-// Bond locks `units` of the caller's free LP units behind their node. Bond
-// providers (split co-funders) are not supported in v1; the signer must equal
-// node_id.
+// Bond moves `units` of lp/btc-qbtc from the caller's bank account into the
+// dedicated lp_bonded module account, and credits the per-node Bond record.
+// The bank balance on lp_bonded mirrors sum(Bond.UnitsBonded). Bonded units
+// are physically inaccessible to the LP from this point — withdraw can only
+// burn what the user holds in their own account.
+//
+// Bond providers (split co-funders) are not supported in v1; the signer must
+// equal node_id.
 func (s *msgServer) Bond(
 	ctx context.Context,
 	msg *types.MsgBond,
@@ -23,13 +30,19 @@ func (s *msgServer) Bond(
 			"signer %s != node_id %s", msg.Signer, msg.NodeId)
 	}
 
-	free, err := s.k.FreeUnits(ctx, msg.NodeId)
+	signer, err := sdk.AccAddressFromBech32(msg.Signer)
 	if err != nil {
-		return nil, err
+		return nil, se.ErrInvalidAddress.Wrap(err.Error())
 	}
-	if msg.Units.GT(free) {
-		return nil, types.ErrBondInsufficient.Wrapf(
-			"requested %s, free %s", msg.Units, free)
+
+	coin := sdk.NewCoin(types.DenomLPUnit, math.NewIntFromBigInt(msg.Units.BigInt()))
+	// Bank rejects this if the signer doesn't have enough free units —
+	// that's the protocol's "ErrBondInsufficient" guard, no separate check
+	// needed.
+	if err := s.k.bankKeeper.SendCoinsFromAccountToModule(
+		ctx, signer, types.BondedAccountName, sdk.NewCoins(coin),
+	); err != nil {
+		return nil, types.ErrBondInsufficient.Wrap(err.Error())
 	}
 
 	bond, err := s.k.GetOrInitBond(ctx, msg.NodeId)
@@ -51,10 +64,9 @@ func (s *msgServer) Bond(
 	return &types.MsgBondResponse{}, nil
 }
 
-// Unbond moves units from bonded back to free. v1 has no churn-state gating
-// (params.bond_locked_during_churn is read but the validator-set churn logic
-// itself is not implemented here); operators can unbond freely. Slashing
-// will tighten this in a follow-up.
+// Unbond moves units from lp_bonded back to the signer's bank account. v1 has
+// no churn-state gating; operators can unbond freely. Slashing will tighten
+// this in a follow-up.
 func (s *msgServer) Unbond(
 	ctx context.Context,
 	msg *types.MsgUnbond,
@@ -67,6 +79,11 @@ func (s *msgServer) Unbond(
 			"signer %s != node_id %s", msg.Signer, msg.NodeId)
 	}
 
+	signer, err := sdk.AccAddressFromBech32(msg.Signer)
+	if err != nil {
+		return nil, se.ErrInvalidAddress.Wrap(err.Error())
+	}
+
 	bond, err := s.k.GetOrInitBond(ctx, msg.NodeId)
 	if err != nil {
 		return nil, err
@@ -77,6 +94,13 @@ func (s *msgServer) Unbond(
 	}
 	bond.UnitsBonded = bond.UnitsBonded.Sub(msg.Units)
 	if err := s.k.SetBond(ctx, bond); err != nil {
+		return nil, err
+	}
+
+	coin := sdk.NewCoin(types.DenomLPUnit, math.NewIntFromBigInt(msg.Units.BigInt()))
+	if err := s.k.bankKeeper.SendCoinsFromModuleToAccount(
+		ctx, types.BondedAccountName, signer, sdk.NewCoins(coin),
+	); err != nil {
 		return nil, err
 	}
 

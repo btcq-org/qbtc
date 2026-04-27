@@ -6,11 +6,23 @@ const (
 	ModuleName = "lp"
 	StoreKey   = ModuleName
 
+	// GenesisSeedAccountName holds the permanent 1-unit dust that anchors
+	// PoolUnits at genesis. Funds here are unreachable.
 	GenesisSeedAccountName = "lp_genesis_seed"
-	ReserveAccountName     = "lp_reserve"
+
+	// BondedAccountName is the custody account for LP units that nodes have
+	// bonded. Bank balance of lp/btc-qbtc on this account always equals
+	// sum(Bond.UnitsBonded). When x/bond is split out as its own module, this
+	// account moves there.
+	BondedAccountName = "lp_bonded"
+
+	ReserveAccountName = "lp_reserve"
 
 	DenomSecuredBTC = "sbtc"
-	DenomLPUnit     = "lp-btc-qbtc"
+	// DenomLPUnit is the bank denom issued on add-liquidity and burned on
+	// withdraw. Slashes in denoms are accepted by cosmos-sdk's bank denom
+	// regex (token-factory uses the same convention).
+	DenomLPUnit = "lp/btc-qbtc"
 )
 
 // Collection prefixes. No prefix may be a byte-prefix of another (cosmossdk.io
