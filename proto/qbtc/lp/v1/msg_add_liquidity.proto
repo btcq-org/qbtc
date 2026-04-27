@@ -13,9 +13,11 @@ option go_package = "github.com/btcq-org/qbtc/x/lp/types";
 // (within tolerance) to the vault with memo "+:<pending_id>". Once observed,
 // units are issued via the symmetric CLP formula.
 //
-// The btc_address must be proven owned by the signer with a ZK proof bound the
-// same way as MsgClaimWithProof. On subsequent adds the LP record's existing
-// btc_address is enforced; mismatches are rejected.
+// btc_address is the LP's withdraw destination. It is locked on the first
+// add and enforced on subsequent adds (mismatches are rejected). No
+// ownership proof is required — if the operator declares an address they
+// don't control, the only loss is their own BTC on withdraw, so this is a
+// wallet-UX concern rather than a protocol-security one.
 message MsgAddLiquidity {
   option (cosmos.msg.v1.signer) = "signer";
   option (amino.name) = "lp/MsgAddLiquidity";
@@ -33,11 +35,6 @@ message MsgAddLiquidity {
     (gogoproto.nullable) = false
   ];
   string btc_address = 5;
-  string proof = 6;                   // hex ZK proof
-  string message_hash = 7;
-  string address_hash = 8;
-  string qbtc_address_hash = 9;
-  string pub_key_hash_sha256 = 10;
 }
 
 message MsgAddLiquidityResponse {

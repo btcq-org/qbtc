@@ -26,17 +26,5 @@ func (m *MsgAddLiquidity) ValidateBasic() error {
 	if m.BtcAddress == "" {
 		return se.ErrInvalidRequest.Wrap("btc_address is required")
 	}
-	if len(m.Proof) < MinProofSize || len(m.Proof) > MaxProofSize {
-		return se.ErrInvalidRequest.Wrapf("proof size out of range [%d, %d]", MinProofSize, MaxProofSize)
-	}
-	if m.PubKeyHashSha256 == "" {
-		return se.ErrInvalidRequest.Wrap("pub_key_hash_sha256 is required")
-	}
 	return nil
 }
-
-// Mirror x/qbtc proof-size bounds so the verifier shares limits.
-const (
-	MinProofSize = 100
-	MaxProofSize = 50 * 1024
-)

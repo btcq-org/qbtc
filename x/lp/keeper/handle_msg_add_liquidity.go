@@ -15,11 +15,10 @@ import (
 // via x/secured.MsgObservedTxIn (memo `+:<pending_id>`); on observation the
 // LPHooks.OnObservedAddLiquidity callback issues units.
 //
-// TODO(zk): verify the ZK proof binding (msg.BtcAddress, msg.Signer) the same
-// way x/qbtc/keeper/handle_msg_claim_with_proof.go does. Currently the proof
-// fields are validated for shape only; we do not yet enforce ownership at the
-// chain level. Without this check, a node could declare a btc_address it does
-// not own and receive withdraws to it. Land before mainnet.
+// btc_address is the future withdraw destination; it is locked on the first
+// add and enforced on subsequent adds. No ownership proof is required — a
+// node that declares an address they don't control only hurts themselves on
+// withdraw, so this is a wallet-UX concern, not a protocol-security one.
 func (s *msgServer) AddLiquidity(
 	ctx context.Context,
 	msg *types.MsgAddLiquidity,
