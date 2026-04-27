@@ -2,12 +2,10 @@ package keeper
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -122,18 +120,4 @@ func (s *msgServer) processObservation(ctx context.Context, obs *types.ObservedT
 			"memo", memo, "txid", obs.Txid)
 		return nil
 	}
-}
-
-// hasInboundFinalized is a small helper exposed for tests.
-func (k *Keeper) hasInboundFinalized(ctx context.Context, txid string, vout uint32) (bool, error) {
-	key := fmt.Sprintf("%s:%d", txid, vout)
-	has, err := k.ObservedInbound.Has(ctx, key)
-	if err != nil && !isNotFound(err) {
-		return false, err
-	}
-	return has, nil
-}
-
-func isNotFound(err error) bool {
-	return err != nil && errors.Is(err, collections.ErrNotFound)
 }
