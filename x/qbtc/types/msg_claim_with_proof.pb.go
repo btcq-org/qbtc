@@ -104,6 +104,9 @@ type MsgClaimWithProof struct {
 	// public input to the ZK circuit; the handler natively verifies
 	// RIPEMD160(pub_key_hash_sha256) matches the UTXO's Bitcoin address hash.
 	PubKeyHashSha256 string `protobuf:"bytes,7,opt,name=pub_key_hash_sha256,json=pubKeyHashSha256,proto3" json:"pub_key_hash_sha256,omitempty"`
+	// Optional. If set, minted tokens are sent to this address instead of
+	// claimer. The ZK proof must commit to this address (via qbtc_address_hash).
+	Receiver string `protobuf:"bytes,8,opt,name=receiver,proto3" json:"receiver,omitempty"`
 }
 
 func (m *MsgClaimWithProof) Reset()         { *m = MsgClaimWithProof{} }
@@ -184,6 +187,13 @@ func (m *MsgClaimWithProof) GetQbtcAddressHash() string {
 func (m *MsgClaimWithProof) GetPubKeyHashSha256() string {
 	if m != nil {
 		return m.PubKeyHashSha256
+	}
+	return ""
+}
+
+func (m *MsgClaimWithProof) GetReceiver() string {
+	if m != nil {
+		return m.Receiver
 	}
 	return ""
 }
@@ -351,6 +361,13 @@ func (m *MsgClaimWithProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Receiver) > 0 {
+		i -= len(m.Receiver)
+		copy(dAtA[i:], m.Receiver)
+		i = encodeVarintMsgClaimWithProof(dAtA, i, uint64(len(m.Receiver)))
+		i--
+		dAtA[i] = 0x42
+	}
 	if len(m.PubKeyHashSha256) > 0 {
 		i -= len(m.PubKeyHashSha256)
 		copy(dAtA[i:], m.PubKeyHashSha256)
@@ -508,6 +525,10 @@ func (m *MsgClaimWithProof) Size() (n int) {
 		n += 1 + l + sovMsgClaimWithProof(uint64(l))
 	}
 	l = len(m.PubKeyHashSha256)
+	if l > 0 {
+		n += 1 + l + sovMsgClaimWithProof(uint64(l))
+	}
+	l = len(m.Receiver)
 	if l > 0 {
 		n += 1 + l + sovMsgClaimWithProof(uint64(l))
 	}
@@ -893,6 +914,38 @@ func (m *MsgClaimWithProof) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.PubKeyHashSha256 = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Receiver", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgClaimWithProof
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMsgClaimWithProof
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgClaimWithProof
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Receiver = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
