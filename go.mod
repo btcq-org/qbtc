@@ -6,7 +6,7 @@ replace (
 	// fork wasmd to work with SDK v0.53.4 + IBC v10
 	github.com/CosmWasm/wasmd => github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e
 	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.38.21-0.20260502040544-c16030e07020
-	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20260313055526-5dbb8d808611
+	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20260502063610-f7f082a54f9f
 	// fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
 	// replace broken goleveldb
@@ -41,7 +41,7 @@ require (
 	github.com/btcsuite/btcd v0.24.2
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
 	github.com/btcsuite/btcd/btcutil v1.1.6
-	github.com/cometbft/cometbft v0.38.20
+	github.com/cometbft/cometbft v0.38.22
 	github.com/consensys/gnark v0.14.0
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/cosmos/cosmos-db v1.1.3

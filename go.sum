@@ -274,8 +274,8 @@ github.com/breml/errchkjson v0.4.1 h1:keFSS8D7A2T0haP9kzZTi7o26r7kE3vymjZNeNDRDw
 github.com/breml/errchkjson v0.4.1/go.mod h1:a23OvR6Qvcl7DG/Z4o0el6BRAjKnaReoPQFciAl9U3s=
 github.com/btcq-org/cometbft v0.38.21-0.20260502040544-c16030e07020 h1:F2tcnFcI3ZqWyfiDNw4FrlCWnCJRswGRjkPJ5CEp9iU=
 github.com/btcq-org/cometbft v0.38.21-0.20260502040544-c16030e07020/go.mod h1:sKSRd02L706oPkbfqZ49hmedh0vGeNj5zedp6AEAx0c=
-github.com/btcq-org/cosmos-sdk v0.0.0-20260313055526-5dbb8d808611 h1:xx9uS3Q8VV6HMn+g8oWxWl31S0K+fDAnDK8z4TV32zI=
-github.com/btcq-org/cosmos-sdk v0.0.0-20260313055526-5dbb8d808611/go.mod h1:OduN1E6FA7bwMLX+0Wi36aoDdKKnep9FoTjDVvdGEY8=
+github.com/btcq-org/cosmos-sdk v0.0.0-20260502063610-f7f082a54f9f h1:Ab5+DIn5B/QMPaZGR2u2NZnyNfoUpOvxDNAiDT+Hpdo=
+github.com/btcq-org/cosmos-sdk v0.0.0-20260502063610-f7f082a54f9f/go.mod h1:roNjtW5gDpUWbaAKHWF0k+bDPu8pCtEI1st1ppG1zLk=
 github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e h1:+UD8It+wSKVlRNovOMCwSGIjqMeZCaES41sMr6ivFsM=
 github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e/go.mod h1:hjhXd6McMd1rDl+QW82VQ6//oPBiLLnXa0Vgj2bIZl8=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
