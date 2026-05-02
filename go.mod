@@ -5,7 +5,7 @@ go 1.25.3
 replace (
 	// fork wasmd to work with SDK v0.53.4 + IBC v10
 	github.com/CosmWasm/wasmd => github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e
-	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.0.0-20260313055048-0a43a1ca4e16
+	github.com/cometbft/cometbft => github.com/btcq-org/cometbft v0.38.21-0.20260502040544-c16030e07020
 	github.com/cosmos/cosmos-sdk => github.com/btcq-org/cosmos-sdk v0.0.0-20260313055526-5dbb8d808611
 	// fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.9.1
@@ -339,7 +339,6 @@ require (
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/improbable-eng/grpc-web v0.15.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/ingonyama-zk/icicle-gnark/v3 v3.2.2 // indirect
 	github.com/ipfs/boxo v0.35.0 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
 	github.com/ipfs/go-datastore v0.9.0 // indirect
@@ -371,7 +370,7 @@ require (
 	github.com/ldez/tagliatelle v0.7.2 // indirect
 	github.com/ldez/usetesting v0.5.0 // indirect
 	github.com/leonklingele/grouper v1.1.2 // indirect
-	github.com/lib/pq v1.10.9 // indirect
+	github.com/lib/pq v1.12.0 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
@@ -401,7 +400,7 @@ require (
 	github.com/miekg/dns v1.1.68 // indirect
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
-	github.com/minio/highwayhash v1.0.3 // indirect
+	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -480,7 +479,7 @@ require (
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sanposhiho/wastedassign/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
-	github.com/sasha-s/go-deadlock v0.3.6 // indirect
+	github.com/sasha-s/go-deadlock v0.3.9 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.29.0 // indirect
 	github.com/securego/gosec/v2 v2.22.8 // indirect
