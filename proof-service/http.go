@@ -29,6 +29,11 @@ type ProveRequest struct {
 	// ChainID for message binding (e.g., "qbtc-1").
 	// If empty, uses the configured default.
 	ChainID string `json:"chain_id,omitempty"`
+
+	// Broadcast, if true, submits the resulting MsgClaimWithProof to the chain
+	// after proof generation. Requires broadcast_grpc_addr and broadcast_priv_key_hex
+	// to be configured in the service config.
+	Broadcast bool `json:"broadcast,omitempty"`
 }
 
 // ProveResponse is the JSON response for POST /prove.
@@ -56,6 +61,9 @@ type ProveResponse struct {
 
 	// ClaimerAddress is the claimer address (echoed back).
 	ClaimerAddress string `json:"claimer_address"`
+
+	// TxHash is the on-chain transaction hash, populated only when broadcast=true.
+	TxHash string `json:"tx_hash,omitempty"`
 }
 
 // ErrorResponse is returned for error cases.
@@ -109,7 +117,7 @@ func (s *Service) handleProve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate and generate proof
-	resp, httpCode, errResp := s.generateProof(req)
+	resp, httpCode, errResp := s.generateProof(r.Context(), req)
 	if errResp != nil {
 		s.metrics.IncrCounter(metrics.MetricProofsFailed)
 		s.writeErrorStruct(w, httpCode, errResp)

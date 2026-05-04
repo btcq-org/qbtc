@@ -1,6 +1,7 @@
 package proofservice
 
 import (
+	"context"
 	"encoding/hex"
 	"math/big"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 )
 
-func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
+func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
 	s.logger.Info().Str("claimer_address", req.ClaimerAddress).
 		Int("num_utxos", len(req.UTXOs)).
 		Msg("received proof generation request")
@@ -131,7 +132,7 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 	}
 
 	// 10. Build response
-	return &ProveResponse{
+	resp := &ProveResponse{
 		Proof:            hex.EncodeToString(proofBytes),
 		MessageHash:      hex.EncodeToString(messageHash[:]),
 		AddressHash:      hex.EncodeToString(addressHash[:]),
@@ -139,5 +140,28 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 		QBTCAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
 		UTXOs:            req.UTXOs,
 		ClaimerAddress:   req.ClaimerAddress,
-	}, http.StatusOK, nil
+	}
+
+	// 11. Optionally broadcast the claim to the chain
+	if req.Broadcast {
+		if s.broadcaster == nil {
+			return nil, http.StatusBadRequest, &ErrorResponse{
+				Error: "broadcasting is not configured on this service",
+				Code:  "BROADCAST_NOT_CONFIGURED",
+			}
+		}
+		txHash, err := s.broadcaster.BroadcastClaim(ctx, resp)
+		if err != nil {
+			s.logger.Error().Err(err).Msg("broadcast failed")
+			return nil, http.StatusInternalServerError, &ErrorResponse{
+				Error:   "broadcast failed",
+				Code:    "BROADCAST_FAILED",
+				Details: err.Error(),
+			}
+		}
+		resp.TxHash = txHash
+		s.logger.Info().Str("tx_hash", txHash).Msg("broadcast claim tx")
+	}
+
+	return resp, http.StatusOK, nil
 }

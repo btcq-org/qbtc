@@ -20,6 +20,20 @@ type Config struct {
 
 	// RequestTimeoutSec is the maximum time allowed for proof generation.
 	RequestTimeoutSec int `mapstructure:"request_timeout_sec" json:"request_timeout_sec"`
+
+	// BroadcastGRPCAddr is the gRPC endpoint of the qbtc node to broadcast to (e.g. "localhost:9090").
+	// Leave empty to disable on-chain broadcasting.
+	BroadcastGRPCAddr string `mapstructure:"broadcast_grpc_addr" json:"broadcast_grpc_addr,omitempty"`
+
+	// BroadcastPrivKeyHex is the hex-encoded secp256k1 private key used to sign and broadcast claim txs.
+	// Leave empty to disable on-chain broadcasting.
+	BroadcastPrivKeyHex string `mapstructure:"broadcast_priv_key_hex" json:"broadcast_priv_key_hex,omitempty"`
+
+	// BroadcastFee is the tx fee paid when broadcasting (e.g. "1000uqbtc").
+	BroadcastFee string `mapstructure:"broadcast_fee" json:"broadcast_fee,omitempty"`
+
+	// BroadcastGasLimit is the gas limit for broadcast txs (e.g. 200000).
+	BroadcastGasLimit uint64 `mapstructure:"broadcast_gas_limit" json:"broadcast_gas_limit,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
