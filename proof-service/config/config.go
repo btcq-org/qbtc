@@ -25,10 +25,9 @@ type Config struct {
 	// Leave empty to disable on-chain broadcasting.
 	BroadcastGRPCAddr string `mapstructure:"broadcast_grpc_addr" json:"broadcast_grpc_addr,omitempty"`
 
-	// BroadcastPrivKeyHex is the hex-encoded secp256k1 private key used to sign and broadcast claim txs.
-	// Leave empty to disable on-chain broadcasting.
-	BroadcastPrivKeyHex string `mapstructure:"broadcast_priv_key_hex" json:"broadcast_priv_key_hex,omitempty"`
-
+	// BroadcastPrivKeyHexList is a list of hex-encoded secp256k1 private keys used to sign and
+	// broadcast claim txs. Keys are selected in round-robin order. Leave empty to disable broadcasting.
+	BroadcastPrivKeyHexList []string `mapstructure:"broadcast_priv_key_hex_list" json:"broadcast_priv_key_hex_list,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.

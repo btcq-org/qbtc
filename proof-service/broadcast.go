@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/btcq-org/qbtc/proof-service/config"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
@@ -26,10 +27,17 @@ import (
 // gasAdjustment is the multiplier applied to the simulated gas usage.
 const gasAdjustment = 1.5
 
-// Broadcaster signs and broadcasts MsgClaimWithProof transactions to the qbtc chain.
-type Broadcaster struct {
+// keyEntry holds a private key and its derived bech32 address.
+type keyEntry struct {
 	privKey  cryptotypes.PrivKey
 	fromAddr string
+}
+
+// Broadcaster signs and broadcasts MsgClaimWithProof transactions to the qbtc chain.
+// Multiple signing keys are supported and selected in round-robin order.
+type Broadcaster struct {
+	keys     []keyEntry
+	counter  atomic.Uint64
 	chainID  string
 	grpcConn *grpc.ClientConn
 	txConfig client.TxConfig
@@ -37,22 +45,28 @@ type Broadcaster struct {
 }
 
 // NewBroadcaster creates a Broadcaster from the service config.
-// Returns nil, nil when broadcasting is not configured (missing addr or key).
+// Returns nil, nil when broadcasting is not configured (missing addr or keys).
 func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
-	if cfg.BroadcastGRPCAddr == "" || cfg.BroadcastPrivKeyHex == "" {
+	if cfg.BroadcastGRPCAddr == "" || len(cfg.BroadcastPrivKeyHexList) == 0 {
 		return nil, nil
 	}
 
-	// Decode private key from hex
-	privKeyBytes, err := hex.DecodeString(cfg.BroadcastPrivKeyHex)
-	if err != nil {
-		return nil, fmt.Errorf("invalid broadcast_priv_key_hex: %w", err)
+	// Decode all private keys
+	keys := make([]keyEntry, 0, len(cfg.BroadcastPrivKeyHexList))
+	for i, hexKey := range cfg.BroadcastPrivKeyHexList {
+		privKeyBytes, err := hex.DecodeString(hexKey)
+		if err != nil {
+			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: invalid hex: %w", i, err)
+		}
+		if len(privKeyBytes) != 32 {
+			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: must be 64 hex characters (32 bytes), got %d bytes", i, len(privKeyBytes))
+		}
+		privKey := &secp256k1.PrivKey{Key: privKeyBytes}
+		keys = append(keys, keyEntry{
+			privKey:  privKey,
+			fromAddr: sdk.AccAddress(privKey.PubKey().Address()).String(),
+		})
 	}
-	if len(privKeyBytes) != 32 {
-		return nil, fmt.Errorf("broadcast_priv_key_hex must be 64 hex characters (32 bytes), got %d bytes", len(privKeyBytes))
-	}
-	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
-	fromAddr := sdk.AccAddress(privKey.PubKey().Address()).String()
 
 	// Set up codec and tx config
 	registry := codectypes.NewInterfaceRegistry()
@@ -68,8 +82,7 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 	}
 
 	return &Broadcaster{
-		privKey:  privKey,
-		fromAddr: fromAddr,
+		keys:     keys,
 		chainID:  cfg.ChainID,
 		grpcConn: conn,
 		txConfig: txConfig,
@@ -77,9 +90,19 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 	}, nil
 }
 
-// FromAddress returns the bech32 address that will sign and pay for transactions.
-func (b *Broadcaster) FromAddress() string {
-	return b.fromAddr
+// FromAddresses returns the bech32 addresses of all configured signing keys.
+func (b *Broadcaster) FromAddresses() []string {
+	addrs := make([]string, len(b.keys))
+	for i, k := range b.keys {
+		addrs[i] = k.fromAddr
+	}
+	return addrs
+}
+
+// nextKey returns the next signing key in round-robin order.
+func (b *Broadcaster) nextKey() keyEntry {
+	idx := b.counter.Add(1) - 1
+	return b.keys[idx%uint64(len(b.keys))]
 }
 
 // Close releases the underlying gRPC connection.
@@ -88,9 +111,12 @@ func (b *Broadcaster) Close() {
 }
 
 // BroadcastClaim builds, signs, and broadcasts a MsgClaimWithProof derived from
-// the given ProveResponse. Gas is estimated via simulation. No fee is required.
+// the given ProveResponse. A signing key is chosen in round-robin order.
+// Gas is estimated via simulation. No fee is required.
 // Returns the transaction hash on success.
 func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (string, error) {
+	key := b.nextKey()
+
 	// Build the message
 	msg := &qbtctypes.MsgClaimWithProof{
 		Claimer:          resp.ClaimerAddress,
@@ -103,9 +129,9 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 	}
 
 	// Fetch account number and sequence from chain
-	accountNum, seq, err := b.fetchAccountInfo(ctx)
+	accountNum, seq, err := b.fetchAccountInfo(ctx, key.fromAddr)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch account info for %s: %w", b.fromAddr, err)
+		return "", fmt.Errorf("failed to fetch account info for %s: %w", key.fromAddr, err)
 	}
 
 	// Build tx with zero gas for simulation
@@ -116,7 +142,7 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 	txBuilder.SetGasLimit(0)
 
 	// Sign with zero gas to get valid tx bytes for simulation
-	if err := b.signTx(ctx, txBuilder, accountNum, seq); err != nil {
+	if err := b.signTx(ctx, key, txBuilder, accountNum, seq); err != nil {
 		return "", fmt.Errorf("failed to sign tx for simulation: %w", err)
 	}
 
@@ -133,7 +159,7 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 	}
 	txBuilder.SetGasLimit(gasLimit)
 
-	if err := b.signTx(ctx, txBuilder, accountNum, seq); err != nil {
+	if err := b.signTx(ctx, key, txBuilder, accountNum, seq); err != nil {
 		return "", fmt.Errorf("failed to sign tx: %w", err)
 	}
 
@@ -175,10 +201,10 @@ func (b *Broadcaster) simulateGas(ctx context.Context, txBuilder client.TxBuilde
 	return uint64(float64(simResp.GasInfo.GasUsed) * gasAdjustment), nil
 }
 
-// fetchAccountInfo retrieves the account number and sequence for the broadcaster address.
-func (b *Broadcaster) fetchAccountInfo(ctx context.Context) (accountNum, seq uint64, err error) {
+// fetchAccountInfo retrieves the account number and sequence for the given address.
+func (b *Broadcaster) fetchAccountInfo(ctx context.Context, addr string) (accountNum, seq uint64, err error) {
 	authClient := authtypes.NewQueryClient(b.grpcConn)
-	resp, err := authClient.Account(ctx, &authtypes.QueryAccountRequest{Address: b.fromAddr})
+	resp, err := authClient.Account(ctx, &authtypes.QueryAccountRequest{Address: addr})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -190,11 +216,11 @@ func (b *Broadcaster) fetchAccountInfo(ctx context.Context) (accountNum, seq uin
 	return account.AccountNumber, account.Sequence, nil
 }
 
-// signTx signs the tx builder in-place with the broadcaster's private key.
-func (b *Broadcaster) signTx(ctx context.Context, txBuilder client.TxBuilder, accountNum, seq uint64) error {
+// signTx signs the tx builder in-place with the given key.
+func (b *Broadcaster) signTx(ctx context.Context, key keyEntry, txBuilder client.TxBuilder, accountNum, seq uint64) error {
 	// Set empty signature first so the tx bytes are well-formed for sign-byte derivation.
 	emptySig := txsigning.SignatureV2{
-		PubKey: b.privKey.PubKey(),
+		PubKey: key.privKey.PubKey(),
 		Data: &txsigning.SingleSignatureData{
 			SignMode:  txsigning.SignMode_SIGN_MODE_DIRECT,
 			Signature: nil,
@@ -206,11 +232,11 @@ func (b *Broadcaster) signTx(ctx context.Context, txBuilder client.TxBuilder, ac
 	}
 
 	signerData := authsigning.SignerData{
-		Address:       b.fromAddr,
+		Address:       key.fromAddr,
 		ChainID:       b.chainID,
 		AccountNumber: accountNum,
 		Sequence:      seq,
-		PubKey:        b.privKey.PubKey(),
+		PubKey:        key.privKey.PubKey(),
 	}
 
 	signBytes, err := authsigning.GetSignBytesAdapter(
@@ -224,13 +250,13 @@ func (b *Broadcaster) signTx(ctx context.Context, txBuilder client.TxBuilder, ac
 		return fmt.Errorf("failed to get sign bytes: %w", err)
 	}
 
-	signature, err := b.privKey.Sign(signBytes)
+	signature, err := key.privKey.Sign(signBytes)
 	if err != nil {
 		return fmt.Errorf("failed to sign: %w", err)
 	}
 
 	realSig := txsigning.SignatureV2{
-		PubKey: b.privKey.PubKey(),
+		PubKey: key.privKey.PubKey(),
 		Data: &txsigning.SingleSignatureData{
 			SignMode:  txsigning.SignMode_SIGN_MODE_DIRECT,
 			Signature: signature,

@@ -82,7 +82,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		return nil, fmt.Errorf("failed to initialize broadcaster: %w", err)
 	}
 	if broadcaster != nil {
-		logger.Info().Str("from_addr", broadcaster.FromAddress()).Str("grpc_addr", cfg.BroadcastGRPCAddr).Msg("broadcaster enabled")
+		logger.Info().Strs("from_addrs", broadcaster.FromAddresses()).Str("grpc_addr", cfg.BroadcastGRPCAddr).Msg("broadcaster enabled")
 	}
 
 	// Create metrics
