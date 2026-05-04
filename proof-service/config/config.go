@@ -29,11 +29,6 @@ type Config struct {
 	// Leave empty to disable on-chain broadcasting.
 	BroadcastPrivKeyHex string `mapstructure:"broadcast_priv_key_hex" json:"broadcast_priv_key_hex,omitempty"`
 
-	// BroadcastFee is the tx fee paid when broadcasting (e.g. "1000uqbtc").
-	BroadcastFee string `mapstructure:"broadcast_fee" json:"broadcast_fee,omitempty"`
-
-	// BroadcastGasLimit is the gas limit for broadcast txs (e.g. 200000).
-	BroadcastGasLimit uint64 `mapstructure:"broadcast_gas_limit" json:"broadcast_gas_limit,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
