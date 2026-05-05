@@ -11,7 +11,6 @@ import (
 var (
 	_ sdk.Msg              = &MsgSetNodePeerAddress{}
 	_ sdk.HasValidateBasic = &MsgSetNodePeerAddress{}
-	_ sdk.LegacyMsg        = &MsgSetNodePeerAddress{}
 )
 
 // ValidatePeerAddress validates the format of a peer address: <peerID>@<host>:<port>
@@ -69,10 +68,4 @@ func (m *MsgSetNodePeerAddress) ValidateBasic() error {
 
 	// Use shared validation function
 	return ValidatePeerAddress(m.PeerAddress)
-}
-
-// GetSigners defines whose signature is required
-func (m *MsgSetNodePeerAddress) GetSigners() []sdk.AccAddress {
-	acct, _ := sdk.AccAddressFromBech32(m.Signer)
-	return []sdk.AccAddress{acct}
 }
