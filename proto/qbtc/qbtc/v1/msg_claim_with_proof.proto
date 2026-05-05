@@ -44,6 +44,9 @@ message MsgClaimWithProof {
   // public input to the ZK circuit; the handler natively verifies
   // RIPEMD160(pub_key_hash_sha256) matches the UTXO's Bitcoin address hash.
   string pub_key_hash_sha256 = 7;
+  // Optional. If set, minted tokens are sent to this address instead of
+  // claimer. The ZK proof must commit to this address (via qbtc_address_hash).
+  string receiver = 8;
 }
 
 // MsgClaimWithProofResponse is the response for a successful batch claim.

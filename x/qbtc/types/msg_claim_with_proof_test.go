@@ -16,6 +16,16 @@ import (
 // This is the address format expected by sdk.AccAddressFromBech32
 const validBech32Address = "qbtc1ddffch4l0ynyd8v4q05j9chzqf7dl2pvz9knds"
 
+// makeValidReceiverAddress returns a valid bech32 address distinct from validBech32Address.
+// Must be called after the bech32 prefix has been configured in the SDK.
+func makeValidReceiverAddress() string {
+	addr := sdk.AccAddress([]byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+		0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+	})
+	return addr.String()
+}
+
 // validBitcoinTxID is a valid 64-character hex Bitcoin transaction ID for testing
 const validBitcoinTxID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -139,6 +149,35 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Proof:           makeValidProof(),
 			},
 			expectErr: false,
+		},
+		{
+			name: "valid message - with receiver",
+			msg: &MsgClaimWithProof{
+				Claimer:          validBech32Address,
+				Receiver:         makeValidReceiverAddress(),
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				MessageHash:      makeValidMessageHash(),
+				AddressHash:      makeValidAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeValidProof(),
+			},
+			expectErr: false,
+		},
+		{
+			name: "invalid receiver address",
+			msg: &MsgClaimWithProof{
+				Claimer:          validBech32Address,
+				Receiver:         "not-a-valid-bech32",
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				MessageHash:      makeValidMessageHash(),
+				AddressHash:      makeValidAddressHash(),
+				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeValidProof(),
+			},
+			expectErr: true,
+			errMsg:    "invalid receiver address",
 		},
 		{
 			name: "missing claimer",

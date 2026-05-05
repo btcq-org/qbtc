@@ -39,6 +39,18 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid claimer address: %v", err)
 	}
 
+	// Resolve the destination: receiver overrides claimer when set
+	recipientAddr := claimerAddr
+	recipientBech32 := msg.Claimer
+	if msg.Receiver != "" {
+		receiverAddr, err := sdk.AccAddressFromBech32(msg.Receiver)
+		if err != nil {
+			return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid receiver address: %v", err)
+		}
+		recipientAddr = receiverAddr
+		recipientBech32 = msg.Receiver
+	}
+
 	// Find the first valid UTXO to determine the proven address
 	var provenAddressHash [20]byte
 	var provenBtcAddress string
@@ -81,8 +93,10 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrInvalidRequest.Wrap("no valid claimable UTXOs found")
 	}
 
-	// Verify the ZK proof against the determined address
-	if err := s.verifyProof(sdkCtx, msg, provenAddressHash); err != nil {
+	// Verify the ZK proof against the determined address.
+	// recipientBech32 is used to derive qbtcAddressHash so the proof binds to
+	// the actual coin destination (receiver when set, claimer otherwise).
+	if err := s.verifyProof(sdkCtx, msg, provenAddressHash, recipientBech32); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("proof verification failed: %v", err)
 	}
 
@@ -159,7 +173,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 
 	var totalClaimed uint64
 	for _, utxo := range claimableUTXOs {
-		if err := s.k.ClaimUTXO(cacheCtx, utxo.txid, utxo.vout, claimerAddr); err != nil {
+		if err := s.k.ClaimUTXO(cacheCtx, utxo.txid, utxo.vout, recipientAddr); err != nil {
 			return nil, sdkerror.ErrInvalidRequest.Wrapf("failed to claim UTXO[%d]: %v", utxo.index, err)
 		}
 		totalClaimed += utxo.amount
@@ -173,6 +187,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		sdk.NewEvent(
 			"claim_with_proof",
 			sdk.NewAttribute("claimer", msg.Claimer),
+			sdk.NewAttribute("receiver", recipientBech32),
 			sdk.NewAttribute("btc_address", provenBtcAddress),
 			sdk.NewAttribute("utxos_claimed", fmt.Sprintf("%d", len(claimableUTXOs))),
 			sdk.NewAttribute("utxos_skipped", fmt.Sprintf("%d", skippedCount)),
@@ -182,6 +197,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 
 	sdkCtx.Logger().Info("batch claimed with proof",
 		"claimer", msg.Claimer,
+		"receiver", recipientBech32,
 		"btc_address", provenBtcAddress,
 		"utxos_claimed", len(claimableUTXOs),
 		"utxos_skipped", skippedCount,
@@ -196,8 +212,9 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 }
 
 // verifyProof verifies the ZK proof for the claim.
-// The proof must demonstrate a valid ECDSA signature from the key that controls the Bitcoin address.
-func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, addressHash [20]byte) error {
+// recipientBech32 is the address the proof must commit to — it is the receiver
+// when set, otherwise the claimer. This binding prevents front-running.
+func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, addressHash [20]byte, recipientBech32 string) error {
 	// Convert the proof from proto format
 	proofBytes, err := hex.DecodeString(msg.Proof)
 	if err != nil {
@@ -215,8 +232,9 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	var pubKeyHashSHA256 [32]byte
 	copy(pubKeyHashSHA256[:], pubKeyHashBytes)
 
-	// Compute the btcq address hash for binding (prevents front-running)
-	qbtcAddressHash := zk.HashQBTCAddress(msg.Claimer)
+	// Derive qbtcAddressHash from the recipient (receiver when set, else claimer).
+	// The proof must commit to the actual coin destination to prevent redirection.
+	qbtcAddressHash := zk.HashQBTCAddress(recipientBech32)
 
 	// Compute chain ID hash from the chain ID (prevents cross-chain replay)
 	chainID := sdkCtx.ChainID()

@@ -1,0 +1,22 @@
+# buf.gen.openapi.yaml
+#
+# Generates a single merged OpenAPI v2 spec covering every proto file in this
+# module. Run via `make proto-openapi-gen`; the resulting file is moved to
+# docs/static/openapi.json and embedded into qbtcd at build time.
+version: v2
+plugins:
+  - local:
+      [
+        "go",
+        "tool",
+        "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2",
+      ]
+    out: .
+    strategy: all
+    opt:
+      - logtostderr=true
+      - openapi_naming_strategy=fqn
+      - json_names_for_fields=false
+      - generate_unbound_methods=false
+      - allow_merge=true
+      - merge_file_name=openapi

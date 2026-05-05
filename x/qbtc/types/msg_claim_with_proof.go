@@ -42,6 +42,13 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 		return se.ErrInvalidAddress.Wrapf("invalid claimer address: %v", err)
 	}
 
+	// Validate optional receiver address when provided
+	if m.Receiver != "" {
+		if _, err := sdk.AccAddressFromBech32(m.Receiver); err != nil {
+			return se.ErrInvalidAddress.Wrapf("invalid receiver address: %v", err)
+		}
+	}
+
 	// Validate at least one UTXO is provided
 	if len(m.Utxos) == 0 {
 		return se.ErrInvalidRequest.Wrap("at least one UTXO is required")

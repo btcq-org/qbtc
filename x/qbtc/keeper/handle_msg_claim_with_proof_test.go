@@ -139,24 +139,26 @@ type publicInput struct {
 // generateProof generates a ZK proof for the test fixture's claimer
 func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	t.Helper()
+	return f.generateProofForRecipient(t, f.claimerAddr)
+}
 
-	qbtcAddressHash := zk.HashQBTCAddress(f.claimerAddr)
+// generateProofForRecipient generates a ZK proof binding to the given recipient address.
+func (f *claimTestFixture) generateProofForRecipient(t *testing.T, recipientAddr string) ([]byte, publicInput) {
+	t.Helper()
+
+	qbtcAddressHash := zk.HashQBTCAddress(recipientAddr)
 	chainIDHash := zk.ComputeChainIDHash(testChainID)
 
-	// Compute the claim message that needs to be signed
 	messageHash := zk.ComputeClaimMessage(f.addressHash, qbtcAddressHash, chainIDHash)
 
-	// Sign the message with ECDSA (simulating what TSS would do)
 	sig := ecdsa.Sign(f.btcPrivKey, messageHash[:])
 
-	// Parse R and S from DER-encoded signature
 	sigBytes := sig.Serialize()
 	rLen := int(sigBytes[3])
 	rBytes := sigBytes[4 : 4+rLen]
 	sLen := int(sigBytes[4+rLen+1])
 	sBytes := sigBytes[4+rLen+2 : 4+rLen+2+sLen]
 
-	// Remove leading zeros (DER uses signed integers)
 	if len(rBytes) > 0 && rBytes[0] == 0 {
 		rBytes = rBytes[1:]
 	}
@@ -167,12 +169,10 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	sigR := new(big.Int).SetBytes(rBytes)
 	sigS := new(big.Int).SetBytes(sBytes)
 
-	// Get public key coordinates
 	pubKey := f.btcPrivKey.PubKey()
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKey.SerializeCompressed())
 	require.NoError(t, err)
 
-	// Generate the ZK proof
 	proof, err := f.prover.GenerateProof(zk.ProofParams{
 		SignatureR:  sigR,
 		SignatureS:  sigS,
@@ -522,4 +522,89 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "proof verification failed")
 	assert.Nil(t, resp)
+}
+
+// TestClaimWithProof_Receiver tests that the receiver field redirects coins and
+// is used as the qbtcAddressHash binding in ZK proof verification.
+func TestClaimWithProof_Receiver(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	f := setupClaimTest(t)
+
+	// A separate address that will receive the coins instead of the claimer.
+	receiverAddr := qbtctestutil.GetRandomQBTCAddress()
+
+	btcAddr := bitcoinAddressFromHash(f.addressHash)
+	utxo := types.UTXO{
+		Txid:           "aaab000000000000000000000000000000000000000000000000000000000001",
+		Vout:           0,
+		Amount:         100000000,
+		EntitledAmount: 60000000,
+		ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+	}
+	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "aaab000000000000000000000000000000000000000000000000000000000001-0", utxo))
+
+	t.Run("coins go to receiver when set", func(t *testing.T) {
+		// Proof is bound to receiverAddr, not claimerAddr.
+		proofData, pi := f.generateProofForRecipient(t, receiverAddr)
+
+		receiverAccAddr, err := sdk.AccAddressFromBech32(receiverAddr)
+		require.NoError(t, err)
+
+		f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
+		// Coins must go to the receiver address, not the claimer.
+		f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, receiverAccAddr, gomock.Any()).Return(nil).Times(1)
+
+		msg := &types.MsgClaimWithProof{
+			Claimer:          f.claimerAddr,
+			Receiver:         receiverAddr,
+			Utxos:            []types.UTXORef{{Txid: "aaab000000000000000000000000000000000000000000000000000000000001", Vout: 0}},
+			Proof:            hex.EncodeToString(proofData),
+			MessageHash:      hex.EncodeToString(pi.MessageHash[:]),
+			AddressHash:      hex.EncodeToString(pi.AddressHash[:]),
+			PubKeyHashSha256: hex.EncodeToString(pi.PubKeyHashSHA256[:]),
+			QbtcAddressHash:  hex.EncodeToString(pi.QBTCAddressHash[:]),
+		}
+
+		server := keeper.NewMsgServerImpl(f.keeper)
+		resp, err := server.ClaimWithProof(f.ctx, msg)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, uint32(1), resp.UtxosClaimed)
+		assert.Equal(t, uint64(60000000), resp.TotalAmountClaimed)
+	})
+
+	t.Run("proof bound to claimer rejected when receiver set", func(t *testing.T) {
+		// Re-insert the UTXO (previous sub-test may have zeroed EntitledAmount).
+		utxo2 := types.UTXO{
+			Txid:           "aaab000000000000000000000000000000000000000000000000000000000002",
+			Vout:           0,
+			Amount:         100000000,
+			EntitledAmount: 60000000,
+			ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+		}
+		require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "aaab000000000000000000000000000000000000000000000000000000000002-0", utxo2))
+
+		// Proof is bound to claimerAddr but message says receiver = receiverAddr.
+		proofData, pi := f.generateProof(t) // claimer-bound proof
+
+		msg := &types.MsgClaimWithProof{
+			Claimer:          f.claimerAddr,
+			Receiver:         receiverAddr,
+			Utxos:            []types.UTXORef{{Txid: "aaab000000000000000000000000000000000000000000000000000000000002", Vout: 0}},
+			Proof:            hex.EncodeToString(proofData),
+			MessageHash:      hex.EncodeToString(pi.MessageHash[:]),
+			AddressHash:      hex.EncodeToString(pi.AddressHash[:]),
+			PubKeyHashSha256: hex.EncodeToString(pi.PubKeyHashSHA256[:]),
+			QbtcAddressHash:  hex.EncodeToString(pi.QBTCAddressHash[:]),
+		}
+
+		server := keeper.NewMsgServerImpl(f.keeper)
+		resp, err := server.ClaimWithProof(f.ctx, msg)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "proof verification failed")
+		assert.Nil(t, resp)
+	})
 }
