@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
+	"sync"
 	"sync/atomic"
 
 	"github.com/btcq-org/qbtc/common"
@@ -29,7 +31,10 @@ import (
 const gasAdjustment = 1.5
 
 // keyEntry holds a private key and its derived bech32 address.
+// mu serializes the fetch/sign/broadcast sequence so concurrent requests
+// using the same key cannot read the same account sequence.
 type keyEntry struct {
+	mu       sync.Mutex
 	privKey  cryptotypes.PrivKey
 	fromAddr string
 }
@@ -37,7 +42,7 @@ type keyEntry struct {
 // Broadcaster signs and broadcasts MsgClaimWithProof transactions to the qbtc chain.
 // Multiple signing keys are supported and selected in round-robin order.
 type Broadcaster struct {
-	keys     []keyEntry
+	keys     []*keyEntry
 	counter  atomic.Uint64
 	chainID  string
 	grpcConn *grpc.ClientConn
@@ -53,7 +58,7 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 	}
 
 	// Decode all private keys (ML-DSA-44, 2560 bytes / 5120 hex chars).
-	keys := make([]keyEntry, 0, len(cfg.BroadcastPrivKeyHexList))
+	keys := make([]*keyEntry, 0, len(cfg.BroadcastPrivKeyHexList))
 	for i, hexKey := range cfg.BroadcastPrivKeyHexList {
 		privKeyBytes, err := hex.DecodeString(hexKey)
 		if err != nil {
@@ -67,7 +72,7 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 		if err != nil {
 			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: failed to derive address: %w", i, err)
 		}
-		keys = append(keys, keyEntry{
+		keys = append(keys, &keyEntry{
 			privKey:  cryptotypes.PrivKey(privKey),
 			fromAddr: fromAddr,
 		})
@@ -105,7 +110,7 @@ func (b *Broadcaster) FromAddresses() []string {
 }
 
 // nextKey returns the next signing key in round-robin order.
-func (b *Broadcaster) nextKey() keyEntry {
+func (b *Broadcaster) nextKey() *keyEntry {
 	idx := b.counter.Add(1) - 1
 	return b.keys[idx%uint64(len(b.keys))]
 }
@@ -121,6 +126,8 @@ func (b *Broadcaster) Close() {
 // Returns the transaction hash on success.
 func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (string, error) {
 	key := b.nextKey()
+	key.mu.Lock()
+	defer key.mu.Unlock()
 
 	// Build the message
 	msg := &qbtctypes.MsgClaimWithProof{
@@ -203,7 +210,7 @@ func (b *Broadcaster) simulateGas(ctx context.Context, txBuilder client.TxBuilde
 		return 0, fmt.Errorf("simulate rpc failed: %w", err)
 	}
 
-	return uint64(float64(simResp.GasInfo.GasUsed) * gasAdjustment), nil
+	return uint64(math.Ceil(float64(simResp.GasInfo.GasUsed) * gasAdjustment)), nil
 }
 
 // fetchAccountInfo retrieves the account number and sequence for the given address.
@@ -222,7 +229,7 @@ func (b *Broadcaster) fetchAccountInfo(ctx context.Context, addr string) (accoun
 }
 
 // signTx signs the tx builder in-place with the given key.
-func (b *Broadcaster) signTx(ctx context.Context, key keyEntry, txBuilder client.TxBuilder, accountNum, seq uint64) error {
+func (b *Broadcaster) signTx(ctx context.Context, key *keyEntry, txBuilder client.TxBuilder, accountNum, seq uint64) error {
 	// Set empty signature first so the tx bytes are well-formed for sign-byte derivation.
 	emptySig := txsigning.SignatureV2{
 		PubKey: key.privKey.PubKey(),

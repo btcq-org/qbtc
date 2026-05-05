@@ -28,7 +28,7 @@ type Config struct {
 	// BroadcastPrivKeyHexList is a list of hex-encoded ML-DSA-44 private keys (2560 bytes / 5120 hex
 	// chars each) used to sign and broadcast claim txs. Keys are selected in round-robin order.
 	// Leave empty to disable broadcasting.
-	BroadcastPrivKeyHexList []string `mapstructure:"broadcast_priv_key_hex_list" json:"broadcast_priv_key_hex_list,omitempty"`
+	BroadcastPrivKeyHexList []string `mapstructure:"broadcast_priv_key_hex_list" json:"-"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
