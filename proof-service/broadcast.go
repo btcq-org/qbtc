@@ -11,6 +11,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/mldsa"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -51,17 +52,22 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 		return nil, nil
 	}
 
-	// Decode all private keys
+	// Decode all private keys. Supports secp256k1 (32 bytes) and ML-DSA-44 (2560 bytes).
 	keys := make([]keyEntry, 0, len(cfg.BroadcastPrivKeyHexList))
 	for i, hexKey := range cfg.BroadcastPrivKeyHexList {
 		privKeyBytes, err := hex.DecodeString(hexKey)
 		if err != nil {
 			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: invalid hex: %w", i, err)
 		}
-		if len(privKeyBytes) != 32 {
-			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: must be 64 hex characters (32 bytes), got %d bytes", i, len(privKeyBytes))
+		var privKey cryptotypes.PrivKey
+		switch len(privKeyBytes) {
+		case 32:
+			privKey = &secp256k1.PrivKey{Key: privKeyBytes}
+		case 2560:
+			privKey = &mldsa.PrivKey{Key: privKeyBytes}
+		default:
+			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: unrecognised key length %d bytes (expected 32 for secp256k1 or 2560 for mldsa44)", i, len(privKeyBytes))
 		}
-		privKey := &secp256k1.PrivKey{Key: privKeyBytes}
 		keys = append(keys, keyEntry{
 			privKey:  privKey,
 			fromAddr: sdk.AccAddress(privKey.PubKey().Address()).String(),
