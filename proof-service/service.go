@@ -30,6 +30,9 @@ type Service struct {
 	// Chain ID hash (precomputed at startup)
 	chainIDHash [8]byte
 
+	// Optional on-chain broadcaster (nil when not configured)
+	broadcaster *Broadcaster
+
 	// HTTP server
 	hs *http.Server
 
@@ -73,6 +76,15 @@ func NewService(cfg config.Config) (*Service, error) {
 	chainIDHash := zk.ComputeChainIDHash(cfg.ChainID)
 	logger.Info().Str("chain_id", cfg.ChainID).Msg("computed chain ID hash")
 
+	// Optionally create broadcaster
+	broadcaster, err := NewBroadcaster(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize broadcaster: %w", err)
+	}
+	if broadcaster != nil {
+		logger.Info().Strs("from_addrs", broadcaster.FromAddresses()).Str("grpc_addr", cfg.BroadcastGRPCAddr).Msg("broadcaster enabled")
+	}
+
 	// Create metrics
 	m := metrics.NewMetrics()
 
@@ -90,6 +102,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		cs:          cs,
 		pk:          pk,
 		chainIDHash: chainIDHash,
+		broadcaster: broadcaster,
 		hs:          hs,
 		metrics:     m,
 		stopChan:    make(chan struct{}),
@@ -138,5 +151,10 @@ func (s *Service) Stop() {
 	}
 
 	s.wg.Wait()
+
+	if s.broadcaster != nil {
+		s.broadcaster.Close()
+	}
+
 	s.logger.Info().Msg("proof-service stopped")
 }

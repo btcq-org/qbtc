@@ -20,6 +20,15 @@ type Config struct {
 
 	// RequestTimeoutSec is the maximum time allowed for proof generation.
 	RequestTimeoutSec int `mapstructure:"request_timeout_sec" json:"request_timeout_sec"`
+
+	// BroadcastGRPCAddr is the gRPC endpoint of the qbtc node to broadcast to (e.g. "localhost:9090").
+	// Leave empty to disable on-chain broadcasting.
+	BroadcastGRPCAddr string `mapstructure:"broadcast_grpc_addr" json:"broadcast_grpc_addr,omitempty"`
+
+	// BroadcastPrivKeyHexList is a list of hex-encoded ML-DSA-44 private keys (2560 bytes / 5120 hex
+	// chars each) used to sign and broadcast claim txs. Keys are selected in round-robin order.
+	// Leave empty to disable broadcasting.
+	BroadcastPrivKeyHexList []string `mapstructure:"broadcast_priv_key_hex_list" json:"-"`
 }
 
 // DefaultConfig returns a Config with sensible defaults.
