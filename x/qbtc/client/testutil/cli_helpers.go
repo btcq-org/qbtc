@@ -33,6 +33,7 @@ func MsgClaimWithProofExec(
 	if err != nil {
 		return nil, err
 	}
+	defer os.RemoveAll(tmpDir)
 	path := filepath.Join(tmpDir, "msg.json")
 	if err := os.WriteFile(path, bz, 0o600); err != nil {
 		return nil, err
