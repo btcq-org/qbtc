@@ -100,7 +100,11 @@ proto-gen:
 	@echo "Generating protobuf files..."
 	./scripts/protocgen.sh
 
-.PHONY: proto-gen
+proto-openapi-gen:
+	@echo "Generating OpenAPI spec..."
+	./scripts/protoc-openapi-gen.sh
+
+.PHONY: proto-gen proto-openapi-gen
 
 ###################
 ###  Protobuf formatting ###
