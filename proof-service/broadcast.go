@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/proof-service/config"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -62,9 +63,13 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: expected 2560 bytes (5120 hex chars) for mldsa44, got %d bytes", i, len(privKeyBytes))
 		}
 		privKey := &mldsa.PrivKey{Key: privKeyBytes}
+		fromAddr, err := sdk.Bech32ifyAddressBytes(common.AccountAddressPrefix, privKey.PubKey().Address())
+		if err != nil {
+			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: failed to derive address: %w", i, err)
+		}
 		keys = append(keys, keyEntry{
 			privKey:  cryptotypes.PrivKey(privKey),
-			fromAddr: sdk.AccAddress(privKey.PubKey().Address()).String(),
+			fromAddr: fromAddr,
 		})
 	}
 
