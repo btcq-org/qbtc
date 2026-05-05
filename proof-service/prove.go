@@ -1,6 +1,7 @@
 package proofservice
 
 import (
+	"context"
 	"encoding/hex"
 	"math/big"
 	"net/http"
@@ -9,11 +10,28 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 )
 
-func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
+func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
 	s.logger.Info().Str("claimer_address", req.ClaimerAddress).
 		Int("num_utxos", len(req.UTXOs)).
 		Msg("received proof generation request")
-	// 1. Validate required fields
+
+	// 1. Fail-fast broadcast pre-checks before doing any ZK work.
+	if req.Broadcast {
+		if s.broadcaster == nil {
+			return nil, http.StatusBadRequest, &ErrorResponse{
+				Error: "broadcasting is not configured on this service",
+				Code:  "BROADCAST_NOT_CONFIGURED",
+			}
+		}
+		if req.ChainID != "" && req.ChainID != s.cfg.ChainID {
+			return nil, http.StatusBadRequest, &ErrorResponse{
+				Error: "chain_id must match the service chain when broadcast=true",
+				Code:  "CHAIN_ID_MISMATCH",
+			}
+		}
+	}
+
+	// 2. Validate required fields
 	if req.SignatureR == "" || req.SignatureS == "" {
 		return nil, http.StatusBadRequest, &ErrorResponse{
 			Error: "signature_r and signature_s are required",
@@ -131,7 +149,7 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 	}
 
 	// 10. Build response
-	return &ProveResponse{
+	resp := &ProveResponse{
 		Proof:            hex.EncodeToString(proofBytes),
 		MessageHash:      hex.EncodeToString(messageHash[:]),
 		AddressHash:      hex.EncodeToString(addressHash[:]),
@@ -139,5 +157,22 @@ func (s *Service) generateProof(req ProveRequest) (*ProveResponse, int, *ErrorRe
 		QBTCAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
 		UTXOs:            req.UTXOs,
 		ClaimerAddress:   req.ClaimerAddress,
-	}, http.StatusOK, nil
+	}
+
+	// 11. Optionally broadcast the claim to the chain
+	if req.Broadcast {
+		txHash, err := s.broadcaster.BroadcastClaim(ctx, resp)
+		if err != nil {
+			s.logger.Error().Err(err).Msg("broadcast failed")
+			return nil, http.StatusInternalServerError, &ErrorResponse{
+				Error:   "broadcast failed",
+				Code:    "BROADCAST_FAILED",
+				Details: err.Error(),
+			}
+		}
+		resp.TxHash = txHash
+		s.logger.Info().Str("tx_hash", txHash).Msg("broadcast claim tx")
+	}
+
+	return resp, http.StatusOK, nil
 }
