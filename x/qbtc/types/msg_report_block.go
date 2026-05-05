@@ -32,6 +32,13 @@ func (m *MsgBtcBlock) ValidateBasic() error {
 	}
 	return nil
 }
+func (m *MsgBtcBlock) GetSigners() []sdk.AccAddress {
+	creator, err := sdk.AccAddressFromBech32(m.Signer)
+	if err != nil {
+		panic(err)
+	}
+	return []sdk.AccAddress{creator}
+}
 
 func (m *MsgBtcBlock) GetAttestations() []*Attestation {
 	return m.Attestations
