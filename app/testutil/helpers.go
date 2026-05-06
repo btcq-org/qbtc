@@ -1,4 +1,4 @@
-package app
+package apptestutil
 
 import (
 	"fmt"
@@ -15,6 +15,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/testutil/network"
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
+
+	"github.com/btcq-org/qbtc/app"
 )
 
 // NewTestNetworkFixture returns a TestFixture for cosmos-sdk's testutil/network
@@ -32,7 +34,7 @@ func NewTestNetworkFixture() network.TestFixture {
 	}
 	defer os.RemoveAll(dir)
 
-	tmpApp := New(
+	tmpApp := app.New(
 		log.NewNopLogger(),
 		dbm.NewMemDB(),
 		nil,
@@ -42,7 +44,7 @@ func NewTestNetworkFixture() network.TestFixture {
 
 	return network.TestFixture{
 		AppConstructor: func(val network.ValidatorI) servertypes.Application {
-			return New(
+			return app.New(
 				val.GetCtx().Logger,
 				dbm.NewMemDB(),
 				nil,
