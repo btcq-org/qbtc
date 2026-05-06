@@ -276,8 +276,8 @@ github.com/btcq-org/cometbft v0.0.0-20260502040544-c16030e07020 h1:IthHS0E92lU8p
 github.com/btcq-org/cometbft v0.0.0-20260502040544-c16030e07020/go.mod h1:sKSRd02L706oPkbfqZ49hmedh0vGeNj5zedp6AEAx0c=
 github.com/btcq-org/cosmos-sdk v0.0.0-20260502063610-f7f082a54f9f h1:Ab5+DIn5B/QMPaZGR2u2NZnyNfoUpOvxDNAiDT+Hpdo=
 github.com/btcq-org/cosmos-sdk v0.0.0-20260502063610-f7f082a54f9f/go.mod h1:roNjtW5gDpUWbaAKHWF0k+bDPu8pCtEI1st1ppG1zLk=
-github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e h1:+UD8It+wSKVlRNovOMCwSGIjqMeZCaES41sMr6ivFsM=
-github.com/btcq-org/wasmd v0.0.0-20251028132249-8297a11b364e/go.mod h1:hjhXd6McMd1rDl+QW82VQ6//oPBiLLnXa0Vgj2bIZl8=
+github.com/btcq-org/wasmd v0.0.0-20260505105426-c1d4060c7271 h1:/XbkldafK7TWc7+MH0JgEI0izPQTXJH0/BEi5GMFJ4M=
+github.com/btcq-org/wasmd v0.0.0-20260505105426-c1d4060c7271/go.mod h1:lV0kUfj3IBtGhzp+ksYBePewO17HnnE0U7Z/yTTQsi4=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
 github.com/btcsuite/btcd v0.22.0-beta.0.20220111032746-97732e52810c/go.mod h1:tjmYdS6MLJ5/s0Fj4DbLgSbDHbEqLJrtnHecBFkdz5M=
 github.com/btcsuite/btcd v0.23.5-0.20231215221805-96c9fd8078fd/go.mod h1:nm3Bko6zh6bWP60UxwoT5LzdGJsQJaPo6HjduXq9p6A=
