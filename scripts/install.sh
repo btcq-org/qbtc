@@ -2,7 +2,7 @@
 set -e
 
 # ========== DEFAULTS ==========
-DEFAULT_VERSION="1.0.15"
+DEFAULT_VERSION="1.0.18"
 GITHUB_REPO="btcq-org/qbtc"
 INSTALL_DIR="/usr/local/bin"
 QBTCD_HOME="$HOME/.qbtc"
