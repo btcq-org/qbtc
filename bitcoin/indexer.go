@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -165,8 +166,15 @@ func (i *Indexer) processVOuts(outs []btcjson.Vout, txid string) {
 	}
 }
 
-// ExportUTXO writes DB entries that mention "utxo" in the key to the named file (base64-encoded values).
-// If outPath is empty, it writes to stdout instead.
+// ExportUTXO walks the indexer's DB and writes a slim genesis snapshot. Only
+// outputs whose address decodes via BitcoinAddressToHash160 (P2PKH/P2WPKH on
+// Bitcoin mainnet) are emitted; the chain doesn't support other types in its
+// claim path, so they're skipped here too. Skip counts are logged for
+// diagnostics — operators see why exported counts differ from raw indexer rows.
+//
+// This indexer is mainnet-only. Supporting testnet/regtest would require
+// threading network params through BitcoinAddressToHash160 and the ZK circuit;
+// that's a separate proposal.
 func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	if outPath == "" {
 		return fmt.Errorf("output filepath is empty")
@@ -197,6 +205,8 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 	it := i.db.NewIterator(nil, nil)
 	defer it.Release()
 	idx := 0
+	skippedNoAddress := 0
+	skippedUnsupported := 0
 	for it.First(); it.Valid(); it.Next() {
 		k := it.Key()
 		v := it.Value()
@@ -214,19 +224,22 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 			i.logger.Error().Err(err).Str("key", string(k)).Msg("invalid txid in indexer key")
 			continue
 		}
-		// Skip outputs whose address type is not P2PKH/P2WPKH; the chain only
-		// supports those.
-		var addrBytes []byte
-		if vOut.ScriptPubKey.Address != "" {
-			h, herr := zk.BitcoinAddressToHash160(vOut.ScriptPubKey.Address)
-			if herr != nil {
-				continue
-			}
-			addrBytes = append(addrBytes, h[:]...)
-		} else {
+		if vOut.ScriptPubKey.Address == "" {
+			skippedNoAddress++
+			i.logger.Debug().Str("key", string(k)).Str("type", vOut.ScriptPubKey.Type).Msg("skipping export: no address (likely OP_RETURN or multisig)")
 			continue
 		}
-		amount := uint64(vOut.Value * 1e8)
+		h, herr := zk.BitcoinAddressToHash160(vOut.ScriptPubKey.Address)
+		if herr != nil {
+			skippedUnsupported++
+			i.logger.Debug().Err(herr).Str("key", string(k)).Str("address", vOut.ScriptPubKey.Address).Str("type", vOut.ScriptPubKey.Type).Msg("skipping export: unsupported address type (chain accepts only P2PKH/P2WPKH)")
+			continue
+		}
+		addrBytes := append([]byte{}, h[:]...)
+		// Use math.Round to avoid losing a satoshi to IEEE 754 truncation —
+		// the slim UTXO snapshot feeds chain genesis, so a per-export drift
+		// would break consensus on first block.
+		amount := uint64(math.Round(vOut.Value * 1e8))
 		pVout := qbtctypes.UTXO{
 			Txid:           txid,
 			Vout:           vOut.N,
@@ -242,6 +255,7 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 			i.logger.Info().Int("count", idx).Msg("exported utxos")
 		}
 	}
+	i.logger.Info().Int("exported", idx).Int("skipped_no_address", skippedNoAddress).Int("skipped_unsupported", skippedUnsupported).Msg("export summary")
 	if err := it.Error(); err != nil {
 		return fmt.Errorf("iterator error during export: %w", err)
 	}

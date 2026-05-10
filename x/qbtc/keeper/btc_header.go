@@ -178,15 +178,31 @@ func (s *msgServer) validateBtcBlockCommit(ctx context.Context, msg *types.MsgBt
 		return [hashSize]byte{}, fmt.Errorf("prev_block mismatch: header points to %x, last accepted %x", msg.Commit.Header.PrevBlock, prev)
 	}
 
+	// Bitcoin requires exactly one coinbase tx, at index 0. Enforcing that here
+	// keeps the rest of the handler from having to defend against a multi-coinbase
+	// or misplaced-coinbase commit (where, e.g., processCoinbaseVOuts would only
+	// see the last one and silently lose entitlement on the others).
 	txids := make([][]byte, len(msg.Commit.Txs))
+	coinbaseCount := 0
 	for i, tx := range msg.Commit.Txs {
 		if tx == nil {
 			return [hashSize]byte{}, fmt.Errorf("tx %d nil", i)
+		}
+		if tx.Coinbase {
+			coinbaseCount++
+			if i != 0 {
+				return [hashSize]byte{}, fmt.Errorf("coinbase tx must be at index 0, got %d", i)
+			}
+		} else if i == 0 {
+			return [hashSize]byte{}, fmt.Errorf("first tx must be coinbase")
 		}
 		if len(tx.Txid) != hashSize {
 			return [hashSize]byte{}, fmt.Errorf("tx %d txid wrong length: %d", i, len(tx.Txid))
 		}
 		txids[i] = tx.Txid
+	}
+	if coinbaseCount != 1 {
+		return [hashSize]byte{}, fmt.Errorf("expected exactly 1 coinbase tx, got %d", coinbaseCount)
 	}
 	root, err := MerkleRoot(txids)
 	if err != nil {

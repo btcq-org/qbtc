@@ -3,11 +3,13 @@ package bifrost
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/btcsuite/btcd/btcjson"
+	"github.com/rs/zerolog/log"
 )
 
 // buildBtcBlockCommit converts a Bitcoin RPC verbose-tx result into the slim
@@ -106,23 +108,42 @@ func convertVin(in *btcjson.Vin) (*types.BtcTxIn, error) {
 	}, nil
 }
 
+// btcToSats converts a BTC amount expressed as a float64 to integer satoshis.
+// Direct truncation (uint64(v * 1e8)) loses a satoshi for values like 0.29 or
+// 0.57 BTC because of IEEE 754 rounding; the slim commit feeds straight into
+// merkle/PoW validation, so any per-validator divergence is a fork hazard.
+func btcToSats(btc float64) uint64 {
+	if btc <= 0 || math.IsNaN(btc) || math.IsInf(btc, 0) {
+		return 0
+	}
+	return uint64(math.Round(btc * 1e8))
+}
+
 func convertVout(out *btcjson.Vout) *types.BtcTxOut {
 	o := &types.BtcTxOut{
 		N:    out.N,
-		Sats: uint64(out.Value * 1e8),
+		Sats: btcToSats(out.Value),
 	}
 	switch strings.ToLower(out.ScriptPubKey.Type) {
 	case "nulldata":
-		if scriptBytes, err := hex.DecodeString(out.ScriptPubKey.Hex); err == nil {
-			o.OpReturn = scriptBytes
+		scriptBytes, err := hex.DecodeString(out.ScriptPubKey.Hex)
+		if err != nil {
+			log.Warn().Err(err).Uint32("vout", out.N).Str("script_hex", out.ScriptPubKey.Hex).Msg("failed to decode nulldata script; OP_RETURN will be empty")
+			break
 		}
+		o.OpReturn = scriptBytes
 	default:
 		if out.ScriptPubKey.Address == "" {
 			break
 		}
-		if hash, err := zk.BitcoinAddressToHash160(out.ScriptPubKey.Address); err == nil {
-			o.Address = append(o.Address, hash[:]...)
+		hash, err := zk.BitcoinAddressToHash160(out.ScriptPubKey.Address)
+		if err != nil {
+			// Address types other than P2PKH/P2WPKH (P2SH/P2WSH/P2TR/...) are
+			// expected here; logging at debug avoids flooding for normal blocks.
+			log.Debug().Err(err).Uint32("vout", out.N).Str("address", out.ScriptPubKey.Address).Str("type", out.ScriptPubKey.Type).Msg("unsupported output address; address will be empty")
+			break
 		}
+		o.Address = append(o.Address, hash[:]...)
 	}
 	return o
 }

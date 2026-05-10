@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -82,7 +83,7 @@ func loadBlockCommit(t *testing.T, path string) (*types.BtcBlockCommit, *btcjson
 		for _, o := range tx.Vout {
 			out := &types.BtcTxOut{
 				N:    o.N,
-				Sats: uint64(o.Value * 1e8),
+				Sats: uint64(math.Round(o.Value * 1e8)),
 			}
 			switch strings.ToLower(o.ScriptPubKey.Type) {
 			case "nulldata":
@@ -163,7 +164,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, utxo.EntitledAmount, uint64(313461773))
+				require.Equal(st, utxo.EntitledAmount, uint64(313462452))
 			},
 		},
 		{
@@ -175,7 +176,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, uint64(2502676488), utxo.EntitledAmount)
+				require.Equal(st, uint64(2502676489), utxo.EntitledAmount)
 
 				key1 := utxoKeyFromHexTxid("e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714", 0)
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
@@ -204,7 +205,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, uint64(2502666488), utxo.EntitledAmount)
+				require.Equal(st, uint64(2502666489), utxo.EntitledAmount)
 
 				key1 := utxoKeyFromHexTxid("2bda3732778da19cbf8799aceed3a6ab270948aeac85678bee013ddf3070687e", 0)
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
@@ -257,7 +258,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, uint64(2502666488), utxo.EntitledAmount)
+				require.Equal(st, uint64(2502666489), utxo.EntitledAmount)
 
 				key1 := utxoKeyFromHexTxid("bfa3ed4869f33192946dcc03d7789d6be32aa07f083e9752fcea2a5568a9ea47", 0)
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)

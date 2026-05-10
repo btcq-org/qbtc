@@ -418,13 +418,25 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	txID []byte,
 	totalFee uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_coinbase_vout")
+	// Drain totalFee across outputs in order: each output absorbs as much fee
+	// as it can until totalFee is exhausted. The previous "subtract totalFee
+	// from every output" produced the right answer when there was a single
+	// non-zero output, but undercounted entitlement when miners split the
+	// coinbase across two outputs (e.g. miner reward + pool donation).
+	remainingFee := totalFee
 	for _, out := range outs {
 		if out.Sats == 0 {
 			continue
 		}
 		entitleAmount := out.Sats
-		if entitleAmount > totalFee {
-			entitleAmount -= totalFee
+		if remainingFee > 0 {
+			if entitleAmount > remainingFee {
+				entitleAmount -= remainingFee
+				remainingFee = 0
+			} else {
+				remainingFee -= entitleAmount
+				entitleAmount = 0
+			}
 		}
 		utxo := types.UTXO{
 			Txid:           txID,

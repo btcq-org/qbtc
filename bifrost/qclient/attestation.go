@@ -94,6 +94,13 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 		validatorsByAddr[consAddr.String()] = validator
 	}
 
+	// Marshal once: every validator signs the same commit bytes, so re-encoding
+	// per attestation is pure waste on a hot path.
+	commitBytes, err := proto.Marshal(msg.Commit)
+	if err != nil {
+		return fmt.Errorf("failed to marshal commit for attestation verification: %w", err)
+	}
+
 	// Track processed validators to avoid duplicates
 	processedValidators := make(map[string]bool, len(msg.Attestations))
 	validPower := math.ZeroInt()
@@ -142,11 +149,6 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 			continue
 		}
 
-		commitBytes, err := proto.Marshal(msg.Commit)
-		if err != nil {
-			c.logger.Error().Err(err).Msg("failed to marshal commit for attestation verification")
-			continue
-		}
 		if publicKey.VerifySignature(commitBytes, attestation.Signature) {
 			validatorPower := math.NewInt(validator.ConsensusPower(sdk.DefaultPowerReduction))
 			validPower = validPower.Add(validatorPower)
