@@ -37,42 +37,30 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			setup: func(t *testing.T, f *fixture, bankKeeper *qbtctestutil.MockBankKeeper) {
 				// Set up three UTXOs with different entitled amounts
 				utxo1 := types.UTXO{
-					Txid:           "txid1",
+					Txid:           pad32([]byte("txid1")),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 50000000,
-					ScriptPubKey: &types.ScriptPubKeyResult{
-						Hex:     "76a91488ac",
-						Type:    "pubkeyhash",
-						Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
-					},
+					Address:        make([]byte, 20),
 				}
 				utxo2 := types.UTXO{
-					Txid:           "txid2",
+					Txid:           pad32([]byte("txid2")),
 					Vout:           1,
 					Amount:         200000000,
 					EntitledAmount: 150000000,
-					ScriptPubKey: &types.ScriptPubKeyResult{
-						Hex:     "76a91488ac",
-						Type:    "pubkeyhash",
-						Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
-					},
+					Address:        make([]byte, 20),
 				}
 				utxo3 := types.UTXO{
-					Txid:           "txid3",
+					Txid:           pad32([]byte("txid3")),
 					Vout:           2,
 					Amount:         300000000,
 					EntitledAmount: 250000000,
-					ScriptPubKey: &types.ScriptPubKeyResult{
-						Hex:     "76a91488ac",
-						Type:    "pubkeyhash",
-						Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
-					},
+					Address:        make([]byte, 20),
 				}
 
-				key1 := "txid1-0"
-				key2 := "txid2-1"
-				key3 := "txid3-2"
+				key1 := types.UTXOKey(pad32([]byte("txid1")), 0)
+				key2 := types.UTXOKey(pad32([]byte("txid2")), 1)
+				key3 := types.UTXOKey(pad32([]byte("txid3")), 2)
 
 				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, key1, utxo1))
 				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, key2, utxo2))
@@ -92,25 +80,24 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			msg: &types.MsgGovClaimUTXO{
 				Authority: govtypes.ModuleName,
 				Utxos: []*types.ClaimUTXO{
-					{Txid: "txid1", Vout: 0},
-					{Txid: "txid2", Vout: 1},
-					{Txid: "txid3", Vout: 2},
+					{Txid: pad32([]byte("txid1")), Vout: 0},
+					{Txid: pad32([]byte("txid2")), Vout: 1},
+					{Txid: pad32([]byte("txid3")), Vout: 2},
 				},
 			},
 			expectErr: false,
 			checkFunc: func(t *testing.T, f *fixture) {
-				// Verify all UTXOs have EntitledAmount set to 0
-				utxo1, err := f.keeper.Utxoes.Get(f.ctx, "txid1-0")
+				utxo1, err := f.keeper.Utxoes.Get(f.ctx, types.UTXOKey(pad32([]byte("txid1")), 0))
 				require.NoError(t, err)
 				assert.Equal(t, uint64(0), utxo1.EntitledAmount)
-				assert.Equal(t, uint64(100000000), utxo1.Amount) // Original amount should remain
+				assert.Equal(t, uint64(100000000), utxo1.Amount)
 
-				utxo2, err := f.keeper.Utxoes.Get(f.ctx, "txid2-1")
+				utxo2, err := f.keeper.Utxoes.Get(f.ctx, types.UTXOKey(pad32([]byte("txid2")), 1))
 				require.NoError(t, err)
 				assert.Equal(t, uint64(0), utxo2.EntitledAmount)
 				assert.Equal(t, uint64(200000000), utxo2.Amount)
 
-				utxo3, err := f.keeper.Utxoes.Get(f.ctx, "txid3-2")
+				utxo3, err := f.keeper.Utxoes.Get(f.ctx, types.UTXOKey(pad32([]byte("txid3")), 2))
 				require.NoError(t, err)
 				assert.Equal(t, uint64(0), utxo3.EntitledAmount)
 				assert.Equal(t, uint64(300000000), utxo3.Amount)
@@ -124,7 +111,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			msg: &types.MsgGovClaimUTXO{
 				Authority: "wrong-authority",
 				Utxos: []*types.ClaimUTXO{
-					{Txid: "txid1", Vout: 0},
+					{Txid: pad32([]byte("txid1")), Vout: 0},
 				},
 			},
 			expectErr: true,
@@ -138,7 +125,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			msg: &types.MsgGovClaimUTXO{
 				Authority: "",
 				Utxos: []*types.ClaimUTXO{
-					{Txid: "txid1", Vout: 0},
+					{Txid: pad32([]byte("txid1")), Vout: 0},
 				},
 			},
 			expectErr: true,
@@ -164,7 +151,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			msg: &types.MsgGovClaimUTXO{
 				Authority: govtypes.ModuleName,
 				Utxos: []*types.ClaimUTXO{
-					{Txid: "", Vout: 0},
+					{Txid: nil, Vout: 0},
 				},
 			},
 			expectErr: true,
@@ -178,7 +165,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			msg: &types.MsgGovClaimUTXO{
 				Authority: govtypes.ModuleName,
 				Utxos: []*types.ClaimUTXO{
-					{Txid: "nonexistent", Vout: 0},
+					{Txid: pad32([]byte("nonexistent")), Vout: 0},
 				},
 			},
 			expectErr: true,
@@ -189,29 +176,24 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			setup: func(t *testing.T, f *fixture, bankKeeper *qbtctestutil.MockBankKeeper) {
 				// Set up a UTXO with zero entitled amount
 				utxo := types.UTXO{
-					Txid:           "txid4",
+					Txid:           pad32([]byte("txid4")),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 0, // Already claimed
-					ScriptPubKey: &types.ScriptPubKeyResult{
-						Hex:     "76a91488ac",
-						Type:    "pubkeyhash",
-						Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
-					},
+					Address:        make([]byte, 20),
 				}
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "txid4-0", utxo))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, types.UTXOKey(pad32([]byte("txid4")), 0), utxo))
 				// MintCoins should not be called for zero entitled amount
 			},
 			msg: &types.MsgGovClaimUTXO{
 				Authority: govtypes.ModuleName,
 				Utxos: []*types.ClaimUTXO{
-					{Txid: "txid4", Vout: 0},
+					{Txid: pad32([]byte("txid4")), Vout: 0},
 				},
 			},
 			expectErr: false,
 			checkFunc: func(t *testing.T, f *fixture) {
-				// UTXO should still have zero entitled amount
-				utxo, err := f.keeper.Utxoes.Get(f.ctx, "txid4-0")
+				utxo, err := f.keeper.Utxoes.Get(f.ctx, types.UTXOKey(pad32([]byte("txid4")), 0))
 				require.NoError(t, err)
 				assert.Equal(t, uint64(0), utxo.EntitledAmount)
 			},

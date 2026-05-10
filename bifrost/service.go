@@ -1,9 +1,8 @@
 package bifrost
 
 import (
-	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -25,6 +24,7 @@ import (
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/privval"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
@@ -349,7 +349,10 @@ func (s *Service) getQBTCLatestProcessBTCBlockHeight(ctx context.Context) (uint6
 	return s.qclient.GetLatestBtcBlockHeight(newCtx)
 }
 
-// getBtcBlock retrieves the bitcoin block at the given height
+// getBtcBlock retrieves the bitcoin block at the given height, builds the
+// slim BtcBlockCommit, signs it, and gossips it to peers. Validators sign
+// proto.Marshal(commit) so the signature covers both the BTC header and the
+// consumed transaction fields without depending on JSON serialization order.
 func (s *Service) getBtcBlock(height int64) error {
 	blockHash, err := s.btcClient.GetBlockHash(height)
 	if err != nil {
@@ -363,33 +366,37 @@ func (s *Service) getBtcBlock(height int64) error {
 		return nil
 	}
 
-	content, err := json.Marshal(block)
+	commit, err := buildBtcBlockCommit(block)
 	if err != nil {
-		return fmt.Errorf("failed to marshal block content at height %d: %w", height, err)
+		return fmt.Errorf("failed to build commit at height %d: %w", height, err)
 	}
-	compressedContent, err := types.GzipDeterministic(content, gzip.BestCompression)
+
+	commitBytes, err := proto.Marshal(commit)
 	if err != nil {
-		return fmt.Errorf("failed to compress block content at height %d: %w", height, err)
+		return fmt.Errorf("failed to marshal commit at height %d: %w", height, err)
 	}
-	sig, err := s.validatorPrivateKey.Sign(compressedContent)
+	sig, err := s.validatorPrivateKey.Sign(commitBytes)
 	if err != nil {
-		return fmt.Errorf("failed to sign block content at height %d: %w", height, err)
+		return fmt.Errorf("failed to sign commit at height %d: %w", height, err)
 	}
-	// use consensus address to explicitly identify the consensus address of the validator
-	// sdk.ValAddress is reserved for the OperatorAddress
-	// eg: qbtcvalcons1...
+
+	hashBytes, err := hex.DecodeString(block.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to decode block hash at height %d: %w", height, err)
+	}
+	hashBytes = reverseBytes(hashBytes)
+
 	valAddr := sdk.ConsAddress(s.validatorPrivateKey.PubKey().Address())
 	blockGossip := types.BlockGossip{
-		Hash:         block.Hash,
-		Height:       uint64(block.Height),
-		BlockContent: compressedContent,
+		Hash:   hashBytes,
+		Height: uint64(block.Height),
+		Commit: commit,
 		Attestation: &types.Attestation{
 			Address:   valAddr.String(),
 			Signature: sig,
 		},
 	}
-	err = s.pubsub.Publish(blockGossip)
-	if err != nil {
+	if err := s.pubsub.Publish(blockGossip); err != nil {
 		return fmt.Errorf("failed to publish block gossip at height %d: %w", height, err)
 	}
 	s.logger.Info().Int64("block_height", height).Msg("published block gossip")

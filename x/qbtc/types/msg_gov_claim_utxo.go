@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"strconv"
 
 	se "github.com/cosmos/cosmos-sdk/types/errors"
@@ -17,8 +18,8 @@ func (m *MsgGovClaimUTXO) ValidateBasic() error {
 		return se.ErrInvalidRequest.Wrapf("too many UTXOs in batch: %d (max %d)", len(m.Utxos), MaxBatchClaimUTXOs)
 	}
 	for _, utxo := range m.Utxos {
-		if utxo.Txid == "" {
-			return se.ErrInvalidRequest.Wrap("txid is required")
+		if len(utxo.Txid) != BitcoinTxIDLength {
+			return se.ErrInvalidRequest.Wrapf("txid must be %d bytes, got %d", BitcoinTxIDLength, len(utxo.Txid))
 		}
 	}
 	return nil
@@ -27,7 +28,7 @@ func (m *MsgGovClaimUTXO) ValidateBasic() error {
 func (m *MsgGovClaimUTXO) GetUtxoString() []string {
 	utxoIds := make([]string, len(m.Utxos))
 	for i, utxo := range m.Utxos {
-		utxoIds[i] = utxo.Txid + ":" + strconv.FormatInt(int64(utxo.Vout), 10)
+		utxoIds[i] = hex.EncodeToString(utxo.Txid) + ":" + strconv.FormatInt(int64(utxo.Vout), 10)
 	}
 	return utxoIds
 }

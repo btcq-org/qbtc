@@ -3,24 +3,21 @@ package qbtc.qbtc.v1;
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
-message ScriptPubKeyResult {
-  // The script public key in hex format
-  string hex = 1;
-  // The type of the script public key (e.g., "pubkeyhash", "scripthash")
-  string type = 2;
-  // The addresses associated with this script public key
-  string address = 3;
-}
-
+// UTXO is a slim representation of a Bitcoin unspent output retained by qbtc.
+// Only the fields the chain actually consumes at claim time are kept; the
+// original verbose script_pub_key (hex/type) is dropped because nothing reads
+// it after the block is processed.
 message UTXO {
-  // The transaction ID where this UTXO originates
-  string txid = 1;
-  // The output index in the transaction
+  // The Bitcoin transaction id, raw 32-byte little-endian.
+  bytes txid = 1;
+  // The output index within the transaction.
   uint32 vout = 2;
-  // The amount of BTC in satoshis
+  // The output amount in satoshis.
   uint64 amount = 3;
-  // the amount entitled to claim from this UTXO
+  // The amount entitled to be claimed from this UTXO.
   uint64 entitled_amount = 4;
-  // The script public key associated with this UTXO
-  ScriptPubKeyResult script_pub_key = 5;
+  // The 20-byte hash160 of the output's address (P2PKH or P2WPKH only). qbtc
+  // only supports outputs that hash160-bind cleanly to the ZK circuit; other
+  // output types are dropped during ingestion.
+  bytes address = 5;
 }

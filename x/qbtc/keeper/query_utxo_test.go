@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
@@ -9,17 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeUTXO(txid string, vout uint32, amount uint64, address string) types.UTXO {
+func makeUTXO(txid []byte, vout uint32, amount uint64, address []byte) types.UTXO {
 	return types.UTXO{
 		Txid:           txid,
 		Vout:           vout,
 		Amount:         amount,
 		EntitledAmount: amount,
-		ScriptPubKey: &types.ScriptPubKeyResult{
-			Address: address,
-			Type:    "pubkeyhash",
-			Hex:     "76a914" + txid[:14] + "88ac",
-		},
+		Address:        address,
 	}
 }
 
@@ -27,9 +24,13 @@ func TestQueryUTXO(t *testing.T) {
 	f := initFixture(t)
 	qs := keeper.NewQueryServerImpl(f.keeper)
 
-	utxo1 := makeUTXO("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, 100000, "bc1qaddr1")
-	utxo2 := makeUTXO("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 1, 200000, "bc1qaddr2")
-	utxo3 := makeUTXO("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 0, 300000, "bc1qaddr3")
+	txA := bytes.Repeat([]byte{0xaa}, 32)
+	txB := bytes.Repeat([]byte{0xbb}, 32)
+	txC := bytes.Repeat([]byte{0xcc}, 32)
+
+	utxo1 := makeUTXO(txA, 0, 100000, bytes.Repeat([]byte{0x01}, 20))
+	utxo2 := makeUTXO(txA, 1, 200000, bytes.Repeat([]byte{0x02}, 20))
+	utxo3 := makeUTXO(txB, 0, 300000, bytes.Repeat([]byte{0x03}, 20))
 
 	for _, u := range []types.UTXO{utxo1, utxo2, utxo3} {
 		require.NoError(t, f.keeper.Utxoes.Set(f.ctx, u.GetKey(), u))
@@ -58,7 +59,7 @@ func TestQueryUTXO(t *testing.T) {
 		},
 		{
 			name:      "not found - unknown txid",
-			req:       &types.QueryUTXORequest{Txid: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Vout: 0},
+			req:       &types.QueryUTXORequest{Txid: txC, Vout: 0},
 			wantErrIs: sdkerrors.ErrKeyNotFound,
 		},
 		{
@@ -73,7 +74,7 @@ func TestQueryUTXO(t *testing.T) {
 		},
 		{
 			name:      "empty txid",
-			req:       &types.QueryUTXORequest{Txid: "", Vout: 0},
+			req:       &types.QueryUTXORequest{Txid: nil, Vout: 0},
 			wantErrIs: sdkerrors.ErrInvalidRequest,
 		},
 	}

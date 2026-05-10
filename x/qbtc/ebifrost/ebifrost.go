@@ -170,7 +170,7 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 			block := &types.MsgBtcBlock{
 				Height:       b.Height,
 				Hash:         b.Hash,
-				BlockContent: b.BlockContent,
+				Commit:       b.Commit,
 				Attestations: b.Attestations,
 				Signer:       ebifrostSignerAcc,
 			}
@@ -178,7 +178,7 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 		},
 		eb.MarshalTx,
 		func(block *types.MsgBtcBlock, logger log.Logger) {
-			logger.Info("Processed btcq block", "height", block.Height, "hash", block.Hash)
+			logger.Info("Processed btcq block", "height", block.Height, "hash", fmt.Sprintf("%x", block.Hash))
 		},
 		func(blocks []*types.MsgBtcBlock) {
 			slices.SortFunc(blocks, func(a, b *types.MsgBtcBlock) int {

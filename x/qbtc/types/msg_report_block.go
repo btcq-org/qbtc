@@ -10,21 +10,20 @@ import (
 var _ sdk.Msg = &MsgBtcBlock{}
 
 func (m *MsgBtcBlock) ValidateBasic() error {
-	if len(m.Hash) == 0 {
-		return errors.ErrInvalidRequest.Wrap("block hash cannot be empty")
+	if len(m.Hash) != 32 {
+		return errors.ErrInvalidRequest.Wrapf("block hash must be 32 bytes, got %d", len(m.Hash))
 	}
 
 	if len(m.Signer) == 0 {
 		return errors.ErrInvalidRequest.Wrap("signer cannot be empty")
 	}
 
-	_, err := sdk.AccAddressFromBech32(m.Signer)
-	if err != nil {
+	if _, err := sdk.AccAddressFromBech32(m.Signer); err != nil {
 		return errors.ErrInvalidAddress.Wrapf("invalid signer address: %s", err)
 	}
 
-	if len(m.BlockContent) == 0 {
-		return errors.ErrInvalidRequest.Wrap("block content cannot be empty")
+	if m.Commit == nil || m.Commit.Header == nil {
+		return errors.ErrInvalidRequest.Wrap("block commit is required")
 	}
 
 	if len(m.Attestations) == 0 {
@@ -32,6 +31,7 @@ func (m *MsgBtcBlock) ValidateBasic() error {
 	}
 	return nil
 }
+
 func (m *MsgBtcBlock) GetSigners() []sdk.AccAddress {
 	creator, err := sdk.AccAddressFromBech32(m.Signer)
 	if err != nil {
@@ -53,8 +53,9 @@ func (m *MsgBtcBlock) RemoveAttestations(attestations []*Attestation) bool {
 	m.Attestations = removeAttestations(m.Attestations, attestations)
 	return len(m.Attestations) == 0
 }
+
 func (m *MsgBtcBlock) Equals(other *MsgBtcBlock) bool {
-	return m.Height == other.Height && m.Hash == other.Hash
+	return m.Height == other.Height && bytes.Equal(m.Hash, other.Hash)
 }
 
 func (a *Attestation) Equals(other *Attestation) bool {

@@ -36,6 +36,11 @@ type Keeper struct {
 
 	LastProcessedBlock collections.Item[uint64]
 
+	// LastProcessedHeader is the 32-byte dsha256 hash of the most recently
+	// accepted Bitcoin block header. The next reported block must point its
+	// prev_block field at this value.
+	LastProcessedHeader collections.Item[[]byte]
+
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
@@ -59,11 +64,12 @@ func NewKeeper(
 		bankKeeper:         bankKeeper,
 		authority:          authority,
 		authKeeper:         authKeeper,
-		Utxoes:             collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodePeerAddresses:  collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
-		ConstOverrides:     collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
-		ZkVerifyingKey:     collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
-		LastProcessedBlock: collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
+		Utxoes:              collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
+		NodePeerAddresses:   collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
+		ConstOverrides:      collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		ZkVerifyingKey:      collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
+		LastProcessedBlock:  collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
+		LastProcessedHeader: collections.NewItem(sb, types.LastProcessedHeaderKey, "last_processed_header", collections.BytesValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {

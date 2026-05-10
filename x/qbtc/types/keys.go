@@ -31,6 +31,11 @@ var (
 
 	// LastProcessedBlockKey stores the last processed block height
 	LastProcessedBlockKey = collections.NewPrefix("last_processed_block")
+
+	// LastProcessedHeaderKey stores the dsha256 hash of the most recently
+	// accepted Bitcoin block header. Reported blocks must chain forward from
+	// this hash via header.prev_block.
+	LastProcessedHeaderKey = collections.NewPrefix("last_processed_header")
 )
 
 const (

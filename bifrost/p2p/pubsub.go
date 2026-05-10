@@ -271,7 +271,7 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 			msg := types.MsgBtcBlock{
 				Height:       block.Height,
 				Hash:         block.Hash,
-				BlockContent: block.BlockContent,
+				Commit:       block.Commit,
 				Attestations: []*types.Attestation{block.Attestation},
 			}
 			err = p.saveMsgBtcBlock(msg, key)
@@ -286,8 +286,10 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	if err := proto.Unmarshal(existingContent, &msgBlock); err != nil {
 		return fmt.Errorf("failed to unmarshal existing block gossip message: %w", err)
 	}
-	if !bytes.Equal(msgBlock.BlockContent, block.BlockContent) {
-		return fmt.Errorf("block content mismatch for block %s at height %d", block.Hash, block.Height)
+	existingBytes, _ := proto.Marshal(msgBlock.Commit)
+	incomingBytes, _ := proto.Marshal(block.Commit)
+	if !bytes.Equal(existingBytes, incomingBytes) {
+		return fmt.Errorf("block content mismatch for block %x at height %d", block.Hash, block.Height)
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
 

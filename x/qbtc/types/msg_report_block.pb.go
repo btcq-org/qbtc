@@ -64,22 +64,237 @@ func (m *Attestation) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Attestation proto.InternalMessageInfo
 
+// BtcHeader is the 80-byte Bitcoin block header expanded into structured
+// fields. The chain re-serializes it into the canonical Bitcoin wire layout to
+// recompute the block hash and verify proof-of-work.
+type BtcHeader struct {
+	Version    uint32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	PrevBlock  []byte `protobuf:"bytes,2,opt,name=prev_block,json=prevBlock,proto3" json:"prev_block,omitempty"`
+	MerkleRoot []byte `protobuf:"bytes,3,opt,name=merkle_root,json=merkleRoot,proto3" json:"merkle_root,omitempty"`
+	Timestamp  uint32 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Bits       uint32 `protobuf:"varint,5,opt,name=bits,proto3" json:"bits,omitempty"`
+	Nonce      uint32 `protobuf:"varint,6,opt,name=nonce,proto3" json:"nonce,omitempty"`
+}
+
+func (m *BtcHeader) Reset()         { *m = BtcHeader{} }
+func (m *BtcHeader) String() string { return proto.CompactTextString(m) }
+func (*BtcHeader) ProtoMessage()    {}
+func (*BtcHeader) Descriptor() ([]byte, []int) {
+	return fileDescriptor_628d11da7ff97b80, []int{1}
+}
+func (m *BtcHeader) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BtcHeader) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BtcHeader.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BtcHeader) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BtcHeader.Merge(m, src)
+}
+func (m *BtcHeader) XXX_Size() int {
+	return m.Size()
+}
+func (m *BtcHeader) XXX_DiscardUnknown() {
+	xxx_messageInfo_BtcHeader.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BtcHeader proto.InternalMessageInfo
+
+// BtcTxIn is the minimum data the chain needs to look up and spend a parent
+// UTXO. Coinbase inputs leave prev_txid empty.
+type BtcTxIn struct {
+	PrevTxid []byte `protobuf:"bytes,1,opt,name=prev_txid,json=prevTxid,proto3" json:"prev_txid,omitempty"`
+	PrevVout uint32 `protobuf:"varint,2,opt,name=prev_vout,json=prevVout,proto3" json:"prev_vout,omitempty"`
+}
+
+func (m *BtcTxIn) Reset()         { *m = BtcTxIn{} }
+func (m *BtcTxIn) String() string { return proto.CompactTextString(m) }
+func (*BtcTxIn) ProtoMessage()    {}
+func (*BtcTxIn) Descriptor() ([]byte, []int) {
+	return fileDescriptor_628d11da7ff97b80, []int{2}
+}
+func (m *BtcTxIn) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BtcTxIn) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BtcTxIn.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BtcTxIn) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BtcTxIn.Merge(m, src)
+}
+func (m *BtcTxIn) XXX_Size() int {
+	return m.Size()
+}
+func (m *BtcTxIn) XXX_DiscardUnknown() {
+	xxx_messageInfo_BtcTxIn.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BtcTxIn proto.InternalMessageInfo
+
+// BtcTxOut carries the per-output fields the chain consumes: the amount in
+// satoshis, the 20-byte hash160 of the output address (when the address type is
+// supported), and the raw OP_RETURN script bytes when the output is a nulldata
+// claim memo. address and op_return are mutually exclusive: a regular output
+// has only address, a nulldata output has only op_return.
+type BtcTxOut struct {
+	N        uint32 `protobuf:"varint,1,opt,name=n,proto3" json:"n,omitempty"`
+	Sats     uint64 `protobuf:"varint,2,opt,name=sats,proto3" json:"sats,omitempty"`
+	Address  []byte `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	OpReturn []byte `protobuf:"bytes,4,opt,name=op_return,json=opReturn,proto3" json:"op_return,omitempty"`
+}
+
+func (m *BtcTxOut) Reset()         { *m = BtcTxOut{} }
+func (m *BtcTxOut) String() string { return proto.CompactTextString(m) }
+func (*BtcTxOut) ProtoMessage()    {}
+func (*BtcTxOut) Descriptor() ([]byte, []int) {
+	return fileDescriptor_628d11da7ff97b80, []int{3}
+}
+func (m *BtcTxOut) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BtcTxOut) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BtcTxOut.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BtcTxOut) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BtcTxOut.Merge(m, src)
+}
+func (m *BtcTxOut) XXX_Size() int {
+	return m.Size()
+}
+func (m *BtcTxOut) XXX_DiscardUnknown() {
+	xxx_messageInfo_BtcTxOut.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BtcTxOut proto.InternalMessageInfo
+
+// BtcTx is the slim view of a Bitcoin transaction the chain actually consumes.
+type BtcTx struct {
+	Txid     []byte      `protobuf:"bytes,1,opt,name=txid,proto3" json:"txid,omitempty"`
+	Coinbase bool        `protobuf:"varint,2,opt,name=coinbase,proto3" json:"coinbase,omitempty"`
+	Vin      []*BtcTxIn  `protobuf:"bytes,3,rep,name=vin,proto3" json:"vin,omitempty"`
+	Vout     []*BtcTxOut `protobuf:"bytes,4,rep,name=vout,proto3" json:"vout,omitempty"`
+}
+
+func (m *BtcTx) Reset()         { *m = BtcTx{} }
+func (m *BtcTx) String() string { return proto.CompactTextString(m) }
+func (*BtcTx) ProtoMessage()    {}
+func (*BtcTx) Descriptor() ([]byte, []int) {
+	return fileDescriptor_628d11da7ff97b80, []int{4}
+}
+func (m *BtcTx) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BtcTx) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BtcTx.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BtcTx) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BtcTx.Merge(m, src)
+}
+func (m *BtcTx) XXX_Size() int {
+	return m.Size()
+}
+func (m *BtcTx) XXX_DiscardUnknown() {
+	xxx_messageInfo_BtcTx.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BtcTx proto.InternalMessageInfo
+
+// BtcBlockCommit is the structured replacement for the previous gzipped
+// btcjson.GetBlockVerboseTxResult payload. It carries the header so qbtc can
+// anchor BTC proof-of-work on-chain, plus the slim transaction list bound to
+// the header by header.merkle_root.
+type BtcBlockCommit struct {
+	Header *BtcHeader `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+	Txs    []*BtcTx   `protobuf:"bytes,2,rep,name=txs,proto3" json:"txs,omitempty"`
+}
+
+func (m *BtcBlockCommit) Reset()         { *m = BtcBlockCommit{} }
+func (m *BtcBlockCommit) String() string { return proto.CompactTextString(m) }
+func (*BtcBlockCommit) ProtoMessage()    {}
+func (*BtcBlockCommit) Descriptor() ([]byte, []int) {
+	return fileDescriptor_628d11da7ff97b80, []int{5}
+}
+func (m *BtcBlockCommit) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BtcBlockCommit) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BtcBlockCommit.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BtcBlockCommit) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BtcBlockCommit.Merge(m, src)
+}
+func (m *BtcBlockCommit) XXX_Size() int {
+	return m.Size()
+}
+func (m *BtcBlockCommit) XXX_DiscardUnknown() {
+	xxx_messageInfo_BtcBlockCommit.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BtcBlockCommit proto.InternalMessageInfo
+
 type MsgBtcBlock struct {
-	// The height of the reported Bitcoin block
+	// The height of the reported Bitcoin block.
 	Height uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
-	// The hash of the reported Bitcoin block
-	Hash string `protobuf:"bytes,2,opt,name=hash,proto3" json:"hash,omitempty"`
-	// compressed bytes of BTC block
-	BlockContent []byte         `protobuf:"bytes,3,opt,name=block_content,json=blockContent,proto3" json:"block_content,omitempty"`
-	Attestations []*Attestation `protobuf:"bytes,4,rep,name=attestations,proto3" json:"attestations,omitempty"`
-	Signer       string         `protobuf:"bytes,5,opt,name=signer,proto3" json:"signer,omitempty"`
+	// The 32-byte hash of the reported Bitcoin block (must equal
+	// dsha256(serialize(commit.header))).
+	Hash []byte `protobuf:"bytes,2,opt,name=hash,proto3" json:"hash,omitempty"`
+	// The structured block commit (header + slim transactions). Validators sign
+	// proto.Marshal(commit) when attesting.
+	Commit       *BtcBlockCommit `protobuf:"bytes,3,opt,name=commit,proto3" json:"commit,omitempty"`
+	Attestations []*Attestation  `protobuf:"bytes,4,rep,name=attestations,proto3" json:"attestations,omitempty"`
+	Signer       string          `protobuf:"bytes,5,opt,name=signer,proto3" json:"signer,omitempty"`
 }
 
 func (m *MsgBtcBlock) Reset()         { *m = MsgBtcBlock{} }
 func (m *MsgBtcBlock) String() string { return proto.CompactTextString(m) }
 func (*MsgBtcBlock) ProtoMessage()    {}
 func (*MsgBtcBlock) Descriptor() ([]byte, []int) {
-	return fileDescriptor_628d11da7ff97b80, []int{1}
+	return fileDescriptor_628d11da7ff97b80, []int{6}
 }
 func (m *MsgBtcBlock) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -110,6 +325,11 @@ var xxx_messageInfo_MsgBtcBlock proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Attestation)(nil), "qbtc.qbtc.v1.Attestation")
+	proto.RegisterType((*BtcHeader)(nil), "qbtc.qbtc.v1.BtcHeader")
+	proto.RegisterType((*BtcTxIn)(nil), "qbtc.qbtc.v1.BtcTxIn")
+	proto.RegisterType((*BtcTxOut)(nil), "qbtc.qbtc.v1.BtcTxOut")
+	proto.RegisterType((*BtcTx)(nil), "qbtc.qbtc.v1.BtcTx")
+	proto.RegisterType((*BtcBlockCommit)(nil), "qbtc.qbtc.v1.BtcBlockCommit")
 	proto.RegisterType((*MsgBtcBlock)(nil), "qbtc.qbtc.v1.MsgBtcBlock")
 }
 
@@ -118,31 +338,49 @@ func init() {
 }
 
 var fileDescriptor_628d11da7ff97b80 = []byte{
-	// 384 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x52, 0x3f, 0xcf, 0xd2, 0x40,
-	0x18, 0xef, 0xf9, 0x22, 0x86, 0xa3, 0x26, 0x7a, 0x79, 0xa3, 0x85, 0x98, 0x4b, 0x03, 0x31, 0x21,
-	0x24, 0xb4, 0x82, 0x9b, 0x89, 0x03, 0x75, 0x34, 0x2e, 0x75, 0x73, 0x69, 0xda, 0x72, 0xb9, 0x36,
-	0xda, 0x1e, 0xdc, 0x3d, 0x10, 0xdd, 0x8c, 0xa3, 0x93, 0x1f, 0x85, 0xc1, 0x0f, 0xc1, 0x48, 0x9c,
-	0x18, 0xa5, 0x0c, 0xcc, 0x7e, 0x03, 0xd3, 0xbb, 0x1a, 0x70, 0x7a, 0x97, 0xa7, 0xf7, 0xfb, 0xd3,
-	0x5f, 0xfb, 0x7b, 0x5a, 0x3c, 0x5c, 0x25, 0x90, 0xfa, 0x7a, 0x6c, 0xa6, 0x7e, 0xa1, 0x78, 0x24,
-	0xd9, 0x52, 0x48, 0x88, 0x92, 0x4f, 0x22, 0xfd, 0xe8, 0x2d, 0xa5, 0x00, 0x41, 0xec, 0x5a, 0xf7,
-	0xf4, 0xd8, 0x4c, 0xfb, 0x8f, 0xe3, 0x22, 0x2f, 0x85, 0xaf, 0xa7, 0x31, 0xf4, 0x9f, 0xa6, 0x42,
-	0x15, 0x42, 0xd5, 0xf7, 0x37, 0x31, 0x8d, 0xd0, 0x33, 0x42, 0xa4, 0x91, 0x6f, 0x40, 0x23, 0xdd,
-	0x72, 0xc1, 0x85, 0xe1, 0xeb, 0x93, 0x61, 0x07, 0x11, 0xee, 0xce, 0x01, 0x98, 0x82, 0x18, 0x72,
-	0x51, 0x92, 0x19, 0x7e, 0x10, 0x2f, 0x16, 0x92, 0x29, 0xe5, 0x20, 0x17, 0x8d, 0x3a, 0x81, 0xf3,
-	0xeb, 0xe7, 0xe4, 0xb6, 0xc9, 0x99, 0x1b, 0xe5, 0x3d, 0xc8, 0xbc, 0xe4, 0xe1, 0x3f, 0x23, 0x79,
-	0x86, 0x3b, 0x2a, 0xe7, 0x65, 0x0c, 0x6b, 0xc9, 0x9c, 0x7b, 0x2e, 0x1a, 0xd9, 0xe1, 0x85, 0x18,
-	0xfc, 0x41, 0xb8, 0xfb, 0x4e, 0xf1, 0x00, 0xd2, 0xa0, 0x6e, 0x48, 0x9e, 0xe0, 0x76, 0xc6, 0x72,
-	0x9e, 0x81, 0x7e, 0x40, 0x2b, 0x6c, 0x10, 0x21, 0xb8, 0x95, 0xc5, 0x2a, 0xd3, 0x01, 0x9d, 0x50,
-	0x9f, 0xc9, 0x10, 0x3f, 0xd4, 0x6b, 0x89, 0x52, 0x51, 0x02, 0x2b, 0xc1, 0xb9, 0xd1, 0xe9, 0xb6,
-	0x26, 0xdf, 0x18, 0x8e, 0xbc, 0xc6, 0x76, 0x7c, 0x69, 0xa0, 0x9c, 0x96, 0x7b, 0x33, 0xea, 0xce,
-	0x7a, 0xde, 0xf5, 0x0e, 0xbd, 0xab, 0x8e, 0xe1, 0x7f, 0x76, 0xf2, 0x02, 0xb7, 0xeb, 0x97, 0x65,
-	0xd2, 0xb9, 0x7f, 0x47, 0xe1, 0xc6, 0xf7, 0xca, 0xfd, 0x76, 0xde, 0x8e, 0x1b, 0xf0, 0xfd, 0xbc,
-	0x1d, 0x3f, 0x4a, 0x20, 0x5d, 0xf9, 0x57, 0x1d, 0x83, 0xb7, 0xbb, 0x23, 0xb5, 0x0e, 0x47, 0x8a,
-	0xbe, 0x56, 0xd4, 0xda, 0x55, 0x14, 0xed, 0x2b, 0x8a, 0x7e, 0x57, 0x14, 0xfd, 0x38, 0x51, 0x6b,
-	0x7f, 0xa2, 0xd6, 0xe1, 0x44, 0xad, 0x0f, 0xcf, 0x79, 0x0e, 0xd9, 0x3a, 0xf1, 0x52, 0x51, 0xf8,
-	0x75, 0xc4, 0x44, 0x48, 0x6e, 0xfe, 0x8c, 0xcf, 0xe6, 0x02, 0x5f, 0x96, 0x4c, 0x25, 0x6d, 0xfd,
-	0xa1, 0x5e, 0xfe, 0x0d, 0x00, 0x00, 0xff, 0xff, 0x03, 0x98, 0x94, 0xfd, 0x3a, 0x02, 0x00, 0x00,
+	// 665 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x54, 0x4f, 0x4f, 0x13, 0x41,
+	0x14, 0xef, 0xd2, 0x52, 0xda, 0xd7, 0x62, 0x74, 0x44, 0x58, 0xfe, 0xb8, 0x36, 0x35, 0x44, 0x42,
+	0x42, 0x2b, 0xd5, 0x93, 0x89, 0x07, 0xca, 0x45, 0x63, 0x0c, 0xc9, 0x48, 0x3c, 0x78, 0x69, 0xb6,
+	0xdb, 0xcd, 0x76, 0x02, 0xbb, 0x53, 0x66, 0xde, 0x36, 0xf5, 0x66, 0x38, 0x1a, 0x0f, 0x7e, 0x11,
+	0x13, 0x0e, 0x7e, 0x08, 0x8e, 0xc4, 0x13, 0x47, 0x29, 0x07, 0xbe, 0x86, 0x99, 0x37, 0x5b, 0x28,
+	0x81, 0x78, 0x99, 0x7d, 0xef, 0xf7, 0xfb, 0xcd, 0xfb, 0x37, 0x33, 0x0b, 0xcf, 0x8f, 0xba, 0x18,
+	0x34, 0x69, 0x19, 0x6e, 0x37, 0x63, 0x1d, 0x75, 0x54, 0x38, 0x90, 0x0a, 0x3b, 0xdd, 0x43, 0x19,
+	0x1c, 0x34, 0x06, 0x4a, 0xa2, 0x64, 0x55, 0xc3, 0x37, 0x68, 0x19, 0x6e, 0xaf, 0x3c, 0xf2, 0x63,
+	0x91, 0xc8, 0x26, 0xad, 0x56, 0xb0, 0xb2, 0x14, 0x48, 0x1d, 0x4b, 0x6d, 0xf6, 0x67, 0x61, 0x32,
+	0x62, 0xd9, 0x12, 0x1d, 0xf2, 0x9a, 0xd6, 0xc9, 0xa8, 0x85, 0x48, 0x46, 0xd2, 0xe2, 0xc6, 0xb2,
+	0x68, 0xbd, 0x03, 0x95, 0x1d, 0xc4, 0x50, 0xa3, 0x8f, 0x42, 0x26, 0xac, 0x05, 0x73, 0x7e, 0xaf,
+	0xa7, 0x42, 0xad, 0x5d, 0xa7, 0xe6, 0x6c, 0x94, 0xdb, 0xee, 0x9f, 0xdf, 0x5b, 0x0b, 0x59, 0x9c,
+	0x1d, 0xcb, 0x7c, 0x42, 0x25, 0x92, 0x88, 0x4f, 0x84, 0x6c, 0x0d, 0xca, 0x5a, 0x44, 0x89, 0x8f,
+	0xa9, 0x0a, 0xdd, 0x99, 0x9a, 0xb3, 0x51, 0xe5, 0x37, 0x40, 0xfd, 0x97, 0x03, 0xe5, 0x36, 0x06,
+	0xef, 0x42, 0xbf, 0x17, 0x2a, 0xe6, 0xc2, 0xdc, 0x30, 0x54, 0x5a, 0xc8, 0x84, 0xe2, 0xcf, 0xf3,
+	0x89, 0xcb, 0x9e, 0x02, 0x0c, 0x54, 0x38, 0xb4, 0x73, 0x98, 0x84, 0x31, 0x48, 0xdb, 0x00, 0xec,
+	0x19, 0x54, 0xe2, 0x50, 0x1d, 0x1c, 0x86, 0x1d, 0x25, 0x25, 0xba, 0x79, 0xe2, 0xc1, 0x42, 0x5c,
+	0x4a, 0x34, 0x55, 0xa0, 0x88, 0x4d, 0x23, 0xf1, 0xc0, 0x2d, 0x50, 0xec, 0x1b, 0x80, 0x31, 0x28,
+	0x74, 0x05, 0x6a, 0x77, 0x96, 0x08, 0xb2, 0xd9, 0x02, 0xcc, 0x26, 0x32, 0x09, 0x42, 0xb7, 0x48,
+	0xa0, 0x75, 0xea, 0xbb, 0x30, 0xd7, 0xc6, 0x60, 0x7f, 0xf4, 0x3e, 0x61, 0xab, 0x40, 0x05, 0x74,
+	0x70, 0x24, 0x7a, 0x54, 0x6e, 0x95, 0x97, 0x0c, 0xb0, 0x3f, 0x12, 0xbd, 0x6b, 0x72, 0x28, 0x53,
+	0xa4, 0x72, 0xe7, 0x2d, 0xf9, 0x59, 0xa6, 0x58, 0x0f, 0xa0, 0x44, 0x41, 0xf6, 0x52, 0x64, 0x55,
+	0x70, 0x26, 0xcd, 0x3a, 0x89, 0x29, 0x44, 0xfb, 0xa8, 0x69, 0x47, 0x81, 0x93, 0x6d, 0x86, 0x32,
+	0x19, 0xba, 0xed, 0xeb, 0x7a, 0xb4, 0xab, 0x50, 0x96, 0x83, 0x8e, 0x0a, 0x31, 0x55, 0x09, 0x35,
+	0x55, 0xe5, 0x25, 0x39, 0xe0, 0xe4, 0xd7, 0x7f, 0x38, 0x30, 0x4b, 0x59, 0x4c, 0xd0, 0xa9, 0x1a,
+	0xc9, 0x66, 0x2b, 0x50, 0x0a, 0xa4, 0x48, 0xba, 0xbe, 0xb6, 0x87, 0x52, 0xe2, 0xd7, 0x3e, 0x7b,
+	0x01, 0xf9, 0xa1, 0x48, 0xdc, 0x7c, 0x2d, 0xbf, 0x51, 0x69, 0x3d, 0x69, 0x4c, 0xdf, 0xb6, 0x46,
+	0xd6, 0x3c, 0x37, 0x0a, 0xb6, 0x09, 0x05, 0xea, 0xaf, 0x40, 0xca, 0xc5, 0x7b, 0x94, 0x7b, 0x29,
+	0x72, 0xd2, 0xd4, 0xfb, 0xf0, 0xa0, 0x8d, 0x01, 0x9d, 0xd6, 0xae, 0x8c, 0x63, 0x81, 0xac, 0x09,
+	0xc5, 0x3e, 0x1d, 0x3b, 0x15, 0x56, 0x69, 0x2d, 0xdd, 0xd9, 0x6f, 0x6f, 0x05, 0xcf, 0x64, 0x6c,
+	0x1d, 0xf2, 0x38, 0x32, 0xb3, 0x31, 0xd9, 0x1e, 0xdf, 0x93, 0x8d, 0x1b, 0xbe, 0x7e, 0x3c, 0x03,
+	0x95, 0x8f, 0x3a, 0x9a, 0x64, 0x63, 0x8b, 0x26, 0x8f, 0x88, 0xfa, 0x48, 0x79, 0x0a, 0x3c, 0xf3,
+	0xcc, 0x58, 0xfa, 0xbe, 0xee, 0x67, 0x97, 0x89, 0x6c, 0xf6, 0x1a, 0x8a, 0x01, 0x55, 0x47, 0xa3,
+	0xae, 0xb4, 0xd6, 0xee, 0x64, 0x99, 0xea, 0x80, 0x67, 0x5a, 0xf6, 0x16, 0xaa, 0xfe, 0xcd, 0x2b,
+	0xd1, 0xd9, 0x3c, 0x96, 0x6f, 0xef, 0x9d, 0x7a, 0x47, 0xfc, 0x96, 0x9c, 0xbd, 0x84, 0xa2, 0x79,
+	0x10, 0xa1, 0xa2, 0xfb, 0xf7, 0xbf, 0x47, 0x95, 0xe9, 0xde, 0xd4, 0x8e, 0xaf, 0x4e, 0x36, 0x33,
+	0xe7, 0xfb, 0xd5, 0xc9, 0xe6, 0xc3, 0x2e, 0x06, 0x47, 0xcd, 0xa9, 0xa6, 0xdb, 0x1f, 0x4e, 0x2f,
+	0xbc, 0xdc, 0xf9, 0x85, 0xe7, 0x7c, 0x1b, 0x7b, 0xb9, 0xd3, 0xb1, 0xe7, 0x9c, 0x8d, 0x3d, 0xe7,
+	0xef, 0xd8, 0x73, 0x7e, 0x5e, 0x7a, 0xb9, 0xb3, 0x4b, 0x2f, 0x77, 0x7e, 0xe9, 0xe5, 0xbe, 0xac,
+	0x47, 0x02, 0xfb, 0x69, 0xb7, 0x11, 0xc8, 0xb8, 0x69, 0x42, 0x6c, 0x49, 0x15, 0xd9, 0xbf, 0xcf,
+	0xc8, 0x7e, 0xf0, 0xeb, 0x20, 0xd4, 0xdd, 0x22, 0xfd, 0x0c, 0x5e, 0xfd, 0x0b, 0x00, 0x00, 0xff,
+	0xff, 0x69, 0x1e, 0x82, 0xa5, 0x9e, 0x04, 0x00, 0x00,
 }
 
 func (m *Attestation) Marshal() (dAtA []byte, err error) {
@@ -176,6 +414,262 @@ func (m *Attestation) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.Address)
 		copy(dAtA[i:], m.Address)
 		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Address)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BtcHeader) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BtcHeader) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BtcHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Nonce != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Nonce))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.Bits != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Bits))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.Timestamp != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Timestamp))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.MerkleRoot) > 0 {
+		i -= len(m.MerkleRoot)
+		copy(dAtA[i:], m.MerkleRoot)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.MerkleRoot)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.PrevBlock) > 0 {
+		i -= len(m.PrevBlock)
+		copy(dAtA[i:], m.PrevBlock)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.PrevBlock)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Version != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Version))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BtcTxIn) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BtcTxIn) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BtcTxIn) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.PrevVout != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.PrevVout))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.PrevTxid) > 0 {
+		i -= len(m.PrevTxid)
+		copy(dAtA[i:], m.PrevTxid)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.PrevTxid)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BtcTxOut) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BtcTxOut) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BtcTxOut) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.OpReturn) > 0 {
+		i -= len(m.OpReturn)
+		copy(dAtA[i:], m.OpReturn)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.OpReturn)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Address) > 0 {
+		i -= len(m.Address)
+		copy(dAtA[i:], m.Address)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Address)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.Sats != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Sats))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.N != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.N))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BtcTx) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BtcTx) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BtcTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Vout) > 0 {
+		for iNdEx := len(m.Vout) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Vout[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMsgReportBlock(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x22
+		}
+	}
+	if len(m.Vin) > 0 {
+		for iNdEx := len(m.Vin) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Vin[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMsgReportBlock(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if m.Coinbase {
+		i--
+		if m.Coinbase {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Txid) > 0 {
+		i -= len(m.Txid)
+		copy(dAtA[i:], m.Txid)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Txid)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *BtcBlockCommit) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BtcBlockCommit) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BtcBlockCommit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Txs) > 0 {
+		for iNdEx := len(m.Txs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Txs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMsgReportBlock(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.Header != nil {
+		{
+			size, err := m.Header.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMsgReportBlock(dAtA, i, uint64(size))
+		}
 		i--
 		dAtA[i] = 0xa
 	}
@@ -223,10 +717,15 @@ func (m *MsgBtcBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0x22
 		}
 	}
-	if len(m.BlockContent) > 0 {
-		i -= len(m.BlockContent)
-		copy(dAtA[i:], m.BlockContent)
-		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.BlockContent)))
+	if m.Commit != nil {
+		{
+			size, err := m.Commit.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMsgReportBlock(dAtA, i, uint64(size))
+		}
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -273,6 +772,121 @@ func (m *Attestation) Size() (n int) {
 	return n
 }
 
+func (m *BtcHeader) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Version != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.Version))
+	}
+	l = len(m.PrevBlock)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	l = len(m.MerkleRoot)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	if m.Timestamp != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.Timestamp))
+	}
+	if m.Bits != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.Bits))
+	}
+	if m.Nonce != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.Nonce))
+	}
+	return n
+}
+
+func (m *BtcTxIn) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.PrevTxid)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	if m.PrevVout != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.PrevVout))
+	}
+	return n
+}
+
+func (m *BtcTxOut) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.N != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.N))
+	}
+	if m.Sats != 0 {
+		n += 1 + sovMsgReportBlock(uint64(m.Sats))
+	}
+	l = len(m.Address)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	l = len(m.OpReturn)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	return n
+}
+
+func (m *BtcTx) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Txid)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	if m.Coinbase {
+		n += 2
+	}
+	if len(m.Vin) > 0 {
+		for _, e := range m.Vin {
+			l = e.Size()
+			n += 1 + l + sovMsgReportBlock(uint64(l))
+		}
+	}
+	if len(m.Vout) > 0 {
+		for _, e := range m.Vout {
+			l = e.Size()
+			n += 1 + l + sovMsgReportBlock(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *BtcBlockCommit) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Header != nil {
+		l = m.Header.Size()
+		n += 1 + l + sovMsgReportBlock(uint64(l))
+	}
+	if len(m.Txs) > 0 {
+		for _, e := range m.Txs {
+			l = e.Size()
+			n += 1 + l + sovMsgReportBlock(uint64(l))
+		}
+	}
+	return n
+}
+
 func (m *MsgBtcBlock) Size() (n int) {
 	if m == nil {
 		return 0
@@ -286,8 +900,8 @@ func (m *MsgBtcBlock) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovMsgReportBlock(uint64(l))
 	}
-	l = len(m.BlockContent)
-	if l > 0 {
+	if m.Commit != nil {
+		l = m.Commit.Size()
 		n += 1 + l + sovMsgReportBlock(uint64(l))
 	}
 	if len(m.Attestations) > 0 {
@@ -425,6 +1039,751 @@ func (m *Attestation) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *BtcHeader) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMsgReportBlock
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BtcHeader: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BtcHeader: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			m.Version = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Version |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevBlock", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PrevBlock = append(m.PrevBlock[:0], dAtA[iNdEx:postIndex]...)
+			if m.PrevBlock == nil {
+				m.PrevBlock = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MerkleRoot", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.MerkleRoot = append(m.MerkleRoot[:0], dAtA[iNdEx:postIndex]...)
+			if m.MerkleRoot == nil {
+				m.MerkleRoot = []byte{}
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			m.Timestamp = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Timestamp |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Bits", wireType)
+			}
+			m.Bits = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Bits |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nonce", wireType)
+			}
+			m.Nonce = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Nonce |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BtcTxIn) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMsgReportBlock
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BtcTxIn: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BtcTxIn: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevTxid", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PrevTxid = append(m.PrevTxid[:0], dAtA[iNdEx:postIndex]...)
+			if m.PrevTxid == nil {
+				m.PrevTxid = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevVout", wireType)
+			}
+			m.PrevVout = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PrevVout |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BtcTxOut) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMsgReportBlock
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BtcTxOut: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BtcTxOut: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field N", wireType)
+			}
+			m.N = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.N |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sats", wireType)
+			}
+			m.Sats = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Sats |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Address = append(m.Address[:0], dAtA[iNdEx:postIndex]...)
+			if m.Address == nil {
+				m.Address = []byte{}
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OpReturn", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.OpReturn = append(m.OpReturn[:0], dAtA[iNdEx:postIndex]...)
+			if m.OpReturn == nil {
+				m.OpReturn = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BtcTx) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMsgReportBlock
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BtcTx: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BtcTx: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txid", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Txid = append(m.Txid[:0], dAtA[iNdEx:postIndex]...)
+			if m.Txid == nil {
+				m.Txid = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Coinbase", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Coinbase = bool(v != 0)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vin", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vin = append(m.Vin, &BtcTxIn{})
+			if err := m.Vin[len(m.Vin)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vout", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vout = append(m.Vout, &BtcTxOut{})
+			if err := m.Vout[len(m.Vout)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BtcBlockCommit) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMsgReportBlock
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BtcBlockCommit: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BtcBlockCommit: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Header", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Header == nil {
+				m.Header = &BtcHeader{}
+			}
+			if err := m.Header.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Txs = append(m.Txs, &BtcTx{})
+			if err := m.Txs[len(m.Txs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -477,38 +1836,6 @@ func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Hash", wireType)
 			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMsgReportBlock
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Hash = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BlockContent", wireType)
-			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
@@ -534,9 +1861,45 @@ func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.BlockContent = append(m.BlockContent[:0], dAtA[iNdEx:postIndex]...)
-			if m.BlockContent == nil {
-				m.BlockContent = []byte{}
+			m.Hash = append(m.Hash[:0], dAtA[iNdEx:postIndex]...)
+			if m.Hash == nil {
+				m.Hash = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Commit", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Commit == nil {
+				m.Commit = &BtcBlockCommit{}
+			}
+			if err := m.Commit.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 4:

@@ -15,15 +15,11 @@ import (
 func TestWriteUtxo(t *testing.T) {
 
 	pVout := qbtctypes.UTXO{
-		Txid:           "test",
+		Txid:           bytes.Repeat([]byte{0x01}, 32),
 		Vout:           0,
 		Amount:         uint64(0.15 * 1e8), // convert to satoshis
 		EntitledAmount: uint64(0.15 * 1e8),
-		ScriptPubKey: &qbtctypes.ScriptPubKeyResult{
-			Hex:     "76a91489abcdefabbaabbaabbaabbaabbaabbaabba88ac",
-			Type:    "pubkeyhash",
-			Address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-		},
+		Address:        bytes.Repeat([]byte{0x02}, 20),
 	}
 	data, err := proto.Marshal(&pVout)
 	assert.NoError(t, err)

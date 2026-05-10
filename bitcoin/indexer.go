@@ -2,6 +2,7 @@ package bitcoin
 
 import (
 	"bufio"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
 	protoio "github.com/cosmos/gogoproto/io"
@@ -207,19 +209,32 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 			continue
 		}
 		fields := strings.Split(string(k), "-")
-		pVout := qbtctypes.UTXO{
-			Txid:           fields[0],
-			Vout:           vOut.N,
-			Amount:         uint64(vOut.Value * 1e8), // convert to satoshis
-			EntitledAmount: uint64(vOut.Value * 1e8),
-			ScriptPubKey: &qbtctypes.ScriptPubKeyResult{
-				Hex:     vOut.ScriptPubKey.Hex,
-				Type:    vOut.ScriptPubKey.Type,
-				Address: vOut.ScriptPubKey.Address,
-			},
+		txid, err := hex.DecodeString(fields[0])
+		if err != nil || len(txid) != 32 {
+			i.logger.Error().Err(err).Str("key", string(k)).Msg("invalid txid in indexer key")
+			continue
 		}
-		err = protoWriter.WriteMsg(&pVout)
-		if err != nil {
+		// Skip outputs whose address type is not P2PKH/P2WPKH; the chain only
+		// supports those.
+		var addrBytes []byte
+		if vOut.ScriptPubKey.Address != "" {
+			h, herr := zk.BitcoinAddressToHash160(vOut.ScriptPubKey.Address)
+			if herr != nil {
+				continue
+			}
+			addrBytes = append(addrBytes, h[:]...)
+		} else {
+			continue
+		}
+		amount := uint64(vOut.Value * 1e8)
+		pVout := qbtctypes.UTXO{
+			Txid:           txid,
+			Vout:           vOut.N,
+			Amount:         amount,
+			EntitledAmount: amount,
+			Address:        addrBytes,
+		}
+		if err := protoWriter.WriteMsg(&pVout); err != nil {
 			return err
 		}
 		idx++

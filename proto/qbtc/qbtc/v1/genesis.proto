@@ -4,6 +4,7 @@ package qbtc.qbtc.v1;
 import "amino/amino.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/type_utxo.proto";
+import "qbtc/qbtc/v1/msg_report_block.proto";
 import "qbtc/qbtc/v1/query_params.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
@@ -31,6 +32,10 @@ message GenesisState {
     (gogoproto.customname) = "ZkVerifyingKey"
   ];
   uint64 btc_initial_height = 6;
+  // The Bitcoin header at btc_initial_height - 1. Reported blocks must chain
+  // forward from this anchor (header.prev_block of the first reported block
+  // equals dsha256(this header)).
+  BtcHeader btc_initial_header = 7;
 }
 
 message GenesisPeerAddress {

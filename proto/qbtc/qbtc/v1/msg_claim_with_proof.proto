@@ -9,9 +9,9 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // UTXORef identifies a specific UTXO by its transaction ID and output index.
 message UTXORef {
-  // The Bitcoin transaction ID where this UTXO originates
-  string txid = 1;
-  // The output index in the Bitcoin transaction
+  // The 32-byte Bitcoin transaction id (little-endian wire format).
+  bytes txid = 1;
+  // The output index in the Bitcoin transaction.
   uint32 vout = 2;
 }
 

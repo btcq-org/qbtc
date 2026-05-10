@@ -229,7 +229,7 @@ func request_Query_UTXO_0(ctx context.Context, marshaler runtime.Marshaler, clie
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "txid")
 	}
 
-	protoReq.Txid, err = runtime.String(val)
+	protoReq.Txid, err = runtime.Bytes(val)
 
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "txid", err)
@@ -267,7 +267,7 @@ func local_request_Query_UTXO_0(ctx context.Context, marshaler runtime.Marshaler
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "txid")
 	}
 
-	protoReq.Txid, err = runtime.String(val)
+	protoReq.Txid, err = runtime.Bytes(val)
 
 	if err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "txid", err)

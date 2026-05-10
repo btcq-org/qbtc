@@ -1,7 +1,7 @@
 package app
 
 import (
-	"fmt"
+	"encoding/hex"
 	"math/rand"
 	"testing"
 	"time"
@@ -32,20 +32,16 @@ func TestClaimUTXO_MintViaQBTCModuleAccount(t *testing.T) {
 	recipient := accounts[0].Address
 
 	// --- seed a UTXO into the qbtc store ---
-	txid := "aabb000000000000000000000000000000000000000000000000000000001234"
+	txid, _ := hex.DecodeString("aabb000000000000000000000000000000000000000000000000000000001234")
 	vout := uint32(0)
-	key := fmt.Sprintf("%s-%d", txid, vout)
+	key := qbtcmoduletypes.UTXOKey(txid, vout)
 
 	utxo := qbtcmoduletypes.UTXO{
 		Txid:           txid,
 		Vout:           vout,
 		Amount:         100_000_000, // 1 BTC in satoshis
 		EntitledAmount: 50_000_000,  // 0.5 BTC claimable
-		ScriptPubKey: &qbtcmoduletypes.ScriptPubKeyResult{
-			Hex:     "76a91489abcdefabbaabbaabbaabbaabbaabbaabbaabba88ac",
-			Type:    "pubkeyhash",
-			Address: "1DummyBitcoinAddress000000000000X",
-		},
+		Address:        make([]byte, 20),
 	}
 	require.NoError(t, app.QbtcKeeper.Utxoes.Set(ctx, key, utxo))
 
@@ -77,19 +73,16 @@ func TestClaimUTXO_MintViaQBTCModuleAccount(t *testing.T) {
 func TestClaimUTXO_ReserveMint(t *testing.T) {
 	app, ctx, _ := setupTestApp(t)
 
-	txid := "ccdd000000000000000000000000000000000000000000000000000000005678"
+	txid, _ := hex.DecodeString("ccdd000000000000000000000000000000000000000000000000000000005678")
 	vout := uint32(0)
-	key := fmt.Sprintf("%s-%d", txid, vout)
+	key := qbtcmoduletypes.UTXOKey(txid, vout)
 
 	utxo := qbtcmoduletypes.UTXO{
 		Txid:           txid,
 		Vout:           vout,
 		Amount:         200_000_000,
 		EntitledAmount: 100_000_000,
-		ScriptPubKey: &qbtcmoduletypes.ScriptPubKeyResult{
-			Hex:  "76a91400000000000000000000000000000000000000aa88ac",
-			Type: "pubkeyhash",
-		},
+		Address:        make([]byte, 20),
 	}
 	require.NoError(t, app.QbtcKeeper.Utxoes.Set(ctx, key, utxo))
 

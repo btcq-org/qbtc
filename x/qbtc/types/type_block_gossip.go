@@ -1,13 +1,16 @@
 package types
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"strconv"
+
+	"github.com/cosmos/gogoproto/proto"
 )
 
-// GetKey returns the unique key for the BlockGossip message, which is its hash.
+// GetKey returns a deterministic key for this BlockGossip — used by bifrost
+// peers to deduplicate gossip and aggregate attestations against a single
+// canonical commit.
 func (m *BlockGossip) GetKey() string {
-	contentHash := sha256.Sum256(m.BlockContent)
-	return m.GetHash() + "-" + strconv.FormatUint(m.GetHeight(), 10) + "-" + hex.EncodeToString(contentHash[:])
+	bz, _ := proto.Marshal(m.GetCommit())
+	return hex.EncodeToString(m.GetHash()) + "-" + strconv.FormatUint(m.GetHeight(), 10) + "-" + hex.EncodeToString(bz)
 }

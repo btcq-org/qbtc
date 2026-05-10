@@ -9,7 +9,8 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // ClaimUTXO is the message for claiming a UTXO by the governance module.
 message ClaimUTXO {
-  string txid = 1;
+  // The 32-byte Bitcoin transaction id (little-endian wire format).
+  bytes txid = 1;
   uint32 vout = 2;
 }
 // MsgGovClaimUTXO is the message for claiming a UTXO by the governance module.

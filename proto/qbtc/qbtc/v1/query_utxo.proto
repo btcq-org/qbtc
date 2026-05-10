@@ -10,9 +10,9 @@ option (gogoproto.marshaler_all) = true;
 // QueryUTXORequest requests a single UTXO by its transaction ID and output
 // index.
 message QueryUTXORequest {
-  // txid is the Bitcoin transaction ID.
-  string txid = 1;
-  // vout is the output index within the transaction.
+  // The 32-byte Bitcoin transaction id (little-endian wire format).
+  bytes txid = 1;
+  // The output index within the transaction.
   uint32 vout = 2;
 }
 

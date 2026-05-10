@@ -1,6 +1,8 @@
 package qbtc
 
 import (
+	"encoding/hex"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cosmos/cosmos-sdk/testutil/network"
 	"github.com/stretchr/testify/suite"
@@ -64,20 +66,23 @@ func (s *E2ETestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.btcAddress = btcAddr
 
+	txid1, _ := hex.DecodeString("aaaa000000000000000000000000000000000000000000000000000000000001")
+	txid2, _ := hex.DecodeString("aaaa000000000000000000000000000000000000000000000000000000000002")
+	_ = btcAddr // keep around for any descendant tests that read it from suite state.
 	s.seedUTXOs = []*types.UTXO{
 		{
-			Txid:           "aaaa000000000000000000000000000000000000000000000000000000000001",
+			Txid:           txid1,
 			Vout:           0,
 			Amount:         100_000_000,
 			EntitledAmount: 50_000_000,
-			ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+			Address:        addrHash[:],
 		},
 		{
-			Txid:           "aaaa000000000000000000000000000000000000000000000000000000000002",
+			Txid:           txid2,
 			Vout:           1,
 			Amount:         200_000_000,
 			EntitledAmount: 150_000_000,
-			ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+			Address:        addrHash[:],
 		},
 	}
 

@@ -23,23 +23,19 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	if isDisabled > 0 {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ClaimWithProof feature is disabled")
 	}
-	// Validate the message
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
 	}
 
-	// Ensure the ZK verifier is initialized
 	if !zk.IsVerifierInitialized() {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ZK verifier not initialized")
 	}
 
-	// Parse the claimer address upfront
 	claimerAddr, err := sdk.AccAddressFromBech32(msg.Claimer)
 	if err != nil {
 		return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid claimer address: %v", err)
 	}
 
-	// Resolve the destination: receiver overrides claimer when set
 	recipientAddr := claimerAddr
 	recipientBech32 := msg.Claimer
 	if msg.Receiver != "" {
@@ -51,40 +47,31 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		recipientBech32 = msg.Receiver
 	}
 
-	// Find the first valid UTXO to determine the proven address
+	// Find the first valid UTXO to determine the proven address. The hash160
+	// is now stored directly on the UTXO, so no per-UTXO string→hash160
+	// conversion is needed at claim time.
 	var provenAddressHash [20]byte
-	var provenBtcAddress string
 	var foundValidUtxo bool
 
 	for i, utxoRef := range msg.Utxos {
-		utxoKey := getUTXOKey(utxoRef.Txid, utxoRef.Vout)
+		utxoKey := types.UTXOKey(utxoRef.Txid, utxoRef.Vout)
 		utxo, err := s.k.Utxoes.Get(sdkCtx, utxoKey)
 		if err != nil {
-			continue // Skip non-existent UTXOs
+			continue
 		}
-
 		if utxo.EntitledAmount == 0 {
-			continue // Skip already claimed UTXOs
+			continue
 		}
-
-		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
-			continue // Skip UTXOs without address
+		if len(utxo.Address) != 20 {
+			continue
 		}
-
-		addressHash, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address)
-		if err != nil {
-			continue // Skip UTXOs with invalid addresses
-		}
-
-		// Found a valid UTXO - use its address for proof verification
-		provenAddressHash = addressHash
-		provenBtcAddress = utxo.ScriptPubKey.Address
+		copy(provenAddressHash[:], utxo.Address)
 		foundValidUtxo = true
 		sdkCtx.Logger().Debug("using UTXO for proof verification",
 			"index", i,
-			"txid", utxoRef.Txid,
+			"txid", hex.EncodeToString(utxoRef.Txid),
 			"vout", utxoRef.Vout,
-			"btc_address", provenBtcAddress,
+			"address_hash", hex.EncodeToString(utxo.Address),
 		)
 		break
 	}
@@ -93,17 +80,13 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrInvalidRequest.Wrap("no valid claimable UTXOs found")
 	}
 
-	// Verify the ZK proof against the determined address.
-	// recipientBech32 is used to derive qbtcAddressHash so the proof binds to
-	// the actual coin destination (receiver when set, claimer otherwise).
 	if err := s.verifyProof(sdkCtx, msg, provenAddressHash, recipientBech32); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("proof verification failed: %v", err)
 	}
 
-	// Collect UTXOs that match the proven address
 	type claimableUTXO struct {
 		index  int
-		txid   string
+		txid   []byte
 		vout   uint32
 		amount uint64
 	}
@@ -111,51 +94,34 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	var skippedCount uint32
 
 	for i, utxoRef := range msg.Utxos {
-		utxoKey := getUTXOKey(utxoRef.Txid, utxoRef.Vout)
+		utxoKey := types.UTXOKey(utxoRef.Txid, utxoRef.Vout)
 		utxo, err := s.k.Utxoes.Get(sdkCtx, utxoKey)
 		if err != nil {
 			skippedCount++
 			sdkCtx.Logger().Debug("skipping UTXO: not found",
-				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout)
+				"index", i, "txid", hex.EncodeToString(utxoRef.Txid), "vout", utxoRef.Vout)
 			continue
 		}
-
 		if utxo.EntitledAmount == 0 {
 			skippedCount++
-			sdkCtx.Logger().Debug("skipping UTXO: already claimed",
-				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout)
 			continue
 		}
-
-		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
+		if len(utxo.Address) != 20 {
 			skippedCount++
-			sdkCtx.Logger().Debug("skipping UTXO: no address",
-				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout)
 			continue
 		}
-
-		utxoAddressHash, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address)
-		if err != nil {
-			skippedCount++
-			sdkCtx.Logger().Debug("skipping UTXO: invalid address format",
-				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout, "error", err)
-			continue
-		}
-
-		// Check if this UTXO's address matches the proven address
-		if !bytes.Equal(provenAddressHash[:], utxoAddressHash[:]) {
+		if !bytes.Equal(provenAddressHash[:], utxo.Address) {
 			skippedCount++
 			sdkCtx.Logger().Debug("skipping UTXO: address mismatch",
 				"index", i,
-				"txid", utxoRef.Txid,
+				"txid", hex.EncodeToString(utxoRef.Txid),
 				"vout", utxoRef.Vout,
-				"expected", provenBtcAddress,
-				"got", utxo.ScriptPubKey.Address,
+				"expected", hex.EncodeToString(provenAddressHash[:]),
+				"got", hex.EncodeToString(utxo.Address),
 			)
 			continue
 		}
 
-		// This UTXO matches - add to claimable list
 		claimableUTXOs = append(claimableUTXOs, claimableUTXO{
 			index:  i,
 			txid:   utxoRef.Txid,
@@ -168,7 +134,6 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrInvalidRequest.Wrap("no UTXOs match the proven address")
 	}
 
-	// Use cache context for atomic batch claim
 	cacheCtx, write := sdkCtx.CacheContext()
 
 	var totalClaimed uint64
@@ -179,16 +144,14 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		totalClaimed += utxo.amount
 	}
 
-	// Commit all claims atomically
 	write()
 
-	// Emit batch event
 	sdkCtx.EventManager().EmitEvent(
 		sdk.NewEvent(
 			"claim_with_proof",
 			sdk.NewAttribute("claimer", msg.Claimer),
 			sdk.NewAttribute("receiver", recipientBech32),
-			sdk.NewAttribute("btc_address", provenBtcAddress),
+			sdk.NewAttribute("address_hash", hex.EncodeToString(provenAddressHash[:])),
 			sdk.NewAttribute("utxos_claimed", fmt.Sprintf("%d", len(claimableUTXOs))),
 			sdk.NewAttribute("utxos_skipped", fmt.Sprintf("%d", skippedCount)),
 			sdk.NewAttribute("total_amount", fmt.Sprintf("%d", totalClaimed)),
@@ -198,7 +161,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	sdkCtx.Logger().Info("batch claimed with proof",
 		"claimer", msg.Claimer,
 		"receiver", recipientBech32,
-		"btc_address", provenBtcAddress,
+		"address_hash", hex.EncodeToString(provenAddressHash[:]),
 		"utxos_claimed", len(claimableUTXOs),
 		"utxos_skipped", skippedCount,
 		"total_amount", totalClaimed,
@@ -215,16 +178,11 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 // recipientBech32 is the address the proof must commit to — it is the receiver
 // when set, otherwise the claimer. This binding prevents front-running.
 func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, addressHash [20]byte, recipientBech32 string) error {
-	// Convert the proof from proto format
 	proofBytes, err := hex.DecodeString(msg.Proof)
 	if err != nil {
 		return fmt.Errorf("proof data is not valid hex: %w", err)
 	}
 
-	// The claimer supplies SHA256 of their SEC-compressed pubkey; the verifier
-	// natively checks RIPEMD160 of it matches the UTXO's AddressHash. This
-	// replaces the in-circuit RIPEMD160 gadget with a ~microsecond native
-	// operation, and ValidateBasic has already enforced the hex/length shape.
 	pubKeyHashBytes, err := hex.DecodeString(msg.PubKeyHashSha256)
 	if err != nil {
 		return fmt.Errorf("pub_key_hash_sha256 is not valid hex: %w", err)
@@ -232,18 +190,13 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	var pubKeyHashSHA256 [32]byte
 	copy(pubKeyHashSHA256[:], pubKeyHashBytes)
 
-	// Derive qbtcAddressHash from the recipient (receiver when set, else claimer).
-	// The proof must commit to the actual coin destination to prevent redirection.
 	qbtcAddressHash := zk.HashQBTCAddress(recipientBech32)
 
-	// Compute chain ID hash from the chain ID (prevents cross-chain replay)
 	chainID := sdkCtx.ChainID()
 	chainIDHash := zk.ComputeChainIDHash(chainID)
 
-	// Compute expected message hash that should have been signed
 	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 
-	// Build verification params
 	params := zk.VerificationParams{
 		MessageHash:      messageHash,
 		AddressHash:      addressHash,
@@ -252,6 +205,5 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 		ChainID:          chainIDHash,
 	}
 
-	// Verify the proof using the global verifier
 	return zk.VerifyProofGlobal(proofBytes, params)
 }

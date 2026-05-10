@@ -2,12 +2,14 @@ package qclient
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	"github.com/cosmos/gogoproto/proto"
 )
 
 func (c *Client) VerifyAttestation(ctx context.Context, block types.BlockGossip) error {
@@ -36,21 +38,23 @@ func (c *Client) VerifyAttestation(ctx context.Context, block types.BlockGossip)
 		return fmt.Errorf("validator not found or not bonded")
 	}
 
-	// Get consensus public key from validator
 	publicKey, err := validator.ConsPubKey()
 	if err != nil {
 		return fmt.Errorf("failed to get consensus public key for validator %s: %w", validator.OperatorAddress, err)
 	}
 
-	// Verify signature against block content
-	if !publicKey.VerifySignature(block.BlockContent, block.Attestation.Signature) {
+	commitBytes, err := proto.Marshal(block.GetCommit())
+	if err != nil {
+		return fmt.Errorf("failed to marshal commit: %w", err)
+	}
+	if !publicKey.VerifySignature(commitBytes, block.Attestation.Signature) {
 		return fmt.Errorf("signature verification failed for validator %s", validator.OperatorAddress)
 	}
 
 	c.logger.Debug().
 		Str("validator", block.Attestation.Address).
 		Uint64("height", block.Height).
-		Str("hash", block.Hash).
+		Str("hash", hex.EncodeToString(block.Hash)).
 		Msg("attestation verified successfully")
 
 	return nil
@@ -138,8 +142,12 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 			continue
 		}
 
-		// Verify signature against block content
-		if publicKey.VerifySignature(msg.BlockContent, attestation.Signature) {
+		commitBytes, err := proto.Marshal(msg.Commit)
+		if err != nil {
+			c.logger.Error().Err(err).Msg("failed to marshal commit for attestation verification")
+			continue
+		}
+		if publicKey.VerifySignature(commitBytes, attestation.Signature) {
 			validatorPower := math.NewInt(validator.ConsensusPower(sdk.DefaultPowerReduction))
 			validPower = validPower.Add(validatorPower)
 
@@ -169,7 +177,7 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 		Str("required_power", requiredPower.String()).
 		Str("total_power", totalVotingPower.String()).
 		Uint64("height", msg.Height).
-		Str("hash", msg.Hash).
+		Str("hash", hex.EncodeToString(msg.Hash)).
 		Msg("supermajority attestation verified")
 
 	return nil

@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -31,10 +32,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testChainID is the chain ID used for testing
 const testChainID = "qbtc-test-1"
 
-// claimTestFixture contains all dependencies for claim tests
 type claimTestFixture struct {
 	ctx           sdk.Context
 	keeper        *keeper.Keeper
@@ -47,11 +46,9 @@ type claimTestFixture struct {
 	btcPrivKey    *btcec.PrivateKey
 }
 
-// setupClaimTest initializes the test environment with ZK verifier
 func setupClaimTest(t *testing.T) *claimTestFixture {
 	t.Helper()
 
-	// Setup ZK circuit (TSS-compatible)
 	setup, err := zk.SetupWithOptions(zk.TestSetupOptions())
 	require.NoError(t, err, "ZK circuit setup should succeed")
 
@@ -65,7 +62,6 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 
 	prover := zk.ProverFromSetup(setup)
 
-	// Initialize SDK config
 	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
 	sdk.GetConfig().SetBech32PrefixForValidator(common.AccountAddressPrefix+sdk.PrefixValidator, common.AccountAddressPrefix+sdk.PrefixValidator+sdk.PrefixPublic)
 
@@ -106,13 +102,11 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 		govtypes.ModuleName,
 	)
 
-	// Create claimer address
 	claimerAddr := qbtctestutil.GetRandomQBTCAddress()
 
 	privateKey, err := btcec.NewPrivateKey()
 	require.NoError(t, err, "should create new private key")
 
-	// Compute the address hash from test private key
 	addressHash, err := zk.PrivateKeyToAddressHash(privateKey)
 	require.NoError(t, err, "should compute address hash")
 
@@ -136,13 +130,11 @@ type publicInput struct {
 	QBTCAddressHash  [32]byte
 }
 
-// generateProof generates a ZK proof for the test fixture's claimer
 func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, publicInput) {
 	t.Helper()
 	return f.generateProofForRecipient(t, f.claimerAddr)
 }
 
-// generateProofForRecipient generates a ZK proof binding to the given recipient address.
 func (f *claimTestFixture) generateProofForRecipient(t *testing.T, recipientAddr string) ([]byte, publicInput) {
 	t.Helper()
 
@@ -191,23 +183,26 @@ func (f *claimTestFixture) generateProofForRecipient(t *testing.T, recipientAddr
 	}
 }
 
-// bitcoinAddressFromHash creates a valid P2PKH Bitcoin address from hash160
-// this method is only used in test , so it is ok to panic on error
-func bitcoinAddressFromHash(hash [20]byte) string {
-	addr, err := zk.Hash160ToP2PKHAddress(hash)
+// hexTxid decodes a Bitcoin txid hex string into the 32-byte little-endian
+// wire format used by the slim UTXO proto.
+func hexTxid(s string) []byte {
+	b, err := hex.DecodeString(s)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create Bitcoin address from hash: %v", err))
+		panic(fmt.Sprintf("invalid hex txid %q: %v", s, err))
 	}
-	return addr
+	if len(b) != 32 {
+		panic(fmt.Sprintf("txid %q must be 32 bytes, got %d", s, len(b)))
+	}
+	return b
 }
 
 // TestClaimWithProof_PartialClaiming tests the partial claiming behavior.
-// NOTE: These tests require a working ZK proof generation. If they fail on
-// "proof generation should succeed", there's likely a bug in the ZK circuit.
 func TestClaimWithProof_PartialClaiming(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+
+	wrongAddr := bytes.Repeat([]byte{0xee}, 20)
 
 	tests := []struct {
 		name           string
@@ -222,31 +217,29 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 		{
 			name: "all UTXOs match - all claimed",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
-				btcAddr := bitcoinAddressFromHash(f.addressHash)
 				utxo1 := types.UTXO{
-					Txid:           "aaaa000000000000000000000000000000000000000000000000000000000001",
+					Txid:           hexTxid("aaaa000000000000000000000000000000000000000000000000000000000001"),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 50000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
 				utxo2 := types.UTXO{
-					Txid:           "aaaa000000000000000000000000000000000000000000000000000000000002",
+					Txid:           hexTxid("aaaa000000000000000000000000000000000000000000000000000000000002"),
 					Vout:           1,
 					Amount:         200000000,
 					EntitledAmount: 150000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "aaaa000000000000000000000000000000000000000000000000000000000001-0", utxo1))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "aaaa000000000000000000000000000000000000000000000000000000000002-1", utxo2))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo1.GetKey(), utxo1))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo2.GetKey(), utxo2))
 
-				// When recipient is provided, MintCoins uses ModuleName, then SendCoinsFromModuleToAccount
 				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(2)
 				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(2)
 			},
 			utxos: []types.UTXORef{
-				{Txid: "aaaa000000000000000000000000000000000000000000000000000000000001", Vout: 0},
-				{Txid: "aaaa000000000000000000000000000000000000000000000000000000000002", Vout: 1},
+				{Txid: hexTxid("aaaa000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
+				{Txid: hexTxid("aaaa000000000000000000000000000000000000000000000000000000000002"), Vout: 1},
 			},
 			expectedClaim:  2,
 			expectedSkip:   0,
@@ -256,72 +249,63 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 		{
 			name: "partial claim - some UTXOs have wrong address",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
-				btcAddr := bitcoinAddressFromHash(f.addressHash)
-				wrongAddr := "1WrongAddressXXXXXXXXXXXXXXXXXXXXX"
-
-				// Matching address - will be claimed
 				utxo1 := types.UTXO{
-					Txid:           "bbbb000000000000000000000000000000000000000000000000000000000001",
+					Txid:           hexTxid("bbbb000000000000000000000000000000000000000000000000000000000001"),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 50000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
-				// Wrong address - will be skipped
 				utxo2 := types.UTXO{
-					Txid:           "bbbb000000000000000000000000000000000000000000000000000000000002",
+					Txid:           hexTxid("bbbb000000000000000000000000000000000000000000000000000000000002"),
 					Vout:           1,
 					Amount:         200000000,
 					EntitledAmount: 150000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: wrongAddr},
+					Address:        wrongAddr,
 				}
-				// Matching address - will be claimed
 				utxo3 := types.UTXO{
-					Txid:           "bbbb000000000000000000000000000000000000000000000000000000000003",
+					Txid:           hexTxid("bbbb000000000000000000000000000000000000000000000000000000000003"),
 					Vout:           2,
 					Amount:         300000000,
 					EntitledAmount: 250000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
 
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "bbbb000000000000000000000000000000000000000000000000000000000001-0", utxo1))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "bbbb000000000000000000000000000000000000000000000000000000000002-1", utxo2))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "bbbb000000000000000000000000000000000000000000000000000000000003-2", utxo3))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo1.GetKey(), utxo1))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo2.GetKey(), utxo2))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo3.GetKey(), utxo3))
 
-				// Only 2 UTXOs should be minted (the matching ones)
 				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(2)
 				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(2)
 			},
 			utxos: []types.UTXORef{
-				{Txid: "bbbb000000000000000000000000000000000000000000000000000000000001", Vout: 0},
-				{Txid: "bbbb000000000000000000000000000000000000000000000000000000000002", Vout: 1},
-				{Txid: "bbbb000000000000000000000000000000000000000000000000000000000003", Vout: 2},
+				{Txid: hexTxid("bbbb000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
+				{Txid: hexTxid("bbbb000000000000000000000000000000000000000000000000000000000002"), Vout: 1},
+				{Txid: hexTxid("bbbb000000000000000000000000000000000000000000000000000000000003"), Vout: 2},
 			},
 			expectedClaim:  2,
 			expectedSkip:   1,
-			expectedAmount: 300000000, // 50M + 250M
+			expectedAmount: 300000000,
 			expectErr:      false,
 		},
 		{
 			name: "partial claim - some UTXOs not found",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
-				btcAddr := bitcoinAddressFromHash(f.addressHash)
 				utxo1 := types.UTXO{
-					Txid:           "cccc000000000000000000000000000000000000000000000000000000000001",
+					Txid:           hexTxid("cccc000000000000000000000000000000000000000000000000000000000001"),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 75000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
-				// Only set up one UTXO
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "cccc000000000000000000000000000000000000000000000000000000000001-0", utxo1))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo1.GetKey(), utxo1))
 
 				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
 				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 			utxos: []types.UTXORef{
-				{Txid: "cccc000000000000000000000000000000000000000000000000000000000001", Vout: 0},
-				{Txid: "cccc000000000000000000000000000000000000000000000000000000000099", Vout: 0}, // doesn't exist
+				{Txid: hexTxid("cccc000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
+				{Txid: hexTxid("cccc000000000000000000000000000000000000000000000000000000000099"), Vout: 0},
 			},
 			expectedClaim:  1,
 			expectedSkip:   1,
@@ -331,33 +315,30 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 		{
 			name: "partial claim - some UTXOs already claimed",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
-				btcAddr := bitcoinAddressFromHash(f.addressHash)
-				// Claimable UTXO
 				utxo1 := types.UTXO{
-					Txid:           "dddd000000000000000000000000000000000000000000000000000000000001",
+					Txid:           hexTxid("dddd000000000000000000000000000000000000000000000000000000000001"),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 80000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
-				// Already claimed (EntitledAmount = 0)
 				utxo2 := types.UTXO{
-					Txid:           "dddd000000000000000000000000000000000000000000000000000000000002",
+					Txid:           hexTxid("dddd000000000000000000000000000000000000000000000000000000000002"),
 					Vout:           1,
 					Amount:         200000000,
 					EntitledAmount: 0,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
 
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "dddd000000000000000000000000000000000000000000000000000000000001-0", utxo1))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "dddd000000000000000000000000000000000000000000000000000000000002-1", utxo2))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo1.GetKey(), utxo1))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo2.GetKey(), utxo2))
 
 				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
 				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 			utxos: []types.UTXORef{
-				{Txid: "dddd000000000000000000000000000000000000000000000000000000000001", Vout: 0},
-				{Txid: "dddd000000000000000000000000000000000000000000000000000000000002", Vout: 1},
+				{Txid: hexTxid("dddd000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
+				{Txid: hexTxid("dddd000000000000000000000000000000000000000000000000000000000002"), Vout: 1},
 			},
 			expectedClaim:  1,
 			expectedSkip:   1,
@@ -367,10 +348,9 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 		{
 			name: "no valid UTXOs - error",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
-				// Don't set up any UTXOs
 			},
 			utxos: []types.UTXORef{
-				{Txid: "eeee000000000000000000000000000000000000000000000000000000000001", Vout: 0},
+				{Txid: hexTxid("eeee000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
 			},
 			expectErr:   true,
 			errContains: "no valid claimable UTXOs found",
@@ -378,61 +358,53 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 		{
 			name: "mixed scenarios - comprehensive test",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
-				btcAddr := bitcoinAddressFromHash(f.addressHash)
-				wrongAddr := "1WrongAddressYYYYYYYYYYYYYYYYYYYYY"
-
-				// Valid - will be claimed
 				utxo1 := types.UTXO{
-					Txid:           "ffff000000000000000000000000000000000000000000000000000000000001",
+					Txid:           hexTxid("ffff000000000000000000000000000000000000000000000000000000000001"),
 					Vout:           0,
 					Amount:         100000000,
 					EntitledAmount: 40000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
-				// Already claimed - will be skipped
 				utxo2 := types.UTXO{
-					Txid:           "ffff000000000000000000000000000000000000000000000000000000000002",
+					Txid:           hexTxid("ffff000000000000000000000000000000000000000000000000000000000002"),
 					Vout:           1,
 					Amount:         200000000,
 					EntitledAmount: 0,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
-				// Wrong address - will be skipped
 				utxo3 := types.UTXO{
-					Txid:           "ffff000000000000000000000000000000000000000000000000000000000003",
+					Txid:           hexTxid("ffff000000000000000000000000000000000000000000000000000000000003"),
 					Vout:           2,
 					Amount:         300000000,
 					EntitledAmount: 250000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: wrongAddr},
+					Address:        wrongAddr,
 				}
-				// Valid - will be claimed
 				utxo4 := types.UTXO{
-					Txid:           "ffff000000000000000000000000000000000000000000000000000000000004",
+					Txid:           hexTxid("ffff000000000000000000000000000000000000000000000000000000000004"),
 					Vout:           3,
 					Amount:         400000000,
 					EntitledAmount: 60000000,
-					ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+					Address:        f.addressHash[:],
 				}
 
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "ffff000000000000000000000000000000000000000000000000000000000001-0", utxo1))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "ffff000000000000000000000000000000000000000000000000000000000002-1", utxo2))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "ffff000000000000000000000000000000000000000000000000000000000003-2", utxo3))
-				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "ffff000000000000000000000000000000000000000000000000000000000004-3", utxo4))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo1.GetKey(), utxo1))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo2.GetKey(), utxo2))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo3.GetKey(), utxo3))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo4.GetKey(), utxo4))
 
-				// Only 2 valid UTXOs
 				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(2)
 				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(2)
 			},
 			utxos: []types.UTXORef{
-				{Txid: "ffff000000000000000000000000000000000000000000000000000000000001", Vout: 0},
-				{Txid: "ffff000000000000000000000000000000000000000000000000000000000002", Vout: 1},
-				{Txid: "ffff000000000000000000000000000000000000000000000000000000000003", Vout: 2},
-				{Txid: "ffff000000000000000000000000000000000000000000000000000000000004", Vout: 3},
-				{Txid: "ffff000000000000000000000000000000000000000000000000000000000099", Vout: 9}, // not found
+				{Txid: hexTxid("ffff000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
+				{Txid: hexTxid("ffff000000000000000000000000000000000000000000000000000000000002"), Vout: 1},
+				{Txid: hexTxid("ffff000000000000000000000000000000000000000000000000000000000003"), Vout: 2},
+				{Txid: hexTxid("ffff000000000000000000000000000000000000000000000000000000000004"), Vout: 3},
+				{Txid: hexTxid("ffff000000000000000000000000000000000000000000000000000000000099"), Vout: 9},
 			},
 			expectedClaim:  2,
-			expectedSkip:   3,         // already claimed + wrong address + not found
-			expectedAmount: 100000000, // 40M + 60M
+			expectedSkip:   3,
+			expectedAmount: 100000000,
 			expectErr:      false,
 		},
 	}
@@ -440,32 +412,25 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 	f := setupClaimTest(t)
 	for _, tc := range tests {
 		t.Run(tc.name, func(st *testing.T) {
-			//defer zk.ClearVerifierForTesting()
-
-			// Setup UTXOs for this test
 			if tc.setupUTXOs != nil {
 				tc.setupUTXOs(st, f)
 			}
 
-			// Generate proof
-			proofData, publicInput := f.generateProof(st)
-			// Create claim message
+			proofData, pi := f.generateProof(st)
 			msg := &types.MsgClaimWithProof{
 				Claimer:          f.claimerAddr,
 				Broadcaster:      f.claimerAddr,
 				Utxos:            tc.utxos,
 				Proof:            hex.EncodeToString(proofData),
-				MessageHash:      hex.EncodeToString(publicInput.MessageHash[:]),
-				AddressHash:      hex.EncodeToString(publicInput.AddressHash[:]),
-				PubKeyHashSha256: hex.EncodeToString(publicInput.PubKeyHashSHA256[:]),
-				QbtcAddressHash:  hex.EncodeToString(publicInput.QBTCAddressHash[:]),
+				MessageHash:      hex.EncodeToString(pi.MessageHash[:]),
+				AddressHash:      hex.EncodeToString(pi.AddressHash[:]),
+				PubKeyHashSha256: hex.EncodeToString(pi.PubKeyHashSHA256[:]),
+				QbtcAddressHash:  hex.EncodeToString(pi.QBTCAddressHash[:]),
 			}
 
-			// Execute
 			server := keeper.NewMsgServerImpl(f.keeper)
 			resp, err := server.ClaimWithProof(f.ctx, msg)
 
-			// Assert
 			if tc.expectErr {
 				assert.Error(t, err)
 				if tc.errContains != "" {
@@ -490,26 +455,22 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	}
 
 	f := setupClaimTest(t)
-	//defer zk.ClearVerifierForTesting()
 
-	// Set up a valid UTXO
-	btcAddr := bitcoinAddressFromHash(f.addressHash)
 	utxo := types.UTXO{
-		Txid:           "9999000000000000000000000000000000000000000000000000000000000001",
+		Txid:           hexTxid("9999000000000000000000000000000000000000000000000000000000000001"),
 		Vout:           0,
 		Amount:         100000000,
 		EntitledAmount: 50000000,
-		ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+		Address:        f.addressHash[:],
 	}
-	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "9999000000000000000000000000000000000000000000000000000000000001-0", utxo))
+	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo.GetKey(), utxo))
 
 	qbtcAddr := zk.HashQBTCAddress(f.claimerAddr)
-	// Create claim with invalid proof data (random bytes)
 	msg := &types.MsgClaimWithProof{
 		Claimer:     f.claimerAddr,
 		Broadcaster: f.claimerAddr,
 		Utxos: []types.UTXORef{
-			{Txid: "9999000000000000000000000000000000000000000000000000000000000001", Vout: 0},
+			{Txid: hexTxid("9999000000000000000000000000000000000000000000000000000000000001"), Vout: 0},
 		},
 		Proof:            hex.EncodeToString(make([]byte, 500)),
 		MessageHash:      hex.EncodeToString(make([]byte, 32)),
@@ -535,35 +496,31 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 
 	f := setupClaimTest(t)
 
-	// A separate address that will receive the coins instead of the claimer.
 	receiverAddr := qbtctestutil.GetRandomQBTCAddress()
 
-	btcAddr := bitcoinAddressFromHash(f.addressHash)
 	utxo := types.UTXO{
-		Txid:           "aaab000000000000000000000000000000000000000000000000000000000001",
+		Txid:           hexTxid("aaab000000000000000000000000000000000000000000000000000000000001"),
 		Vout:           0,
 		Amount:         100000000,
 		EntitledAmount: 60000000,
-		ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+		Address:        f.addressHash[:],
 	}
-	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "aaab000000000000000000000000000000000000000000000000000000000001-0", utxo))
+	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo.GetKey(), utxo))
 
 	t.Run("coins go to receiver when set", func(t *testing.T) {
-		// Proof is bound to receiverAddr, not claimerAddr.
 		proofData, pi := f.generateProofForRecipient(t, receiverAddr)
 
 		receiverAccAddr, err := sdk.AccAddressFromBech32(receiverAddr)
 		require.NoError(t, err)
 
 		f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
-		// Coins must go to the receiver address, not the claimer.
 		f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, receiverAccAddr, gomock.Any()).Return(nil).Times(1)
 
 		msg := &types.MsgClaimWithProof{
 			Claimer:          f.claimerAddr,
 			Broadcaster:      f.claimerAddr,
 			Receiver:         receiverAddr,
-			Utxos:            []types.UTXORef{{Txid: "aaab000000000000000000000000000000000000000000000000000000000001", Vout: 0}},
+			Utxos:            []types.UTXORef{{Txid: hexTxid("aaab000000000000000000000000000000000000000000000000000000000001"), Vout: 0}},
 			Proof:            hex.EncodeToString(proofData),
 			MessageHash:      hex.EncodeToString(pi.MessageHash[:]),
 			AddressHash:      hex.EncodeToString(pi.AddressHash[:]),
@@ -580,24 +537,22 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 	})
 
 	t.Run("proof bound to claimer rejected when receiver set", func(t *testing.T) {
-		// Re-insert the UTXO (previous sub-test may have zeroed EntitledAmount).
 		utxo2 := types.UTXO{
-			Txid:           "aaab000000000000000000000000000000000000000000000000000000000002",
+			Txid:           hexTxid("aaab000000000000000000000000000000000000000000000000000000000002"),
 			Vout:           0,
 			Amount:         100000000,
 			EntitledAmount: 60000000,
-			ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+			Address:        f.addressHash[:],
 		}
-		require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "aaab000000000000000000000000000000000000000000000000000000000002-0", utxo2))
+		require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo2.GetKey(), utxo2))
 
-		// Proof is bound to claimerAddr but message says receiver = receiverAddr.
-		proofData, pi := f.generateProof(t) // claimer-bound proof
+		proofData, pi := f.generateProof(t)
 
 		msg := &types.MsgClaimWithProof{
 			Claimer:          f.claimerAddr,
 			Broadcaster:      f.claimerAddr,
 			Receiver:         receiverAddr,
-			Utxos:            []types.UTXORef{{Txid: "aaab000000000000000000000000000000000000000000000000000000000002", Vout: 0}},
+			Utxos:            []types.UTXORef{{Txid: hexTxid("aaab000000000000000000000000000000000000000000000000000000000002"), Vout: 0}},
 			Proof:            hex.EncodeToString(proofData),
 			MessageHash:      hex.EncodeToString(pi.MessageHash[:]),
 			AddressHash:      hex.EncodeToString(pi.AddressHash[:]),

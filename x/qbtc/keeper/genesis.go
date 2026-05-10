@@ -21,7 +21,7 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 	for _, utxo := range genState.Utxos {
 		err := k.Utxoes.Set(ctx, utxo.GetKey(), *utxo)
 		if err != nil {
-			return fmt.Errorf("failed to set UTXO %s: %w", utxo.Txid, err)
+			return fmt.Errorf("failed to set UTXO %x: %w", utxo.Txid, err)
 		}
 	}
 	for _, item := range genState.Params {
@@ -54,6 +54,22 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 		if err != nil {
 			return fmt.Errorf("failed to set last processed block height: %w", err)
 		}
+	}
+
+	// Anchor the BTC header chain. The first reported block must point its
+	// prev_block at this header's hash. If no anchor is provided, seed with
+	// the all-zero hash so a fresh devnet that starts from the BTC genesis
+	// block validates naturally.
+	var anchor [32]byte
+	if genState.BtcInitialHeader != nil {
+		h, err := HeaderHash(genState.BtcInitialHeader)
+		if err != nil {
+			return fmt.Errorf("failed to hash initial btc header: %w", err)
+		}
+		anchor = h
+	}
+	if err := k.LastProcessedHeader.Set(ctx, anchor[:]); err != nil {
+		return fmt.Errorf("failed to set initial btc header anchor: %w", err)
 	}
 	return nil
 }

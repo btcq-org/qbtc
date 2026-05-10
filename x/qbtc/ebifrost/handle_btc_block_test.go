@@ -39,9 +39,12 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 	}
 
 	buildBlock := func(key, att int) *types.MsgBtcBlock {
+		hash := make([]byte, 32)
+		hash[0] = byte(key)
+		hash[1] = byte(key >> 8)
 		return &types.MsgBtcBlock{
 			Height: uint64(key),
-			Hash:   fmt.Sprintf("hash-%d", key),
+			Hash:   hash,
 			Attestations: []*types.Attestation{
 				{
 					Address:   fmt.Sprintf("validator-%d", att),

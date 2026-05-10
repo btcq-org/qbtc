@@ -16,18 +16,68 @@ message Attestation {
   bytes signature = 2;
 }
 
+// BtcHeader is the 80-byte Bitcoin block header expanded into structured
+// fields. The chain re-serializes it into the canonical Bitcoin wire layout to
+// recompute the block hash and verify proof-of-work.
+message BtcHeader {
+  uint32 version = 1;
+  bytes prev_block = 2;   // 32-byte little-endian
+  bytes merkle_root = 3;  // 32-byte little-endian
+  uint32 timestamp = 4;
+  uint32 bits = 5;
+  uint32 nonce = 6;
+}
+
+// BtcTxIn is the minimum data the chain needs to look up and spend a parent
+// UTXO. Coinbase inputs leave prev_txid empty.
+message BtcTxIn {
+  bytes prev_txid = 1;  // 32-byte little-endian
+  uint32 prev_vout = 2;
+}
+
+// BtcTxOut carries the per-output fields the chain consumes: the amount in
+// satoshis, the 20-byte hash160 of the output address (when the address type is
+// supported), and the raw OP_RETURN script bytes when the output is a nulldata
+// claim memo. address and op_return are mutually exclusive: a regular output
+// has only address, a nulldata output has only op_return.
+message BtcTxOut {
+  uint32 n = 1;
+  uint64 sats = 2;
+  bytes address = 3;
+  bytes op_return = 4;
+}
+
+// BtcTx is the slim view of a Bitcoin transaction the chain actually consumes.
+message BtcTx {
+  bytes txid = 1;       // 32-byte little-endian
+  bool coinbase = 2;
+  repeated BtcTxIn vin = 3;
+  repeated BtcTxOut vout = 4;
+}
+
+// BtcBlockCommit is the structured replacement for the previous gzipped
+// btcjson.GetBlockVerboseTxResult payload. It carries the header so qbtc can
+// anchor BTC proof-of-work on-chain, plus the slim transaction list bound to
+// the header by header.merkle_root.
+message BtcBlockCommit {
+  BtcHeader header = 1;
+  repeated BtcTx txs = 2;
+}
+
 message MsgBtcBlock {
   option (cosmos.msg.v1.signer) = "signer";
   option (amino.name) = "btcq/MsgBtcBlock";
 
-  // The height of the reported Bitcoin block
+  // The height of the reported Bitcoin block.
   uint64 height = 1;
 
-  // The hash of the reported Bitcoin block
-  string hash = 2;
+  // The 32-byte hash of the reported Bitcoin block (must equal
+  // dsha256(serialize(commit.header))).
+  bytes hash = 2;
 
-  // compressed bytes of BTC block
-  bytes block_content = 3;
+  // The structured block commit (header + slim transactions). Validators sign
+  // proto.Marshal(commit) when attesting.
+  BtcBlockCommit commit = 3;
 
   repeated Attestation attestations = 4;
   string signer = 5 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];

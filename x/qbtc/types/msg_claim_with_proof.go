@@ -20,8 +20,8 @@ const MaxProofSize = 50 * 1024
 // A valid PLONK proof must be at least a few hundred bytes.
 const MinProofSize = 100
 
-// MaxTxIDLength is the maximum length of a Bitcoin transaction ID (64 hex chars).
-const MaxTxIDLength = 64
+// BitcoinTxIDLength is the length of a Bitcoin transaction id in raw bytes.
+const BitcoinTxIDLength = 32
 
 // MaxBatchClaimUTXOs is the maximum number of UTXOs that can be claimed in a single batch.
 // This limit prevents DoS attacks via oversized batches while allowing efficient bulk claims.
@@ -31,25 +31,20 @@ const MaxBatchClaimUTXOs = 50
 // This is called before the message reaches the handler and is critical
 // for preventing DoS attacks and rejecting obviously invalid messages early.
 func (m *MsgClaimWithProof) ValidateBasic() error {
-	// Validate claimer address is non-empty
 	if m.Claimer == "" {
 		return se.ErrInvalidRequest.Wrap("claimer address is required")
 	}
 
-	// Validate claimer address format (bech32)
-	_, err := sdk.AccAddressFromBech32(m.Claimer)
-	if err != nil {
+	if _, err := sdk.AccAddressFromBech32(m.Claimer); err != nil {
 		return se.ErrInvalidAddress.Wrapf("invalid claimer address: %v", err)
 	}
 
-	// Validate optional receiver address when provided
 	if m.Receiver != "" {
 		if _, err := sdk.AccAddressFromBech32(m.Receiver); err != nil {
 			return se.ErrInvalidAddress.Wrapf("invalid receiver address: %v", err)
 		}
 	}
 
-	// Validate broadcaster (the cosmos tx signer)
 	if m.Broadcaster == "" {
 		return se.ErrInvalidRequest.Wrap("broadcaster address is required")
 	}
@@ -57,43 +52,27 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 		return se.ErrInvalidAddress.Wrapf("invalid broadcaster address: %v", err)
 	}
 
-	// Validate at least one UTXO is provided
 	if len(m.Utxos) == 0 {
 		return se.ErrInvalidRequest.Wrap("at least one UTXO is required")
 	}
 
-	// Validate batch size limit
 	if len(m.Utxos) > MaxBatchClaimUTXOs {
 		return se.ErrInvalidRequest.Wrapf("too many UTXOs in batch: %d (max %d)", len(m.Utxos), MaxBatchClaimUTXOs)
 	}
 
-	// Validate each UTXO reference
 	seen := make(map[string]bool)
 	for i, utxo := range m.Utxos {
-		// Validate txid is provided
-		if utxo.Txid == "" {
-			return se.ErrInvalidRequest.Wrapf("utxo[%d]: txid is required", i)
+		if len(utxo.Txid) != BitcoinTxIDLength {
+			return se.ErrInvalidRequest.Wrapf("utxo[%d]: txid must be %d bytes, got %d", i, BitcoinTxIDLength, len(utxo.Txid))
 		}
 
-		// Validate txid length (Bitcoin txid is 64 hex characters)
-		if len(utxo.Txid) != MaxTxIDLength {
-			return se.ErrInvalidRequest.Wrapf("utxo[%d]: txid must be %d hex characters, got %d", i, MaxTxIDLength, len(utxo.Txid))
-		}
-
-		// Validate txid is valid hex
-		if _, err := hex.DecodeString(utxo.Txid); err != nil {
-			return se.ErrInvalidRequest.Wrapf("utxo[%d]: txid is not valid hex: %v", i, err)
-		}
-
-		// Check for duplicates
-		key := fmt.Sprintf("%s:%d", utxo.Txid, utxo.Vout)
+		key := fmt.Sprintf("%x:%d", utxo.Txid, utxo.Vout)
 		if seen[key] {
-			return se.ErrInvalidRequest.Wrapf("utxo[%d]: duplicate UTXO reference (txid=%s, vout=%d)", i, utxo.Txid, utxo.Vout)
+			return se.ErrInvalidRequest.Wrapf("utxo[%d]: duplicate UTXO reference (txid=%x, vout=%d)", i, utxo.Txid, utxo.Vout)
 		}
 		seen[key] = true
 	}
 
-	// Validate proof data exists
 	if len(m.Proof) == 0 {
 		return se.ErrInvalidRequest.Wrap("proof data is required")
 	}
@@ -101,11 +80,9 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	if err != nil {
 		return se.ErrInvalidRequest.Wrapf("proof data is not valid hex: %v", err)
 	}
-	// Validate proof size bounds (prevents DoS via oversized proofs)
 	if len(proofBytes) > MaxProofSize {
 		return se.ErrInvalidRequest.Wrapf("proof data too large: %d bytes (max %d)", len(proofBytes), MaxProofSize)
 	}
-
 	if len(proofBytes) < MinProofSize {
 		return se.ErrInvalidRequest.Wrapf("proof data too small: %d bytes (min %d)", len(proofBytes), MinProofSize)
 	}

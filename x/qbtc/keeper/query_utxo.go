@@ -13,15 +13,15 @@ func (qs queryServer) UTXO(ctx context.Context, req *types.QueryUTXORequest) (*t
 	if req == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("request cannot be nil")
 	}
-	if req.Txid == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("txid is required")
+	if len(req.Txid) != types.BitcoinTxIDLength {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("txid must be %d bytes, got %d", types.BitcoinTxIDLength, len(req.Txid))
 	}
 
-	key := getUTXOKey(req.Txid, req.Vout)
+	key := types.UTXOKey(req.Txid, req.Vout)
 	utxo, err := qs.k.Utxoes.Get(ctx, key)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrKeyNotFound.Wrapf("UTXO not found: txid=%s vout=%d", req.Txid, req.Vout)
+			return nil, sdkerrors.ErrKeyNotFound.Wrapf("UTXO not found: txid=%x vout=%d", req.Txid, req.Vout)
 		}
 		return nil, err
 	}
