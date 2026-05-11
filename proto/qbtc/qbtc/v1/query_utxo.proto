@@ -2,7 +2,6 @@ syntax = "proto3";
 package qbtc.qbtc.v1;
 
 import "gogoproto/gogo.proto";
-import "qbtc/qbtc/v1/type_utxo.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 option (gogoproto.marshaler_all) = true;
@@ -10,14 +9,33 @@ option (gogoproto.marshaler_all) = true;
 // QueryUTXORequest requests a single UTXO by its transaction ID and output
 // index.
 message QueryUTXORequest {
-  // The 32-byte Bitcoin transaction id (little-endian wire format).
-  bytes txid = 1;
+  // The 64-character hex Bitcoin transaction id as block explorers display it
+  // (big-endian / reversed wire format). Internally the chain stores txids as
+  // 32-byte little-endian; the query handler converts at the boundary.
+  string txid = 1;
   // The output index within the transaction.
   uint32 vout = 2;
 }
 
-// QueryUTXOResponse contains the requested UTXO.
+// QueryUTXOResponse contains the requested UTXO in display form.
 message QueryUTXOResponse {
-  // utxo is the requested UTXO.
-  UTXO utxo = 1 [ (gogoproto.nullable) = false ];
+  DisplayUTXO utxo = 1 [ (gogoproto.nullable) = false ];
+}
+
+// DisplayUTXO is the human-readable view of a stored UTXO. It mirrors the
+// fields the storage UTXO carries but renders txid and address as hex strings
+// so REST/gRPC clients and explorers can consume them without base64 decoding.
+message DisplayUTXO {
+  // The 64-character hex Bitcoin transaction id (big-endian display form).
+  string txid = 1;
+  // The output index within the transaction.
+  uint32 vout = 2;
+  // The output amount in satoshis.
+  uint64 amount = 3;
+  // The amount entitled to be claimed from this UTXO.
+  uint64 entitled_amount = 4;
+  // The 20-byte hash160 of the output's address, hex-encoded (40 characters).
+  // Lossless and unambiguous between P2PKH and P2WPKH; clients format into
+  // either address style as needed.
+  string address = 5;
 }

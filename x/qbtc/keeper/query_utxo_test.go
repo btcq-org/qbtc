@@ -2,6 +2,7 @@ package keeper_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
@@ -18,6 +19,16 @@ func makeUTXO(txid []byte, vout uint32, amount uint64, address []byte) types.UTX
 		EntitledAmount: amount,
 		Address:        address,
 	}
+}
+
+// reverseHexFromWire renders the chain's little-endian txid into the
+// big-endian hex form clients send to the query endpoint.
+func reverseHexFromWire(b []byte) string {
+	rev := make([]byte, len(b))
+	for i := range b {
+		rev[i] = b[len(b)-1-i]
+	}
+	return hex.EncodeToString(rev)
 }
 
 func TestQueryUTXO(t *testing.T) {
@@ -37,34 +48,42 @@ func TestQueryUTXO(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		req       *types.QueryUTXORequest
-		wantUTXO  *types.UTXO
-		wantErrIs error
+		name        string
+		req         *types.QueryUTXORequest
+		wantTxidHex string
+		wantVout    uint32
+		wantAmount  uint64
+		wantErrIs   error
 	}{
 		{
-			name:     "found - first output of tx a",
-			req:      &types.QueryUTXORequest{Txid: utxo1.Txid, Vout: 0},
-			wantUTXO: &utxo1,
+			name:        "found - first output of tx a",
+			req:         &types.QueryUTXORequest{Txid: reverseHexFromWire(txA), Vout: 0},
+			wantTxidHex: reverseHexFromWire(txA),
+			wantVout:    0,
+			wantAmount:  100000,
 		},
 		{
-			name:     "found - second output of tx a",
-			req:      &types.QueryUTXORequest{Txid: utxo2.Txid, Vout: 1},
-			wantUTXO: &utxo2,
+			name:        "found - second output of tx a",
+			req:         &types.QueryUTXORequest{Txid: reverseHexFromWire(txA), Vout: 1},
+			wantTxidHex: reverseHexFromWire(txA),
+			wantVout:    1,
+			wantAmount:  200000,
 		},
 		{
-			name:     "found - tx b vout 0",
-			req:      &types.QueryUTXORequest{Txid: utxo3.Txid, Vout: 0},
-			wantUTXO: &utxo3,
+			name:        "found - tx b vout 0",
+			req:         &types.QueryUTXORequest{Txid: reverseHexFromWire(txB), Vout: 0},
+			wantTxidHex: reverseHexFromWire(txB),
+			wantVout:    0,
+			wantAmount:  300000,
 		},
 		{
 			name:      "not found - unknown txid",
-			req:       &types.QueryUTXORequest{Txid: txC, Vout: 0},
+			req:       &types.QueryUTXORequest{Txid: reverseHexFromWire(txC), Vout: 0},
 			wantErrIs: sdkerrors.ErrKeyNotFound,
 		},
 		{
 			name:      "not found - wrong vout",
-			req:       &types.QueryUTXORequest{Txid: utxo1.Txid, Vout: 99},
+			req:       &types.QueryUTXORequest{Txid: reverseHexFromWire(txA), Vout: 99},
 			wantErrIs: sdkerrors.ErrKeyNotFound,
 		},
 		{
@@ -74,7 +93,17 @@ func TestQueryUTXO(t *testing.T) {
 		},
 		{
 			name:      "empty txid",
-			req:       &types.QueryUTXORequest{Txid: nil, Vout: 0},
+			req:       &types.QueryUTXORequest{Txid: "", Vout: 0},
+			wantErrIs: sdkerrors.ErrInvalidRequest,
+		},
+		{
+			name:      "txid wrong length",
+			req:       &types.QueryUTXORequest{Txid: "abcd", Vout: 0},
+			wantErrIs: sdkerrors.ErrInvalidRequest,
+		},
+		{
+			name:      "txid not hex",
+			req:       &types.QueryUTXORequest{Txid: "zz" + reverseHexFromWire(txA)[2:], Vout: 0},
 			wantErrIs: sdkerrors.ErrInvalidRequest,
 		},
 	}
@@ -89,9 +118,9 @@ func TestQueryUTXO(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, tc.wantUTXO.Txid, resp.Utxo.Txid)
-			require.Equal(t, tc.wantUTXO.Vout, resp.Utxo.Vout)
-			require.Equal(t, tc.wantUTXO.Amount, resp.Utxo.Amount)
+			require.Equal(t, tc.wantTxidHex, resp.Utxo.Txid)
+			require.Equal(t, tc.wantVout, resp.Utxo.Vout)
+			require.Equal(t, tc.wantAmount, resp.Utxo.Amount)
 		})
 	}
 }

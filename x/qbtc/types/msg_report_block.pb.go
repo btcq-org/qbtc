@@ -68,8 +68,10 @@ var xxx_messageInfo_Attestation proto.InternalMessageInfo
 // fields. The chain re-serializes it into the canonical Bitcoin wire layout to
 // recompute the block hash and verify proof-of-work.
 type BtcHeader struct {
-	Version    uint32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	PrevBlock  []byte `protobuf:"bytes,2,opt,name=prev_block,json=prevBlock,proto3" json:"prev_block,omitempty"`
+	Version uint32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// 32-byte little-endian wire-format hash of the previous block.
+	PrevBlock []byte `protobuf:"bytes,2,opt,name=prev_block,json=prevBlock,proto3" json:"prev_block,omitempty"`
+	// 32-byte little-endian wire-format merkle root over the block's txids.
 	MerkleRoot []byte `protobuf:"bytes,3,opt,name=merkle_root,json=merkleRoot,proto3" json:"merkle_root,omitempty"`
 	Timestamp  uint32 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	Bits       uint32 `protobuf:"varint,5,opt,name=bits,proto3" json:"bits,omitempty"`
@@ -112,6 +114,7 @@ var xxx_messageInfo_BtcHeader proto.InternalMessageInfo
 // BtcTxIn is the minimum data the chain needs to look up and spend a parent
 // UTXO. Coinbase inputs leave prev_txid empty.
 type BtcTxIn struct {
+	// 32-byte little-endian txid of the parent transaction.
 	PrevTxid []byte `protobuf:"bytes,1,opt,name=prev_txid,json=prevTxid,proto3" json:"prev_txid,omitempty"`
 	PrevVout uint32 `protobuf:"varint,2,opt,name=prev_vout,json=prevVout,proto3" json:"prev_vout,omitempty"`
 }
@@ -196,6 +199,7 @@ var xxx_messageInfo_BtcTxOut proto.InternalMessageInfo
 
 // BtcTx is the slim view of a Bitcoin transaction the chain actually consumes.
 type BtcTx struct {
+	// 32-byte little-endian transaction id.
 	Txid     []byte      `protobuf:"bytes,1,opt,name=txid,proto3" json:"txid,omitempty"`
 	Coinbase bool        `protobuf:"varint,2,opt,name=coinbase,proto3" json:"coinbase,omitempty"`
 	Vin      []*BtcTxIn  `protobuf:"bytes,3,rep,name=vin,proto3" json:"vin,omitempty"`
