@@ -87,10 +87,24 @@ func BitsToTarget(bits uint32) (*big.Int, error) {
 	return target, nil
 }
 
-// CheckProofOfWork verifies that headerHash, interpreted as a big-endian
-// integer (Bitcoin convention reverses the wire bytes for numeric comparison),
-// is less than or equal to the target derived from bits.
-func CheckProofOfWork(headerHash [hashSize]byte, bits uint32) error {
+// MainnetPowLimitBits is the compact-encoded difficulty-1 ceiling on Bitcoin
+// mainnet (target ≈ 2^224). Headers whose expanded target exceeds this are
+// rejected: without a static ceiling, a malicious producer can declare e.g.
+// regtest difficulty (bits=0x207fffff, target≈2^255) and pass the PoW check
+// with essentially zero work — defeating the anchor entirely.
+//
+// Full per-height retarget validation is deferred; this is the static lower
+// bound that's required for the anchor to mean anything.
+const MainnetPowLimitBits uint32 = 0x1d00ffff
+
+// CheckProofOfWork verifies that:
+//  1. The target expanded from bits is well-formed and does not exceed
+//     powLimit (the expanded target of powLimitBits).
+//  2. headerHash, interpreted as a big-endian integer, is <= the target.
+//
+// Bitcoin compares the hash as a big-endian integer; the wire/header form is
+// little-endian, so the bytes are reversed before SetBytes.
+func CheckProofOfWork(headerHash [hashSize]byte, bits, powLimitBits uint32) error {
 	target, err := BitsToTarget(bits)
 	if err != nil {
 		return err
@@ -98,8 +112,13 @@ func CheckProofOfWork(headerHash [hashSize]byte, bits uint32) error {
 	if target.Sign() <= 0 {
 		return fmt.Errorf("invalid bits target")
 	}
-	// Bitcoin compares the hash as a big-endian integer; the wire/header form
-	// is little-endian, so reverse before SetBytes.
+	powLimit, err := BitsToTarget(powLimitBits)
+	if err != nil {
+		return fmt.Errorf("invalid powLimit: %w", err)
+	}
+	if target.Cmp(powLimit) > 0 {
+		return fmt.Errorf("bits target exceeds powLimit (bits=%#x, max=%#x)", bits, powLimitBits)
+	}
 	reversed := make([]byte, hashSize)
 	for i := 0; i < hashSize; i++ {
 		reversed[i] = headerHash[hashSize-1-i]
@@ -166,7 +185,7 @@ func (s *msgServer) validateBtcBlockCommit(ctx context.Context, msg *types.MsgBt
 		return [hashSize]byte{}, fmt.Errorf("header hash %x does not match msg.hash %x", headerHash[:], msg.Hash)
 	}
 
-	if err := CheckProofOfWork(headerHash, msg.Commit.Header.Bits); err != nil {
+	if err := CheckProofOfWork(headerHash, msg.Commit.Header.Bits, s.k.PoWLimitBits); err != nil {
 		return [hashSize]byte{}, fmt.Errorf("proof-of-work: %w", err)
 	}
 

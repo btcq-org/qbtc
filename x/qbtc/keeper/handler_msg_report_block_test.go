@@ -376,6 +376,11 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 	prev := make([]byte, 32)
 	require.NoError(t, f.keeper.LastProcessedHeader.Set(f.ctx, prev))
 
+	// Relax the PoW ceiling so a synthetic block at regtest difficulty
+	// passes header validation. Production keepers default to
+	// MainnetPowLimitBits; tests that build fabricated commits must lower it.
+	f.keeper.PoWLimitBits = 0x207fffff
+
 	header := &types.BtcHeader{
 		Version:    1,
 		PrevBlock:  prev,
@@ -389,7 +394,7 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 	for {
 		headerHash, err = keeper.HeaderHash(header)
 		require.NoError(t, err)
-		if keeper.CheckProofOfWork(headerHash, header.Bits) == nil {
+		if keeper.CheckProofOfWork(headerHash, header.Bits, f.keeper.PoWLimitBits) == nil {
 			break
 		}
 		header.Nonce++

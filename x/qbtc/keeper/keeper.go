@@ -44,6 +44,13 @@ type Keeper struct {
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
+
+	// PoWLimitBits is the compact-encoded maximum allowed BTC header target.
+	// Reported headers whose target exceeds this are rejected so a producer
+	// can't sneak in a regtest-difficulty fake block. Defaults to Bitcoin
+	// mainnet's difficulty-1 ceiling; tests can lower it to construct
+	// synthetic blocks.
+	PoWLimitBits uint32
 }
 
 func NewKeeper(
@@ -70,6 +77,7 @@ func NewKeeper(
 		ZkVerifyingKey:      collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
 		LastProcessedBlock:  collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
 		LastProcessedHeader: collections.NewItem(sb, types.LastProcessedHeaderKey, "last_processed_header", collections.BytesValue),
+		PoWLimitBits:        MainnetPowLimitBits,
 	}
 	schema, err := sb.Build()
 	if err != nil {

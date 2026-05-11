@@ -26,7 +26,15 @@ func TestSerializeHeaderAndHash_BlockOne(t *testing.T) {
 	wantBE := "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"
 	require.Equal(t, wantBE, hex.EncodeToString(reverseBytes(hh[:])))
 
-	require.NoError(t, keeper.CheckProofOfWork(hh, h.Bits))
+	require.NoError(t, keeper.CheckProofOfWork(hh, h.Bits, keeper.MainnetPowLimitBits))
+}
+
+func TestCheckProofOfWork_RejectsAboveCeiling(t *testing.T) {
+	// bits=0x207fffff is the regtest max target. A header that satisfies it
+	// trivially must still be rejected on mainnet because the bits ceiling
+	// guards against fabricated low-work commits.
+	var hash [32]byte // all zeros — satisfies any target
+	require.Error(t, keeper.CheckProofOfWork(hash, 0x207fffff, keeper.MainnetPowLimitBits))
 }
 
 func TestBitsToTarget_Mainnet(t *testing.T) {
@@ -73,7 +81,7 @@ func TestCheckProofOfWork_Reject(t *testing.T) {
 	for i := range hash {
 		hash[i] = 0xff
 	}
-	require.Error(t, keeper.CheckProofOfWork(hash, 0x1d00ffff))
+	require.Error(t, keeper.CheckProofOfWork(hash, 0x1d00ffff, keeper.MainnetPowLimitBits))
 }
 
 func reverseBytes(b []byte) []byte {
