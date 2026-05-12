@@ -39,9 +39,15 @@ func buildBtcBlockCommit(b *btcjson.GetBlockVerboseTxResult) (*types.BtcBlockCom
 }
 
 func convertHeader(b *btcjson.GetBlockVerboseTxResult) (*types.BtcHeader, error) {
-	prev, err := decodeBigEndianHash(b.PreviousHash)
-	if err != nil {
-		return nil, fmt.Errorf("prev hash: %w", err)
+	// Bitcoin's genesis block has no previous block; the JSON omits the field.
+	// All other blocks must supply a 32-byte parent hash.
+	prev := make([]byte, 32)
+	if b.PreviousHash != "" {
+		decoded, err := decodeBigEndianHash(b.PreviousHash)
+		if err != nil {
+			return nil, fmt.Errorf("prev hash: %w", err)
+		}
+		prev = decoded
 	}
 	merkle, err := decodeBigEndianHash(b.MerkleRoot)
 	if err != nil {
