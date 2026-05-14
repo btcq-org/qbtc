@@ -452,6 +452,7 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 			// Create claim message
 			msg := &types.MsgClaimWithProof{
 				Claimer:          f.claimerAddr,
+				Broadcaster:      f.claimerAddr,
 				Utxos:            tc.utxos,
 				Proof:            hex.EncodeToString(proofData),
 				MessageHash:      hex.EncodeToString(publicInput.MessageHash[:]),
@@ -505,7 +506,8 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	qbtcAddr := zk.HashQBTCAddress(f.claimerAddr)
 	// Create claim with invalid proof data (random bytes)
 	msg := &types.MsgClaimWithProof{
-		Claimer: f.claimerAddr,
+		Claimer:     f.claimerAddr,
+		Broadcaster: f.claimerAddr,
 		Utxos: []types.UTXORef{
 			{Txid: "9999000000000000000000000000000000000000000000000000000000000001", Vout: 0},
 		},
@@ -559,6 +561,7 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 
 		msg := &types.MsgClaimWithProof{
 			Claimer:          f.claimerAddr,
+			Broadcaster:      f.claimerAddr,
 			Receiver:         receiverAddr,
 			Utxos:            []types.UTXORef{{Txid: "aaab000000000000000000000000000000000000000000000000000000000001", Vout: 0}},
 			Proof:            hex.EncodeToString(proofData),
@@ -592,6 +595,7 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 
 		msg := &types.MsgClaimWithProof{
 			Claimer:          f.claimerAddr,
+			Broadcaster:      f.claimerAddr,
 			Receiver:         receiverAddr,
 			Utxos:            []types.UTXORef{{Txid: "aaab000000000000000000000000000000000000000000000000000000000002", Vout: 0}},
 			Proof:            hex.EncodeToString(proofData),

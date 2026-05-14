@@ -64,6 +64,11 @@ the zkprover tool. Example:
 				return fmt.Errorf("decode MsgClaimWithProof: %w", err)
 			}
 
+			// Auto-fill broadcaster from --from when not set in the JSON file.
+			if msg.Broadcaster == "" {
+				msg.Broadcaster = clientCtx.GetFromAddress().String()
+			}
+
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 		},
 	}

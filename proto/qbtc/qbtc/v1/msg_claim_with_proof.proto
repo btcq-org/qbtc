@@ -21,10 +21,11 @@ message UTXORef {
 // be claimed; others are skipped. Maximum 50 UTXOs can be claimed in a single
 // batch to prevent DoS.
 message MsgClaimWithProof {
-  option (cosmos.msg.v1.signer) = "claimer";
+  option (cosmos.msg.v1.signer) = "broadcaster";
   option (amino.name) = "qbtc/MsgClaimWithProof";
 
-  // The address on the qbtc chain that will receive the claimed tokens
+  // The address on the qbtc chain that will receive the claimed tokens.
+  // Payload-only: minting destination, not the cosmos tx signer.
   string claimer = 1;
 
   // The UTXOs to claim. Only those matching the proven Bitcoin address will
@@ -47,6 +48,9 @@ message MsgClaimWithProof {
   // Optional. If set, minted tokens are sent to this address instead of
   // claimer. The ZK proof must commit to this address (via qbtc_address_hash).
   string receiver = 8;
+  // The cosmos tx signer. For direct claims this equals claimer; for
+  // proof-service broadcasts this is the service's broadcast key address.
+  string broadcaster = 9;
 }
 
 // MsgClaimWithProofResponse is the response for a successful batch claim.
