@@ -132,6 +132,7 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 	// Build the message
 	msg := &qbtctypes.MsgClaimWithProof{
 		Claimer:          resp.ClaimerAddress,
+		Broadcaster:      key.fromAddr,
 		Utxos:            resp.UTXOs,
 		Proof:            resp.Proof,
 		MessageHash:      resp.MessageHash,

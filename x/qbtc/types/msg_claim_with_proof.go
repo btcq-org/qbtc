@@ -49,6 +49,14 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 		}
 	}
 
+	// Validate broadcaster (the cosmos tx signer)
+	if m.Broadcaster == "" {
+		return se.ErrInvalidRequest.Wrap("broadcaster address is required")
+	}
+	if _, err := sdk.AccAddressFromBech32(m.Broadcaster); err != nil {
+		return se.ErrInvalidAddress.Wrapf("invalid broadcaster address: %v", err)
+	}
+
 	// Validate at least one UTXO is provided
 	if len(m.Utxos) == 0 {
 		return se.ErrInvalidRequest.Wrap("at least one UTXO is required")

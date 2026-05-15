@@ -113,6 +113,7 @@ func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *typ
 
 	return &types.MsgClaimWithProof{
 		Claimer:          claimer,
+		Broadcaster:      claimer,
 		Utxos:            utxos,
 		Proof:            hex.EncodeToString(proofBytes),
 		MessageHash:      hex.EncodeToString(messageHash[:]),
