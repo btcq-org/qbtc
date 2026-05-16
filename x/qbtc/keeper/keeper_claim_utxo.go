@@ -5,11 +5,15 @@ import (
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 // ClaimUTXO claims a UTXO.
 // It mints the coins to the recipient (or reserve module account if recipient is nil) and resets the entitled amount to 0.
 func (k Keeper) ClaimUTXO(ctx context.Context, txid []byte, vout uint32, recipient sdk.AccAddress) error {
+	if len(txid) != types.BitcoinTxIDLength {
+		return sdkerror.ErrInvalidRequest.Wrapf("txid must be %d bytes, got %d", types.BitcoinTxIDLength, len(txid))
+	}
 	key := types.UTXOKey(txid, vout)
 	utxo, err := k.Utxoes.Get(ctx, key)
 	if err != nil {
