@@ -9,13 +9,13 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 )
 
 // AccountKeeper is the subset of x/auth's AccountKeeper the decorator needs to
 // pre-create signer accounts for first-time claimers.
 type AccountKeeper interface {
 	GetAccount(ctx context.Context, addr sdk.AccAddress) sdk.AccountI
-	NewAccountWithAddress(ctx context.Context, addr sdk.AccAddress) sdk.AccountI
 	SetAccount(ctx context.Context, acc sdk.AccountI)
 }
 
@@ -88,11 +88,29 @@ func (fcd FreeClaimDecorator) ensureSignerAccounts(ctx sdk.Context, tx sdk.Tx) e
 	return nil
 }
 
+// createAccountIfMissing pre-creates a BaseAccount for addr if it doesn't
+// already exist. Uses NewBaseAccountWithAddress (account_number = 0) rather
+// than ak.NewAccountWithAddress (auto-increment from the global counter)
+// because wallet-direct claimers cannot predict the auto-assigned number —
+// without a stable account_number they cannot construct a SignDoc the
+// downstream SigVerificationDecorator will accept.
+//
+// account_number=0 is safe here:
+//   - The ZK proof in MsgClaimWithProof binds the claim to (claimer, chain,
+//     version) and is one-shot per UTXO, so it carries the anti-replay
+//     property account_number would otherwise provide for the first tx.
+//   - sequence still increments normally on the persisted BaseAccount,
+//     protecting any subsequent txs from this account.
+//   - The auth store is keyed by address, not by account_number, so
+//     duplicates across fresh claim accounts do not collide.
+//   - The global account-number counter is left untouched; regular
+//     account creations (faucets, transfers, IBC) keep their unique
+//     numbering — they never go through this decorator.
 func (fcd FreeClaimDecorator) createAccountIfMissing(ctx sdk.Context, addr sdk.AccAddress) {
 	if fcd.ak.GetAccount(ctx, addr) != nil {
 		return
 	}
-	fcd.ak.SetAccount(ctx, fcd.ak.NewAccountWithAddress(ctx, addr))
+	fcd.ak.SetAccount(ctx, authtypes.NewBaseAccountWithAddress(addr))
 }
 
 // isClaimOnlyTx returns true if the tx contains only MsgClaimWithProof messages.

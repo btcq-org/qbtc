@@ -19,7 +19,6 @@ import (
 // FreeClaimDecorator without spinning up a real keeper.
 type fakeAccountKeeper struct {
 	accounts map[string]sdk.AccountI
-	nextNum  uint64
 }
 
 func newFakeAccountKeeper() *fakeAccountKeeper {
@@ -28,13 +27,6 @@ func newFakeAccountKeeper() *fakeAccountKeeper {
 
 func (f *fakeAccountKeeper) GetAccount(_ context.Context, addr sdk.AccAddress) sdk.AccountI {
 	return f.accounts[addr.String()]
-}
-
-func (f *fakeAccountKeeper) NewAccountWithAddress(_ context.Context, addr sdk.AccAddress) sdk.AccountI {
-	acc := authtypes.NewBaseAccountWithAddress(addr)
-	_ = acc.SetAccountNumber(f.nextNum)
-	f.nextNum++
-	return acc
 }
 
 func (f *fakeAccountKeeper) SetAccount(_ context.Context, acc sdk.AccountI) {
@@ -79,8 +71,13 @@ func TestFreeClaimDecorator_CreatesAccountForFirstTimeClaimer(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, nextCalled, "next decorator should run")
-	require.NotNil(t, ak.GetAccount(context.Background(), claimer),
+	acc := ak.GetAccount(context.Background(), claimer)
+	require.NotNil(t, acc,
 		"claimer account must be pre-created so downstream decorators can look it up")
+	require.Equal(t, uint64(0), acc.GetAccountNumber(),
+		"fresh claim accounts must have account_number=0 so wallet-direct claimers can sign a matching SignDoc")
+	require.Equal(t, uint64(0), acc.GetSequence(),
+		"fresh claim accounts must have sequence=0 so the first claim tx verifies")
 }
 
 func TestFreeClaimDecorator_PreservesExistingAccount(t *testing.T) {
