@@ -35,13 +35,9 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	}
 
 	minConfirmations := s.k.GetConfig(sdkCtx, constants.MinUtxoConfirmationBlocks)
-	lastProcessedBlock := uint64(0)
-	if minConfirmations > 0 {
-		var err error
-		lastProcessedBlock, err = s.k.GetLastProcessedBlock(sdkCtx)
-		if err != nil {
-			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
-		}
+	lastProcessedBlock, err := s.k.GetLastProcessedBlock(sdkCtx)
+	if err != nil {
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
 	}
 
 	// Parse the claimer address upfront
