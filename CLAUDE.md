@@ -8,13 +8,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+### Build
+
 ```bash
 # Build all binaries (qbtcd, bifrost, utxo-indexer)
 make build
 
+# Install qbtcd to $GOPATH/bin
+make install
+
 # Build zkprover CLI only
 make build-prover
 
+# Build proof-service HTTP wrapper
+make build-proof-service
+
+# Build Docker image for proof-service
+make docker-build-proof-service
+
+# Run proof-service in Docker (exposes :8090)
+make docker-run-proof-service
+
+# Build Docker image for local development
+make docker-localnet
+```
+
+### Testing
+
+```bash
 # Run unit tests (excludes ZK circuit tests)
 make test-unit
 
@@ -24,24 +45,91 @@ make test-all
 # Run ZK-specific tests
 make test-zk
 
+# Run tests with race condition detection
+make test-race
+
+# Run tests with coverage report (generates HTML)
+make test-cover
+
+# Run benchmarks
+make bench
+
+# Run go vet
+make govet
+
+# Run go vet + unit tests
+make test
+
+# Run vulnerability check
+make govulncheck
+
 # Run a single test
 go test ./x/qbtc/zk/... -run TestFoo -v -tags testing
+```
 
-# Lint
+### Linting
+
+```bash
+# Run linter
 make lint
+
+# Run linter and auto-fix issues
 make lint-fix
 
-# Full check (proto format + lint + markdown lint)
-make check
+# Run markdown linter
+make lint-md
 
-# Generate protobuf
+# Run markdown linter and auto-fix
+make lint-md-fix
+
+# Full check: proto format + lint + markdown lint
+make check
+```
+
+### Protobuf
+
+```bash
+# Generate protobuf Go files
 make proto-gen
 
-# Generate trusted setup (Hermez PoT ceremony)
-make setup-prover
+# Generate OpenAPI spec
+make proto-openapi-gen
 
+# Format proto files (requires Docker)
+make proto-format
+
+# Check proto formatting (requires Docker)
+make proto-format-check
+
+# Lint proto files (requires Docker)
+make proto-lint
+```
+
+### ZK / Prover
+
+```bash
+# Generate trusted setup (Hermez PoT ceremony) — run build-prover first
+make setup-prover
+```
+
+### Local Node
+
+```bash
 # Start a local node
 ./scripts/start-node.sh
+
+# Generate testnet config files (requires BITCOIN_RPC_* env vars)
+make generate-testnet
+```
+
+### Release
+
+```bash
+# Build release binaries locally via Docker (snapshot, no publish)
+make release-local
+
+# Publish a release via Docker (requires GITHUB_TOKEN)
+make release
 ```
 
 **Note**: ZK circuit tests require the `-tags testing` build tag and a pre-generated trusted setup. Use `make test-unit` for fast iteration without ZK tests.

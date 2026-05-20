@@ -33,6 +33,7 @@ type Keeper struct {
 	Utxoes            collections.Map[string, types.UTXO]
 	NodePeerAddresses collections.Map[string, string]
 	ConstOverrides    collections.Map[string, int64]
+	StringParams      collections.Map[string, string]
 
 	LastProcessedBlock collections.Item[uint64]
 
@@ -62,6 +63,7 @@ func NewKeeper(
 		Utxoes:             collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
 		NodePeerAddresses:  collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:     collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
+		StringParams:       collections.NewMap(sb, types.StringParamKeys, "string_params", collections.StringKey, collections.StringValue),
 		ZkVerifyingKey:     collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
 		LastProcessedBlock: collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
 	}
@@ -93,6 +95,14 @@ func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int
 			ctx.Logger().Error("failed to get const override", "const", keyName, "error", err)
 		}
 		return constants.DefaultValues[constName]
+	}
+	return v
+}
+
+func (k Keeper) GetStringParam(ctx context.Context, key string) string {
+	v, err := k.StringParams.Get(ctx, key)
+	if err != nil {
+		return ""
 	}
 	return v
 }
