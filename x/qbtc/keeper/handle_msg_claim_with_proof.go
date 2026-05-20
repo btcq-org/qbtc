@@ -23,6 +23,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	if isDisabled > 0 {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ClaimWithProof feature is disabled")
 	}
+
 	// Validate the message
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
@@ -31,6 +32,12 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	// Ensure the ZK verifier is initialized
 	if !zk.IsVerifierInitialized() {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ZK verifier not initialized")
+	}
+
+	minConfirmations := s.k.GetConfig(sdkCtx, constants.MinUtxoConfirmationBlocks)
+	lastProcessedBlock, err := s.k.GetLastProcessedBlock(sdkCtx)
+	if err != nil {
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
 	}
 
 	// Parse the claimer address upfront
@@ -69,6 +76,10 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 
 		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
 			continue // Skip UTXOs without address
+		}
+
+		if minConfirmations > 0 && utxo.BlockHeight > 0 && lastProcessedBlock < utxo.BlockHeight+uint64(minConfirmations) {
+			continue // Skip UTXOs that have not reached the minimum confirmation threshold
 		}
 
 		addressHash, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address)
@@ -131,6 +142,17 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 			skippedCount++
 			sdkCtx.Logger().Debug("skipping UTXO: no address",
 				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout)
+			continue
+		}
+
+		if minConfirmations > 0 && utxo.BlockHeight > 0 && lastProcessedBlock < utxo.BlockHeight+uint64(minConfirmations) {
+			skippedCount++
+			sdkCtx.Logger().Debug("skipping UTXO: not enough confirmations",
+				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout,
+				"utxo_block_height", utxo.BlockHeight,
+				"last_processed_block", lastProcessedBlock,
+				"min_confirmations", minConfirmations,
+			)
 			continue
 		}
 

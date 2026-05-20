@@ -9,6 +9,7 @@ const (
 	EmissionCurve ConstantName = iota
 	BlocksPerYear
 	ClaimWithProofDisabled
+	MinUtxoConfirmationBlocks
 )
 
 func FromString(s string) (ConstantName, bool) {
@@ -19,6 +20,8 @@ func FromString(s string) (ConstantName, bool) {
 		return BlocksPerYear, true
 	case "ClaimWithProofDisabled":
 		return ClaimWithProofDisabled, true
+	case "MinUtxoConfirmationBlocks":
+		return MinUtxoConfirmationBlocks, true
 	default:
 		return 0, false
 	}
