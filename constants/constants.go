@@ -3,7 +3,8 @@
 package constants
 
 var DefaultValues = map[ConstantName]int64{
-	EmissionCurve:          5,
-	BlocksPerYear:          10 * 60 * 24 * 365, // 10 blocks per minute
-	ClaimWithProofDisabled: 0,
+	EmissionCurve:             5,
+	BlocksPerYear:             10 * 60 * 24 * 365, // 10 blocks per minute
+	ClaimWithProofDisabled:    0,
+	MinUtxoConfirmationBlocks: 144, // ~1 day at ~10 min/block
 }

@@ -23,4 +23,6 @@ message UTXO {
   uint64 entitled_amount = 4;
   // The script public key associated with this UTXO
   ScriptPubKeyResult script_pub_key = 5;
+  // The Bitcoin block height at which this UTXO was created
+  uint64 block_height = 6;
 }

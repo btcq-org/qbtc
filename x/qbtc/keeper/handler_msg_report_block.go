@@ -119,7 +119,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 			coinBaseTx = &tx
 			continue
 		}
-		fee, err := s.processTransaction(cacheContext, tx)
+		fee, err := s.processTransaction(cacheContext, tx, msg.Height)
 		if err != nil {
 			cacheContext.Logger().Error("failed to process transaction", "txid", tx.Txid, "error", err)
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", tx.Txid, err)
@@ -128,7 +128,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	}
 	// update coinbase transaction
 	if coinBaseTx != nil {
-		if err := s.processCoinbaseVOuts(cacheContext, coinBaseTx.Vout, coinBaseTx.Txid, totalFee); err != nil {
+		if err := s.processCoinbaseVOuts(cacheContext, coinBaseTx.Vout, coinBaseTx.Txid, totalFee, msg.Height); err != nil {
 			cacheContext.Logger().Error("failed to process coinbase transaction", "txid", coinBaseTx.Txid, "error", err)
 			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinBaseTx.Txid, err)
 		}
@@ -165,7 +165,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	return &types.MsgEmpty{}, nil
 }
 
-func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) (uint64, error) {
+func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, blockHeight uint64) (uint64, error) {
 	defer telemetry.MeasureSince(time.Now(), "process_transaction")
 	fee := uint64(0)
 	totalClaimable, totalInput, hasClaimed, err := s.processVIn(ctx, tx.Vin)
@@ -188,7 +188,7 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult) 
 			totalClaimable = 0
 		}
 	}
-	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalOutput); err != nil {
+	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalOutput, blockHeight); err != nil {
 		return fee, err
 	}
 
@@ -368,7 +368,8 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 	txID string,
 	totalClaimableAmount uint64,
 	hasClaim bool,
-	totalOutputAmount uint64) error {
+	totalOutputAmount uint64,
+	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_vout")
 	for _, out := range outs {
 		if out.Value == 0 {
@@ -390,6 +391,7 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 				Type:    out.ScriptPubKey.Type,
 				Address: out.ScriptPubKey.Address,
 			},
+			BlockHeight: blockHeight,
 		}
 		if err := s.k.Utxoes.Set(ctx, utxo.GetKey(), utxo); err != nil {
 			ctx.Logger().Error("failed to save UTXO", "key", utxo.GetKey(), "error", err)
@@ -401,7 +403,8 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	outs []btcjson.Vout,
 	txID string,
-	totalFee uint64) error {
+	totalFee uint64,
+	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_coinbase_vout")
 	for _, out := range outs {
 		if out.Value == 0 {
@@ -422,6 +425,7 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 				Type:    out.ScriptPubKey.Type,
 				Address: out.ScriptPubKey.Address,
 			},
+			BlockHeight: blockHeight,
 		}
 		if err := s.k.Utxoes.Set(ctx, utxo.GetKey(), utxo); err != nil {
 			ctx.Logger().Error("failed to save UTXO", "key", utxo.GetKey(), "error", err)
