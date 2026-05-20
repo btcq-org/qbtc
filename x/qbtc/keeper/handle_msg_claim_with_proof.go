@@ -24,15 +24,6 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ClaimWithProof feature is disabled")
 	}
 
-	minConfirmations := s.k.GetConfig(sdkCtx, constants.MinUtxoConfirmationBlocks)
-	lastProcessedBlock := uint64(0)
-	if minConfirmations > 0 {
-		var err error
-		lastProcessedBlock, err = s.k.GetLastProcessedBlock(sdkCtx)
-		if err != nil {
-			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
-		}
-	}
 	// Validate the message
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, err
@@ -41,6 +32,16 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	// Ensure the ZK verifier is initialized
 	if !zk.IsVerifierInitialized() {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ZK verifier not initialized")
+	}
+
+	minConfirmations := s.k.GetConfig(sdkCtx, constants.MinUtxoConfirmationBlocks)
+	lastProcessedBlock := uint64(0)
+	if minConfirmations > 0 {
+		var err error
+		lastProcessedBlock, err = s.k.GetLastProcessedBlock(sdkCtx)
+		if err != nil {
+			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
+		}
 	}
 
 	// Parse the claimer address upfront
