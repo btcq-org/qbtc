@@ -99,12 +99,15 @@ func (k Keeper) GetConfig(ctx sdk.Context, constName constants.ConstantName) int
 	return v
 }
 
-func (k Keeper) GetStringParam(ctx context.Context, key string) string {
+func (k Keeper) GetStringParam(ctx context.Context, key string) (string, error) {
 	v, err := k.StringParams.Get(ctx, key)
-	if err != nil {
-		return ""
+	if errors.Is(err, collections.ErrNotFound) {
+		return "", nil
 	}
-	return v
+	if err != nil {
+		return "", err
+	}
+	return v, nil
 }
 
 func (k Keeper) GetLastProcessedBlock(ctx context.Context) (uint64, error) {

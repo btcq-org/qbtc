@@ -20,15 +20,23 @@ func (s *msgServer) GovClaimUTXO(ctx context.Context, msg *types.MsgGovClaimUTXO
 
 	// Resolve optional fund addresses from governance string params.
 	var devAddr, mktAddr sdk.AccAddress
-	if addrStr := s.k.GetStringParam(ctx, types.DevFundAddressKey); addrStr != "" {
-		parsed, err := sdk.AccAddressFromBech32(addrStr)
+	devAddrStr, err := s.k.GetStringParam(ctx, types.DevFundAddressKey)
+	if err != nil {
+		return nil, err
+	}
+	if devAddrStr != "" {
+		parsed, err := sdk.AccAddressFromBech32(devAddrStr)
 		if err != nil {
 			return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid dev fund address in params: %s", err)
 		}
 		devAddr = parsed
 	}
-	if addrStr := s.k.GetStringParam(ctx, types.MarketingFundAddressKey); addrStr != "" {
-		parsed, err := sdk.AccAddressFromBech32(addrStr)
+	mktAddrStr, err := s.k.GetStringParam(ctx, types.MarketingFundAddressKey)
+	if err != nil {
+		return nil, err
+	}
+	if mktAddrStr != "" {
+		parsed, err := sdk.AccAddressFromBech32(mktAddrStr)
 		if err != nil {
 			return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid marketing fund address in params: %s", err)
 		}

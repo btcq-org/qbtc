@@ -159,7 +159,8 @@ func Test_msgServer_UpdateParam_StringParamPersisted(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify it was stored.
-	got := f.keeper.GetStringParam(f.ctx, types.DevFundAddressKey)
+	got, err := f.keeper.GetStringParam(f.ctx, types.DevFundAddressKey)
+	require.NoError(t, err)
 	assert.Equal(t, devAddrStr, got)
 
 	// Clear it.
@@ -169,6 +170,7 @@ func Test_msgServer_UpdateParam_StringParamPersisted(t *testing.T) {
 		StringValue: "",
 	})
 	require.NoError(t, err)
-	got = f.keeper.GetStringParam(f.ctx, types.DevFundAddressKey)
+	got, err = f.keeper.GetStringParam(f.ctx, types.DevFundAddressKey)
+	require.NoError(t, err)
 	assert.Equal(t, "", got)
 }
