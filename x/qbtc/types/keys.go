@@ -26,6 +26,9 @@ var (
 	// ConstOverrideKeys is the prefix for constant overrides
 	ConstOverrideKeys = collections.NewPrefix("const_override")
 
+	// StringParamKeys is the prefix for string-valued governance parameters
+	StringParamKeys = collections.NewPrefix("string_param")
+
 	// ZkVerifyingKeyKey stores the PLONK verifying key for ZK proof verification
 	ZkVerifyingKeyKey = collections.NewPrefix("zk_verifying_key")
 
@@ -34,13 +37,22 @@ var (
 )
 
 const (
+	// String parameter keys for governance-controlled addresses.
+	DevFundAddressKey      = "DevFundAddress"
+	MarketingFundAddressKey = "MarketingFundAddress"
+)
+
+const (
 	EventTypeUpdateParam = "update_param"
 
 	AttributeKeyParamKey   = "param_key"
 	AttributeKeyParamValue = "param_value"
 
-	EventTypeGovClaimUTXO  = "gov_claim_utxo"
-	AttributeKeyUTXOCount  = "utxo_count"
-	AttributeKeyGovClaimer = "gov_claimer"
-	AttributeUtxos         = "utxos"
+	EventTypeGovClaimUTXO           = "gov_claim_utxo"
+	AttributeKeyUTXOCount           = "utxo_count"
+	AttributeKeyGovClaimer          = "gov_claimer"
+	AttributeUtxos                  = "utxos"
+	AttributeKeyDevFundAmount       = "dev_fund_amount"
+	AttributeKeyMarketingFundAmount = "marketing_fund_amount"
+	AttributeKeyReserveAmount       = "reserve_amount"
 )

@@ -7,12 +7,12 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_msgServer_UpdateParam(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
+		name    string
 		msg     *types.MsgUpdateParam
 		want    *types.MsgEmpty
 		wantErr bool
@@ -68,7 +68,7 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "valid message",
+			name: "valid int64 param",
 			msg: &types.MsgUpdateParam{
 				Authority: "gov",
 				Key:       constants.EmissionCurve.String(),
@@ -76,6 +76,46 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			},
 			want:    &types.MsgEmpty{},
 			wantErr: false,
+		},
+		{
+			name: "valid DevFundAddress - set to empty (clear)",
+			msg: &types.MsgUpdateParam{
+				Authority:   "gov",
+				Key:         types.DevFundAddressKey,
+				StringValue: "",
+			},
+			want:    &types.MsgEmpty{},
+			wantErr: false,
+		},
+		{
+			name: "invalid DevFundAddress - bad bech32",
+			msg: &types.MsgUpdateParam{
+				Authority:   "gov",
+				Key:         types.DevFundAddressKey,
+				StringValue: "not-a-valid-address",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "valid MarketingFundAddress - set to empty (clear)",
+			msg: &types.MsgUpdateParam{
+				Authority:   "gov",
+				Key:         types.MarketingFundAddressKey,
+				StringValue: "",
+			},
+			want:    &types.MsgEmpty{},
+			wantErr: false,
+		},
+		{
+			name: "invalid MarketingFundAddress - bad bech32",
+			msg: &types.MsgUpdateParam{
+				Authority:   "gov",
+				Key:         types.MarketingFundAddressKey,
+				StringValue: "not-a-valid-address",
+			},
+			want:    nil,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -98,4 +138,39 @@ func Test_msgServer_UpdateParam(t *testing.T) {
 			assert.Equal(st, tt.want, got)
 		})
 	}
+}
+
+func Test_msgServer_UpdateParam_StringParamPersisted(t *testing.T) {
+	f := initFixture(t)
+	server := keeper.NewMsgServerImpl(f.keeper)
+
+	// Generate a valid qbtc bech32 address from raw bytes.
+	devAddrRaw := make([]byte, 20)
+	copy(devAddrRaw, []byte("dev_fund_address_000"))
+	devAddrStr, err := f.addressCodec.BytesToString(devAddrRaw)
+	require.NoError(t, err)
+
+	// Set DevFundAddress.
+	_, err = server.UpdateParam(f.ctx, &types.MsgUpdateParam{
+		Authority:   "gov",
+		Key:         types.DevFundAddressKey,
+		StringValue: devAddrStr,
+	})
+	require.NoError(t, err)
+
+	// Verify it was stored.
+	got, err := f.keeper.GetStringParam(f.ctx, types.DevFundAddressKey)
+	require.NoError(t, err)
+	assert.Equal(t, devAddrStr, got)
+
+	// Clear it.
+	_, err = server.UpdateParam(f.ctx, &types.MsgUpdateParam{
+		Authority:   "gov",
+		Key:         types.DevFundAddressKey,
+		StringValue: "",
+	})
+	require.NoError(t, err)
+	got, err = f.keeper.GetStringParam(f.ctx, types.DevFundAddressKey)
+	require.NoError(t, err)
+	assert.Equal(t, "", got)
 }
