@@ -66,6 +66,7 @@ bench:
 
 test-all:
 	@echo Running unit tests...
+	@go mod download github.com/vultisig/go-wrappers
 	@export LD_LIBRARY_PATH=$$(go list -m -f '{{.Dir}}' github.com/vultisig/go-wrappers)/includes/linux:$$LD_LIBRARY_PATH && \
 	go test -mod=readonly -tags=testing -v -timeout 30m ./...
 
