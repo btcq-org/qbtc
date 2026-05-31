@@ -1,0 +1,56 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.goproto_getters_all) = false;
+
+// BtcBlockDelta is the minimal representation of a Bitcoin block required to
+// maintain the on-chain UTXO set. It carries the spent outpoints to delete and
+// the created outputs to insert. Input values and scripts are intentionally
+// omitted: they are recovered from the chain's own UTXO set at apply time.
+//
+// All hash/txid byte fields use Bitcoin display (big-endian) order, i.e. the
+// hex-decoded form of the txid/hash strings returned by bitcoind, so the
+// encoding round-trips through hex without an endianness flip. The marshaled
+// form must be byte-for-byte deterministic across honest observers so that the
+// sha256 digest carried in vote extensions matches.
+message BtcBlockDelta {
+  // The height of the Bitcoin block this delta represents.
+  uint32 height = 1;
+  // The Bitcoin block hash (display order).
+  bytes block_hash = 2;
+  // The previous Bitcoin block hash (display order); enables chain linkage.
+  bytes prev_block_hash = 3;
+  // Transactions, in block order.
+  repeated BtcTx txs = 4;
+}
+
+// BtcTx is the minimal per-transaction delta: which UTXOs it spends and which
+// it creates.
+message BtcTx {
+  // The transaction id (display order). Required when outputs is non-empty
+  // because it keys the created UTXOs.
+  bytes txid = 1;
+  // True for the coinbase transaction (fees + subsidy accounting).
+  bool coinbase = 2;
+  // Outpoints spent by this transaction; the matching UTXOs are deleted.
+  repeated BtcOutpoint inputs = 3;
+  // Outputs created by this transaction; inserted as new UTXOs.
+  repeated BtcTxOut outputs = 4;
+}
+
+// BtcOutpoint references a previously created output by (txid, vout).
+message BtcOutpoint {
+  bytes txid = 1;
+  uint32 vout = 2;
+}
+
+// BtcTxOut is a created output: its value and the raw scriptPubKey. The raw
+// script is stored losslessly so any script type is supported and the human
+// readable address is derivable on-chain.
+message BtcTxOut {
+  uint64 value = 1;
+  bytes script_pub_key = 2;
+}

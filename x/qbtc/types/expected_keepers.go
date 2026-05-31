@@ -5,6 +5,7 @@ import (
 
 	"cosmossdk.io/core/address"
 	"cosmossdk.io/math"
+	cmtprotocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
@@ -38,4 +39,7 @@ type StakingKeeper interface {
 	Validator(ctx context.Context, addr sdk.ValAddress) (stakingtypes.ValidatorI, error)
 	// IterateBondedValidatorsByPower iterates over validators by power
 	IterateBondedValidatorsByPower(ctx context.Context, fn func(index int64, validator stakingtypes.ValidatorI) (stop bool)) error
+	// GetPubKeyByConsAddr returns a validator's consensus public key. Used to
+	// verify vote-extension signatures via baseapp.ValidateVoteExtensions.
+	GetPubKeyByConsAddr(context.Context, sdk.ConsAddress) (cmtprotocrypto.PublicKey, error)
 }

@@ -218,6 +218,12 @@ func New(
 	)
 	app.SetPrepareProposal(eBifrostProposalHandler.PrepareProposal)
 	app.SetProcessProposal(eBifrostProposalHandler.ProcessProposal)
+	// ABCI 2.0 vote extensions carry each validator's attestation digests for
+	// observed Bitcoin blocks; the >2/3 supermajority is proven by the
+	// CometBFT commit. Requires consensus param
+	// abci.vote_extensions_enable_height to be set (genesis or upgrade).
+	app.SetExtendVoteHandler(eBifrostProposalHandler.ExtendVote)
+	app.SetVerifyVoteExtensionHandler(eBifrostProposalHandler.VerifyVoteExtension)
 
 	/****  Module Options ****/
 

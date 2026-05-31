@@ -2,6 +2,7 @@ syntax = "proto3";
 package qbtc.ebifrost.v1;
 
 import "qbtc/qbtc/v1/msg_report_block.proto";
+import "qbtc/qbtc/v1/type_btc_block_delta.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/ebifrost";
 
@@ -9,7 +10,14 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/ebifrost";
 service LocalhostBifrost {
   // SendBTCBlock sends a block to the btcq node once it has been validated with
   // enough attestations.
+  //
+  // Deprecated: superseded by SendBTCBlockDelta + ABCI vote extensions. Kept
+  // until the bifrost daemon is migrated to produce minimal deltas.
   rpc SendBTCBlock(.qbtc.qbtc.v1.MsgBtcBlock) returns (SendBTCBlockResponse);
+  // SendBTCBlockDelta feeds an observed minimal Bitcoin block delta into the
+  // node's cache, from where ExtendVote attests its digest.
+  rpc SendBTCBlockDelta(.qbtc.qbtc.v1.BtcBlockDelta)
+      returns (SendBTCBlockResponse);
   // SubscribeToEvents streams event notifications that match the requested
   // types.
   rpc SubscribeToEvents(SubscribeRequest) returns (stream EventNotification);

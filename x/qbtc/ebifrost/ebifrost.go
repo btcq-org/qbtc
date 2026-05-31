@@ -20,6 +20,8 @@ const (
 	// generated: bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte("ebifrost_signer")))
 	// nolint:unused
 	ebifrostSignerAcc = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
+	// SignerAcc is the exported enshrined-bifrost signer used on injected txs.
+	SignerAcc = ebifrostSignerAcc
 	// number of most recent blocks to keep in the cache
 	// nolint:unused
 	cachedBlocks = 10
@@ -48,6 +50,12 @@ type EnshrinedBifrost struct {
 
 	// caches
 	btcBlockCache *InjectCache[*types.MsgBtcBlock]
+
+	// btcDeltaCache holds observed minimal block deltas keyed by Bitcoin height,
+	// fed by the bifrost daemon via SendBTCBlockDelta. ExtendVote attests their
+	// digests and PrepareProposal injects the agreed delta bytes.
+	deltaMu       sync.RWMutex
+	btcDeltaCache map[uint64]*types.BtcBlockDelta
 }
 
 // NewEnshrinedBifrost creates a new EnshrinedBifrost server.
@@ -65,6 +73,7 @@ func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger)
 		stopCh:        make(chan struct{}),
 		subscribers:   make(map[string][]chan *EventNotification),
 		btcBlockCache: NewInjectCache[*types.MsgBtcBlock](),
+		btcDeltaCache: make(map[uint64]*types.BtcBlockDelta),
 	}
 	RegisterLocalhostBifrostServer(s, eb)
 	return eb

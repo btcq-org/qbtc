@@ -1,0 +1,33 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "qbtc/qbtc/v1/type_btc_block_delta.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.goproto_getters_all) = false;
+option (gogoproto.goproto_stringer_all) = true;
+option (gogoproto.stringer_all) = false;
+
+// MsgInjectBtcBlock is injected by the proposing validator during
+// PrepareProposal. It carries the agreed minimal block delta together with the
+// previous height's ExtendedCommitInfo, which proves that a >2/3 supermajority
+// attested the delta digest through their vote extensions. It can only enter a
+// block via proposal injection (enforced by the ante handler), never via the
+// mempool.
+message MsgInjectBtcBlock {
+  option (cosmos.msg.v1.signer) = "signer";
+  option (amino.name) = "btcq/MsgInjectBtcBlock";
+
+  // The minimal Bitcoin block delta to apply to the UTXO set.
+  BtcBlockDelta delta = 1;
+  // Marshaled cometbft abci.ExtendedCommitInfo from height H-1, carrying each
+  // validator's vote extension and its precommit signature.
+  bytes extended_commit_info = 2;
+  // Fixed enshrined-bifrost signer address (placeholder; the real authorization
+  // is the supermajority proof in extended_commit_info).
+  string signer = 3 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+}

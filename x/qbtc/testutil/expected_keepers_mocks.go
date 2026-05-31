@@ -6,6 +6,7 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	cmtprotocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/golang/mock/gomock"
@@ -66,6 +67,19 @@ func (m *MockStakingKeeper) GetLastTotalPower(ctx context.Context) (math.Int, er
 	ret0, _ := ret[0].(math.Int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
+}
+
+func (m *MockStakingKeeper) GetPubKeyByConsAddr(ctx context.Context, addr sdk.ConsAddress) (cmtprotocrypto.PublicKey, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPubKeyByConsAddr", ctx, addr)
+	ret0, _ := ret[0].(cmtprotocrypto.PublicKey)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (mr *MockStakingKeeperRecorder) GetPubKeyByConsAddr(ctx, addr any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPubKeyByConsAddr", reflect.TypeOf((*MockStakingKeeper)(nil).GetPubKeyByConsAddr), ctx, addr)
 }
 
 func (m *MockStakingKeeper) PowerReduction(ctx context.Context) math.Int {

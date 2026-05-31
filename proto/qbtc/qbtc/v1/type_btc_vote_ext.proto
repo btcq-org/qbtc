@@ -1,0 +1,28 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+option (gogoproto.goproto_getters_all) = false;
+
+// BtcBlockVoteExtension is attached by each validator to its CometBFT precommit
+// via ABCI 2.0 ExtendVote. It carries only digests of the Bitcoin blocks the
+// validator has observed and is ready to attest to — never the block contents
+// themselves, which would bloat every precommit.
+message BtcBlockVoteExtension {
+  repeated BtcBlockAttest items = 1;
+}
+
+// BtcBlockAttest is one validator's attestation digest for a single Bitcoin
+// block height.
+message BtcBlockAttest {
+  // The Bitcoin block height being attested.
+  uint64 height = 1;
+  // The Bitcoin block hash (display order).
+  bytes block_hash = 2;
+  // sha256 of the canonical BtcBlockDelta bytes for this height. The precommit
+  // signature over the vote extension (produced by CometBFT) is what binds this
+  // digest to the validator's voting power.
+  bytes delta_hash = 3;
+}
