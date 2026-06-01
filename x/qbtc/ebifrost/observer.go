@@ -58,7 +58,7 @@ func (eb *EnshrinedBifrost) fetchOnce() {
 			return
 		default:
 		}
-		if _, ok := eb.GetDelta(uint64(h)); ok {
+		if eb.hasDelta(uint64(h)) {
 			continue
 		}
 		hash, err := eb.btc.GetBlockHash(h)

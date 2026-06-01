@@ -483,10 +483,9 @@ func initGenFiles(
 
 	btcqGenesis.PeerAddresses = make([]qbtctypes.GenesisPeerAddress, len(p2pPeers))
 	for i, peer := range p2pPeers {
-		peerAddress := fmt.Sprintf("%s@%s:%s", peer.PeerAddress, fmt.Sprintf("node_%d_bifrost", i), "30006")
 		btcqGenesis.PeerAddresses[i] = qbtctypes.GenesisPeerAddress{
 			Validator:   peer.Validator,
-			PeerAddress: peerAddress,
+			PeerAddress: peer.PeerAddress,
 		}
 	}
 	appGenState[qbtctypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(&btcqGenesis)

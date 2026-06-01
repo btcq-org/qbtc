@@ -6,25 +6,18 @@ import (
 
 	"cosmossdk.io/log"
 	"github.com/btcq-org/qbtc/bitcoin"
-	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-const (
-	// ebifrostSignerAcc is the dummy address to submit injected transactions.
-	// generated: bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte("ebifrost_signer")))
-	// nolint:unused
-	ebifrostSignerAcc = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
-	// SignerAcc is the exported enshrined-bifrost signer used on injected txs.
-	SignerAcc = ebifrostSignerAcc
-)
+// SignerAcc is the fixed signer address placed on injected txs.
+// generated: bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte("ebifrost_signer")))
+const SignerAcc = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
 
 // EnshrinedBifrost is the embedded Bitcoin observer. Each validator node runs it
 // to fetch Bitcoin blocks directly from its configured RPC endpoint, build
 // minimal UTXO deltas, and cache them. ExtendVote attests the cached deltas'
-// digests and PrepareProposal injects the supermajority-agreed delta. There is
-// no standalone bifrost daemon and no gossip network.
+// digests and PrepareProposal injects the supermajority-agreed delta.
 type EnshrinedBifrost struct {
 	logger log.Logger
 	cdc    codec.Codec
@@ -38,7 +31,7 @@ type EnshrinedBifrost struct {
 	// btcDeltaCache holds observed minimal block deltas keyed by Bitcoin height,
 	// filled by the observer goroutine and read by ExtendVote / PrepareProposal.
 	deltaMu       sync.RWMutex
-	btcDeltaCache map[uint64]*types.BtcBlockDelta
+	btcDeltaCache map[uint64]cachedDelta
 
 	// btc is the Bitcoin RPC client; nil when observation is not configured.
 	btc *bitcoin.BtcClient
@@ -55,7 +48,7 @@ func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger)
 		cdc:           cdc,
 		cfg:           cfg,
 		stopCh:        make(chan struct{}),
-		btcDeltaCache: make(map[uint64]*types.BtcBlockDelta),
+		btcDeltaCache: make(map[uint64]cachedDelta),
 	}
 	if cfg.Enable && cfg.BitcoinHost != "" {
 		btc, err := bitcoin.NewBtcClient(bitcoin.Config{

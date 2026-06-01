@@ -60,16 +60,8 @@ func (h *ProposalHandler) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote)
 	// Publish the chain's last-processed height so the embedded observer fetches
 	// the blocks above it (and prunes those already applied).
 	h.bifrost.SetFloor(lastProcessed)
-	deltas := h.bifrost.ObservedDeltas(lastProcessed, maxAttestItems)
 
-	ve := &types.BtcBlockVoteExtension{}
-	for _, d := range deltas {
-		ve.Items = append(ve.Items, &types.BtcBlockAttest{
-			Height:    uint64(d.Height),
-			BlockHash: d.BlockHash,
-			DeltaHash: d.Digest(),
-		})
-	}
+	ve := &types.BtcBlockVoteExtension{Items: h.bifrost.ObservedAttests(lastProcessed, maxAttestItems)}
 	bz, err := ve.Marshal()
 	if err != nil {
 		return nil, err
@@ -122,8 +114,8 @@ func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrep
 
 	blockHash, deltaHash, power, total := keeper.TallyBtcBlockDelta(req.LocalLastCommit, target)
 	if total > 0 && power*3 > total*2 {
-		if d, ok := h.bifrost.GetDelta(target); ok &&
-			bytes.Equal(d.Digest(), deltaHash) && bytes.Equal(d.BlockHash, blockHash) {
+		if d, digest, ok := h.bifrost.GetDelta(target); ok &&
+			bytes.Equal(digest, deltaHash) && bytes.Equal(d.BlockHash, blockHash) {
 			if extBz, err := req.LocalLastCommit.Marshal(); err == nil {
 				msg := &types.MsgInjectBtcBlock{
 					Delta:              d,

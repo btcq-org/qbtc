@@ -24,8 +24,7 @@ var chainParams = &chaincfg.MainNetParams
 
 // InjectBtcBlock applies a vote-extension-attested minimal Bitcoin block delta
 // to the UTXO set. It is only ever delivered via proposer injection (enforced
-// by the ante handler) and is the replacement for the legacy
-// SetMsgReportBlock + gossip-attestation flow.
+// by the ante handler).
 func (s *msgServer) InjectBtcBlock(ctx context.Context, msg *types.MsgInjectBtcBlock) (*types.MsgEmpty, error) {
 	defer telemetry.MeasureSince(time.Now(), "msg_inject_btc_block")
 
@@ -53,7 +52,7 @@ func (s *msgServer) InjectBtcBlock(ctx context.Context, msg *types.MsgInjectBtcB
 	}
 
 	cacheCtx, writeCache := sdkCtx.CacheContext()
-	claimTxIds := make([]string, 0)
+	claimTxIDs := make(map[string]bool)
 	totalFee := uint64(0)
 	var coinbaseTx *types.BtcTx
 
@@ -62,7 +61,7 @@ func (s *msgServer) InjectBtcBlock(ctx context.Context, msg *types.MsgInjectBtcB
 		// Detect claim txs before processing, because their spent inputs are
 		// removed from the store during processing.
 		if s.isClaimDeltaTx(cacheCtx, tx) {
-			claimTxIds = append(claimTxIds, tx.TxidHex())
+			claimTxIDs[tx.TxidHex()] = true
 		}
 		if tx.Coinbase {
 			coinbaseTx = tx
@@ -83,10 +82,10 @@ func (s *msgServer) InjectBtcBlock(ctx context.Context, msg *types.MsgInjectBtcB
 		}
 	}
 
-	if len(claimTxIds) > 0 {
+	if len(claimTxIDs) > 0 {
 		for i := range delta.Txs {
 			tx := delta.Txs[i]
-			if !slices.Contains(claimTxIds, tx.TxidHex()) {
+			if !claimTxIDs[tx.TxidHex()] {
 				continue
 			}
 			if err := s.processDeltaClaimTx(cacheCtx, tx); err != nil {
@@ -292,7 +291,7 @@ func (s *msgServer) processDeltaCoinbaseVOuts(ctx sdk.Context, tx *types.BtcTx, 
 	txid := tx.TxidHex()
 	// The block fee is a whole-block total and must be deducted from the
 	// coinbase claimable exactly once, not once per output. Deduct it across the
-	// outputs (lowest index first); this matches the legacy single-output case.
+	// outputs (lowest index first), which collapses to the common single-output case.
 	remainingFee := totalFee
 	for i, out := range tx.Outputs {
 		if out.Value == 0 {

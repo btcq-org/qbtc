@@ -22,8 +22,7 @@ const (
 
 // EBifrostConfig configures the embedded Bitcoin observer. Each validator node
 // observes Bitcoin directly via its own RPC endpoint and attests the resulting
-// minimal block deltas through ABCI vote extensions — there is no separate
-// bifrost daemon and no gossip network.
+// minimal block deltas through ABCI vote extensions.
 type EBifrostConfig struct {
 	Enable bool `json:"enable"`
 
