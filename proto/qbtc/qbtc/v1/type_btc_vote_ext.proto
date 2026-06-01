@@ -10,9 +10,7 @@ option (gogoproto.goproto_getters_all) = false;
 // via ABCI 2.0 ExtendVote. It carries only digests of the Bitcoin blocks the
 // validator has observed and is ready to attest to — never the block contents
 // themselves, which would bloat every precommit.
-message BtcBlockVoteExtension {
-  repeated BtcBlockAttest items = 1;
-}
+message BtcBlockVoteExtension { repeated BtcBlockAttest items = 1; }
 
 // BtcBlockAttest is one validator's attestation digest for a single Bitcoin
 // block height.
