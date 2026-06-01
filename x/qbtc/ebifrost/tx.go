@@ -21,6 +21,13 @@ type wInjectTx struct {
 	cdc codec.Codec
 }
 
+// IsInjectTx reports whether tx is the proposer-injected envelope. It lets
+// other packages apply the same envelope check the ante handler enforces.
+func IsInjectTx(tx sdk.Tx) bool {
+	_, ok := tx.(wInjectTx)
+	return ok
+}
+
 func NewInjectTx(cdc codec.Codec, msgs []sdk.Msg) wInjectTx {
 	msgsAny := make([]*codectypes.Any, len(msgs))
 	for i, msg := range msgs {

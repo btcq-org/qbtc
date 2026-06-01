@@ -290,19 +290,36 @@ func (s *msgServer) processDeltaVOuts(ctx sdk.Context, tx *types.BtcTx, totalCla
 
 func (s *msgServer) processDeltaCoinbaseVOuts(ctx sdk.Context, tx *types.BtcTx, totalFee uint64, blockHeight uint64) error {
 	txid := tx.TxidHex()
+	// The block fee is a whole-block total and must be deducted from the
+	// coinbase claimable exactly once, not once per output. Deduct it across the
+	// outputs (lowest index first); this matches the legacy single-output case.
+	remainingFee := totalFee
 	for i, out := range tx.Outputs {
 		if out.Value == 0 {
 			continue
 		}
-		entitled := out.Value
-		if entitled > totalFee {
-			entitled -= totalFee
-		}
+		entitled := deductFee(out.Value, &remainingFee)
 		if err := s.setDeltaUTXO(ctx, txid, uint32(i), out, entitled, blockHeight); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// deductFee subtracts as much of *remaining as this output can absorb, updating
+// *remaining, and returns the output's entitled amount. It ensures the block's
+// total fee is removed from the coinbase claimable only once in aggregate.
+func deductFee(value uint64, remaining *uint64) uint64 {
+	if *remaining == 0 {
+		return value
+	}
+	if value > *remaining {
+		value -= *remaining
+		*remaining = 0
+		return value
+	}
+	*remaining -= value
+	return 0
 }
 
 func (s *msgServer) setDeltaUTXO(ctx sdk.Context, txid string, vout uint32, out *types.BtcTxOut, entitled, blockHeight uint64) error {

@@ -6,6 +6,26 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
+// cloneBtcBlockDelta returns a deep copy so the cache owns immutable snapshots:
+// callers cannot mutate stored/returned deltas (and thus the attested/injected
+// bytes) outside the lock. Round-tripping through proto is simplest and
+// guaranteed-correct for the generated type.
+func cloneBtcBlockDelta(d *types.BtcBlockDelta) *types.BtcBlockDelta {
+	if d == nil {
+		return nil
+	}
+	bz, err := d.Marshal()
+	if err != nil {
+		// Marshal of a generated message with no maps cannot fail in practice.
+		panic(err)
+	}
+	c := &types.BtcBlockDelta{}
+	if err := c.Unmarshal(bz); err != nil {
+		panic(err)
+	}
+	return c
+}
+
 // SendBTCBlockDelta feeds an observed minimal Bitcoin block delta into the
 // node's cache. ExtendVote attests the digests of cached deltas; PrepareProposal
 // pulls the full delta bytes for the height that reached quorum.
@@ -14,7 +34,7 @@ func (eb *EnshrinedBifrost) SendBTCBlockDelta(ctx context.Context, delta *types.
 		return &SendBTCBlockResponse{}, nil
 	}
 	eb.deltaMu.Lock()
-	eb.btcDeltaCache[uint64(delta.Height)] = delta
+	eb.btcDeltaCache[uint64(delta.Height)] = cloneBtcBlockDelta(delta)
 	eb.deltaMu.Unlock()
 	return &SendBTCBlockResponse{}, nil
 }
@@ -36,7 +56,7 @@ func (eb *EnshrinedBifrost) ObservedDeltas(minHeight uint64, limit int) []*types
 		if !ok {
 			break
 		}
-		out = append(out, d)
+		out = append(out, cloneBtcBlockDelta(d))
 		if limit > 0 && len(out) >= limit {
 			break
 		}
@@ -52,7 +72,7 @@ func (eb *EnshrinedBifrost) GetDelta(height uint64) (*types.BtcBlockDelta, bool)
 	eb.deltaMu.RLock()
 	defer eb.deltaMu.RUnlock()
 	d, ok := eb.btcDeltaCache[height]
-	return d, ok
+	return cloneBtcBlockDelta(d), ok
 }
 
 // PruneDeltasBelow drops cached deltas at or below height (already processed).

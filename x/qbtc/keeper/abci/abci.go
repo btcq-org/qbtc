@@ -177,19 +177,29 @@ func (h *ProposalHandler) ProcessProposal(ctx sdk.Context, req *abci.RequestProc
 		if err != nil {
 			return reject, nil
 		}
-		for _, msg := range tx.GetMsgs() {
-			inj, ok := msg.(*types.MsgInjectBtcBlock)
-			if !ok {
-				continue
+		msgs := tx.GetMsgs()
+		hasInject := false
+		for _, msg := range msgs {
+			if _, ok := msg.(*types.MsgInjectBtcBlock); ok {
+				hasInject = true
+				break
 			}
-			if i != 0 {
-				ctx.Logger().Error("reject proposal: injected btc block not first tx", "index", i)
-				return reject, nil
-			}
-			if err := h.keeper.ValidateInjectedBtcBlock(ctx, inj); err != nil {
-				ctx.Logger().Error("reject proposal: invalid injected btc block", "error", err)
-				return reject, nil
-			}
+		}
+		if !hasInject {
+			continue
+		}
+		// The envelope must be exactly what InjectedTxDecorator.AnteHandle
+		// accepts at delivery (the inject wrapper, first tx, single allowed
+		// message). Otherwise the proposal could pass here and then silently
+		// drop the BTC delta during FinalizeBlock.
+		if i != 0 || !ebifrost.IsInjectTx(tx) || len(msgs) != 1 {
+			ctx.Logger().Error("reject proposal: malformed injected btc block envelope", "index", i)
+			return reject, nil
+		}
+		inj := msgs[0].(*types.MsgInjectBtcBlock)
+		if err := h.keeper.ValidateInjectedBtcBlock(ctx, inj); err != nil {
+			ctx.Logger().Error("reject proposal: invalid injected btc block", "error", err)
+			return reject, nil
 		}
 	}
 

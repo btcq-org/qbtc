@@ -87,6 +87,41 @@ func TestGetDeltaClaimMemo(t *testing.T) {
 	})
 }
 
+func TestDeductFee(t *testing.T) {
+	// Apply deductFee across a list of coinbase output values and return the
+	// per-output entitled amounts, mirroring processDeltaCoinbaseVOuts.
+	apply := func(values []uint64, totalFee uint64) []uint64 {
+		remaining := totalFee
+		out := make([]uint64, len(values))
+		for i, v := range values {
+			out[i] = deductFee(v, &remaining)
+		}
+		return out
+	}
+
+	t.Run("single output deducts full fee once", func(t *testing.T) {
+		require.Equal(t, []uint64{5_000_000_000 - 1000}, apply([]uint64{5_000_000_000}, 1000))
+	})
+
+	t.Run("multi output deducts fee once in aggregate", func(t *testing.T) {
+		// Two outputs both > totalFee: the fee must be subtracted once total,
+		// not once per output.
+		got := apply([]uint64{3_000_000_000, 2_000_000_000}, 1000)
+		require.Equal(t, []uint64{3_000_000_000 - 1000, 2_000_000_000}, got)
+		// total entitled == total value - totalFee
+		require.Equal(t, uint64(5_000_000_000-1000), got[0]+got[1])
+	})
+
+	t.Run("fee spills over to next output when first is smaller", func(t *testing.T) {
+		got := apply([]uint64{600, 5_000_000_000}, 1000)
+		require.Equal(t, []uint64{0, 5_000_000_000 - 400}, got)
+	})
+
+	t.Run("zero fee leaves values intact", func(t *testing.T) {
+		require.Equal(t, []uint64{100, 200}, apply([]uint64{100, 200}, 0))
+	})
+}
+
 func TestBtcBlockDeltaDigestDeterministic(t *testing.T) {
 	mk := func() *types.BtcBlockDelta {
 		return &types.BtcBlockDelta{
