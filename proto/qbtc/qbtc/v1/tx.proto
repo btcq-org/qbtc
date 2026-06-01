@@ -6,7 +6,6 @@ import "cosmos/msg/v1/msg.proto";
 import "cosmos_proto/cosmos.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/msg_set_node_peer_address.proto";
-import "qbtc/qbtc/v1/msg_report_block.proto";
 import "qbtc/qbtc/v1/msg_inject_btc_block.proto";
 import "qbtc/qbtc/v1/msg_gov_claim_utxo.proto";
 import "qbtc/qbtc/v1/msg_update_param.proto";
@@ -20,8 +19,6 @@ service Msg {
   // SetNodePeerAddress allows authorized validators to update their node peer
   // address.
   rpc SetNodePeerAddress(MsgSetNodePeerAddress) returns (MsgEmpty);
-  // SetMsgReportBlock is the message for reporting a Bitcoin block.
-  rpc SetMsgReportBlock(MsgBtcBlock) returns (MsgEmpty);
   // InjectBtcBlock applies a vote-extension-attested minimal Bitcoin block
   // delta to the UTXO set. Injected by the proposer only.
   rpc InjectBtcBlock(MsgInjectBtcBlock) returns (MsgEmpty);

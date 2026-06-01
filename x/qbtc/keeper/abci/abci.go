@@ -56,7 +56,11 @@ func (h *ProposalHandler) lastProcessed(ctx sdk.Context) uint64 {
 // and is ready to attest. It carries only (height, block hash, delta hash) — the
 // precommit signature CometBFT produces over the extension is the attestation.
 func (h *ProposalHandler) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote) (*abci.ResponseExtendVote, error) {
-	deltas := h.bifrost.ObservedDeltas(h.lastProcessed(ctx), maxAttestItems)
+	lastProcessed := h.lastProcessed(ctx)
+	// Publish the chain's last-processed height so the embedded observer fetches
+	// the blocks above it (and prunes those already applied).
+	h.bifrost.SetFloor(lastProcessed)
+	deltas := h.bifrost.ObservedDeltas(lastProcessed, maxAttestItems)
 
 	ve := &types.BtcBlockVoteExtension{}
 	for _, d := range deltas {

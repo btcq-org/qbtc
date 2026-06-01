@@ -22,7 +22,7 @@ func (itd InjectedTxDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate b
 	if _, ok := tx.(wInjectTx); !ok {
 		for _, m := range tx.GetMsgs() {
 			switch m.(type) {
-			case *types.MsgBtcBlock, *types.MsgInjectBtcBlock:
+			case *types.MsgInjectBtcBlock:
 				// only allowed through an InjectTx, fail.
 				return ctx, se.ErrUnauthorized.Wrap(fmt.Sprintf("msg only allowed via proposal inject tx: %T", m))
 			default:
@@ -47,7 +47,7 @@ func (itd InjectedTxDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate b
 	// make sure entire tx is only allowed msgs
 	for _, m := range msgs {
 		switch m.(type) {
-		case *types.MsgBtcBlock, *types.MsgInjectBtcBlock:
+		case *types.MsgInjectBtcBlock:
 			// allowed
 		default:
 			return ctx, se.ErrUnauthorized.Wrap(fmt.Sprintf("invalid inject tx message type: %T", m))

@@ -99,6 +99,13 @@ func (c *BtcClient) GetBlockVerboseTxs(hash string) (*btcjson.GetBlockVerboseTxR
 	return &block, extractBTCError(err)
 }
 
+// GetBlockCount returns the height of the most-work fully-validated chain tip.
+func (c *BtcClient) GetBlockCount() (int64, error) {
+	var count int64
+	err := c.client.Call(&count, "getblockcount")
+	return count, extractBTCError(err)
+}
+
 // GetBlockHash returns the hash of the block in best-block-chain at the given height.
 func (c *BtcClient) GetBlockHash(height int64) (string, error) {
 	var hash string

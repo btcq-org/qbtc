@@ -14,12 +14,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/btcq-org/qbtc/bifrost/keystore"
-	"github.com/btcq-org/qbtc/bifrost/p2p"
 	cmtconfig "github.com/cometbft/cometbft/config"
 	types "github.com/cometbft/cometbft/types"
 	tmtime "github.com/cometbft/cometbft/types/time"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -43,7 +40,6 @@ import (
 
 	runtime "github.com/cosmos/cosmos-sdk/runtime"
 
-	bifrostconfig "github.com/btcq-org/qbtc/bifrost/config"
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
@@ -55,9 +51,6 @@ var (
 	flagOutputDir             = "output-dir"
 	flagValidatorsStakeAmount = "validators-stake-amount"
 	flagStartingIPAddress     = "starting-ip-address"
-
-	// bifrost specific arguments
-	flagBifrostStartBlockHeight = "bifrost-start-block-height"
 
 	// bitcoin specific arguments
 	flagBitcoinRPCHost     = "bitcoin-rpc-host"
@@ -79,9 +72,6 @@ type initArgs struct {
 	startingIPAddress      string
 	validatorsStakesAmount map[int]sdk.Coin
 	ports                  map[int]string
-
-	// bifrost specific arguments
-	bifrostStartBlockHeight int64
 
 	// bitcoin specific arguments
 	bitcoinRPCHost     string
@@ -155,11 +145,7 @@ Example:
 				}
 			}
 
-			// bifrost
-			args.bifrostStartBlockHeight, _ = cmd.Flags().GetInt64(flagBifrostStartBlockHeight)
-			if args.bifrostStartBlockHeight == 0 {
-				return fmt.Errorf("bifrost start block height is required")
-			}
+			// bitcoin RPC for the embedded observer
 			args.bitcoinRPCHost, _ = cmd.Flags().GetString(flagBitcoinRPCHost)
 			args.bitcoinRPCPort, _ = cmd.Flags().GetInt64(flagBitcoinRPCPort)
 			args.bitcoinRPCUser, _ = cmd.Flags().GetString(flagBitcoinRPCUser)
@@ -175,9 +161,6 @@ Example:
 	cmd.Flags().String(flagValidatorsStakeAmount, "100000000,100000000,100000000,100000000", "Amount of stake for each validator")
 	cmd.Flags().String(flagStartingIPAddress, "localhost", "Starting IP address (192.168.0.1 results in persistent peers list ID0@192.168.0.1:46656, ID1@192.168.0.2:46656, ...)")
 	cmd.Flags().String(flags.FlagKeyringBackend, "test", "Select keyring's backend (os|file|test)")
-
-	// bifrost specific arguments
-	cmd.Flags().Int64(flagBifrostStartBlockHeight, 0, "Start block height for bifrost")
 
 	// bitcoin specific arguments
 	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host")
@@ -239,7 +222,6 @@ func initTestnetFiles(
 	appConfig.Telemetry.EnableHostnameLabel = false
 	appConfig.Telemetry.Enabled = false
 	appConfig.Telemetry.PrometheusRetentionTime = 0
-	appConfig.EBifrost.Address = ":50051"
 
 	var (
 		genAccounts     []authtypes.GenesisAccount
@@ -255,13 +237,11 @@ func initTestnetFiles(
 	nodes := make([]ValidatorNode, args.numValidators)
 	for i := range nodes {
 		nodes[i] = ValidatorNode{
-			Name:              fmt.Sprintf("node_%d", i),
-			RPCPort:           args.ports[i],
-			Volume:            fmt.Sprintf("validator%d", i),
-			BifrostPort:       strconv.Itoa(30006 - 3*i),
-			BifrostHealthPort: strconv.Itoa(30007 - 3*i),
-			APIPort:           strconv.Itoa(1317 - i),
-			GRPCPort:          strconv.Itoa(9090 - 2*i),
+			Name:     fmt.Sprintf("node_%d", i),
+			RPCPort:  args.ports[i],
+			Volume:   fmt.Sprintf("validator%d", i),
+			APIPort:  strconv.Itoa(1317 - i),
+			GRPCPort: strconv.Itoa(9090 - 2*i),
 		}
 	}
 
@@ -278,31 +258,6 @@ func initTestnetFiles(
 		if err := os.MkdirAll(filepath.Join(nodeDir, "config"), nodeDirPerm); err != nil {
 			_ = os.RemoveAll(args.outputDir)
 			return err
-		}
-
-		bifrostHome := filepath.Join(nodeDir, "bifrost")
-		// Create bifrost home directory
-		err = ensureDir(bifrostHome)
-		if err != nil {
-			_ = os.RemoveAll(args.outputDir)
-			return err
-		}
-
-		kstore, err := keystore.NewFileKeyStore(bifrostHome)
-		if err != nil {
-			return err
-		}
-		p2pKey, err := keystore.GetOrCreateKey(kstore, "bifrost-p2p-key")
-		if err != nil {
-			return fmt.Errorf("failed to get or create p2p key, err: %w", err)
-		}
-		p2pPrivKey, err := crypto.UnmarshalPrivateKey(p2pKey.Body)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal p2p key, err: %w", err)
-		}
-		id, err := p2p.ID(p2pPrivKey)
-		if err != nil {
-			return fmt.Errorf("failed to get peer id, err: %w", err)
 		}
 
 		nodeIDs[i], valPubKeys[i], err = genutil.InitializeNodeValidatorFiles(nodeConfig)
@@ -340,7 +295,7 @@ func initTestnetFiles(
 
 		peerInfo := PeerInfo{
 			Validator:   sdk.ValAddress(addr).String(),
-			PeerAddress: id.String(),
+			PeerAddress: "",
 		}
 		p2pPeers = append(p2pPeers, peerInfo)
 
@@ -414,28 +369,18 @@ func initTestnetFiles(
 
 		appConfig.GRPC.Address = "0.0.0.0:" + strconv.Itoa(9090-2*i)
 		appConfig.API.Address = "tcp://0.0.0.0:" + strconv.Itoa(1317-i)
-		appConfig.EBifrost.Address = ":50051"
+		// Embedded Bitcoin observer: each node observes Bitcoin directly and
+		// attests via ABCI vote extensions (no separate bifrost daemon).
+		appConfig.EBifrost.Enable = true
+		appConfig.EBifrost.BitcoinHost = args.bitcoinRPCHost
+		appConfig.EBifrost.BitcoinPort = args.bitcoinRPCPort
+		appConfig.EBifrost.BitcoinRPCUser = args.bitcoinRPCUser
+		appConfig.EBifrost.BitcoinPassword = args.bitcoinRPCPassword
 
 		// Regenerate the template with the updated config values
 		updatedTemplate := srvconfig.DefaultConfigTemplate + ebifrost.ConfigTemplate(appConfig.EBifrost)
 		srvconfig.SetConfigTemplate(updatedTemplate)
 		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
-
-		bitcoinDataHome := filepath.Join(nodeDir, "bitcoin_data")
-		// Create bitcoin data home directory
-		err = ensureDir(bitcoinDataHome)
-		if err != nil {
-			_ = os.RemoveAll(args.outputDir)
-			return err
-		}
-		if err := initBifrostFiles(args,
-			bifrostHome,
-			fmt.Sprintf("node_%d:50051", i),
-			fmt.Sprintf("node_%d:%d", i, 9090-2*i),
-			fmt.Sprintf("http://node_%d:26657", i),
-			"/qbtc_data/.qbtc/bitcoin_data"); err != nil {
-			return err
-		}
 	}
 
 	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers); err != nil {
@@ -502,32 +447,6 @@ func writeFile(file, dir string, contents []byte) error {
 	}
 
 	return nil
-}
-
-func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress, cometBFTRPCAddress, dataDir string) error {
-	bifrostConfig := bifrostconfig.DefaultConfig()
-	bifrostConfig.StartBlockHeight = args.bifrostStartBlockHeight
-	bifrostConfig.BitcoinConfig.Host = args.bitcoinRPCHost
-	bifrostConfig.BitcoinConfig.Port = args.bitcoinRPCPort
-	bifrostConfig.BitcoinConfig.RPCUser = args.bitcoinRPCUser
-	bifrostConfig.BitcoinConfig.Password = args.bitcoinRPCPassword
-	bifrostConfig.BitcoinConfig.LocalDBPath = filepath.Join(dataDir, "db")
-
-	bifrostConfig.RootPath = "/qbtc_data/.qbtc/bifrost"
-	bifrostConfig.KeyName = "bifrost-p2p-key"
-	bifrostConfig.ListenAddr = "0.0.0.0:30006"
-	bifrostConfig.ExternalIP = ""
-
-	bifrostConfig.QBTCHome = "/qbtc_data/.qbtc"
-	bifrostConfig.EbifrostAddress = ebifrostAddress
-	bifrostConfig.QBTCGRPCAddress = nodeGRPCAddress
-	bifrostConfig.CometBFTRPCAddress = cometBFTRPCAddress
-
-	bifrostConfigJSON, err := json.Marshal(bifrostConfig)
-	if err != nil {
-		return err
-	}
-	return writeFile(filepath.Join(outputDir, "config.json"), outputDir, bifrostConfigJSON)
 }
 
 func initGenFiles(
@@ -724,13 +643,11 @@ func generateRandomString(length int) string {
 }
 
 type ValidatorNode struct {
-	Name              string
-	Volume            string
-	RPCPort           string
-	APIPort           string
-	GRPCPort          string
-	BifrostPort       string
-	BifrostHealthPort string
+	Name     string
+	Volume   string
+	RPCPort  string
+	APIPort  string
+	GRPCPort string
 }
 
 const dockerComposeDefinition = `
@@ -744,17 +661,6 @@ services:{{range $validator := .Validators }}
 			- "{{ $validator.GRPCPort }}:9090"
 		volumes:
 			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
-	{{ $validator.Name }}_bifrost:
-		image: btcq-org/qbtc:{{ $.Tag }}
-		restart: always
-		command: [ "bifrost", "--config", "/qbtc_data/.qbtc/bifrost/config.json"]
-		ports:
-			- "{{ $validator.BifrostPort }}:30006"
-			- "{{ $validator.BifrostHealthPort }}:30007"
-		volumes:
-			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
-		depends_on:
-			- {{ $validator.Name }}
 {{end}}
 `
 
