@@ -1,6 +1,7 @@
 package ebifrost
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -58,10 +59,12 @@ func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger)
 			Password: cfg.BitcoinPassword,
 		}, nil)
 		if err != nil {
-			logger.Error("failed to create bitcoin client; observer disabled", "error", err)
-		} else {
-			eb.btc = btc
+			// The observer is explicitly configured; a broken client is a
+			// misconfiguration, not a reason to silently start without
+			// contributing vote extensions.
+			panic(fmt.Errorf("ebifrost: bitcoin observer configured but client creation failed: %w", err))
 		}
+		eb.btc = btc
 	}
 	return eb
 }

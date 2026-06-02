@@ -45,9 +45,14 @@ func (eb *EnshrinedBifrost) SetFloor(height uint64) {
 }
 
 // storeDelta caches an observed delta (a deep copy) and its digest, keyed by
-// Bitcoin height.
+// Bitcoin height. Heights at or below the current floor are already processed
+// and dropped, so a delta fetched just before the floor advanced is not
+// reinserted behind it.
 func (eb *EnshrinedBifrost) storeDelta(delta *types.BtcBlockDelta) {
 	if eb == nil || delta == nil {
+		return
+	}
+	if uint64(delta.Height) <= eb.floor.Load() {
 		return
 	}
 	clone := cloneBtcBlockDelta(delta)

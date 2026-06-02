@@ -509,6 +509,23 @@ func initGenFiles(
 	return nil
 }
 
+// enableVoteExtensions sets vote_extensions_enable_height = 2 in the genesis
+// file's consensus params, so the embedded Bitcoin observer can attest blocks.
+func enableVoteExtensions(genFile string) error {
+	appGenesis, err := genutiltypes.AppGenesisFromFile(genFile)
+	if err != nil {
+		return err
+	}
+	if appGenesis.Consensus == nil {
+		appGenesis.Consensus = &genutiltypes.ConsensusGenesis{}
+	}
+	if appGenesis.Consensus.Params == nil {
+		appGenesis.Consensus.Params = types.DefaultConsensusParams()
+	}
+	appGenesis.Consensus.Params.ABCI.VoteExtensionsEnableHeight = 2
+	return appGenesis.SaveAs(genFile)
+}
+
 func collectGenFiles(
 	clientCtx client.Context, nodeConfig *cmtconfig.Config,
 	nodeIDs []string, valPubKeys []cryptotypes.PubKey,
@@ -563,6 +580,13 @@ func collectGenFiles(
 
 		// overwrite each validator's genesis file to have a canonical genesis time
 		if err := genutil.ExportGenesisFileWithTime(genFile, chainID, nil, appState, genTime); err != nil {
+			return err
+		}
+		// Enable ABCI vote extensions so the embedded Bitcoin observer can attest
+		// blocks (the SDK export writes default consensus params, which leave them
+		// disabled). From initial_height + 1, since CometBFT disallows enabling at
+		// the first block.
+		if err := enableVoteExtensions(genFile); err != nil {
 			return err
 		}
 	}

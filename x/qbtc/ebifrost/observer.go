@@ -6,6 +6,7 @@ import (
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcjson"
+	"github.com/btcsuite/btcd/btcutil"
 )
 
 // fetchWindow bounds how far ahead of the chain's last-processed height the
@@ -133,8 +134,15 @@ func buildDelta(block *btcjson.GetBlockVerboseTxResult) (*types.BtcBlockDelta, e
 			if err != nil {
 				return nil, err
 			}
+			// btcutil.NewAmount rounds the BTC float to the nearest satoshi
+			// (and rejects NaN/Inf), avoiding the off-by-one truncation of a
+			// raw uint64(value * 1e8) conversion.
+			amount, err := btcutil.NewAmount(out.Value)
+			if err != nil {
+				return nil, err
+			}
 			bt.Outputs = append(bt.Outputs, &types.BtcTxOut{
-				Value:        uint64(out.Value * 1e8), // BTC float → satoshis
+				Value:        uint64(amount),
 				ScriptPubKey: script,
 			})
 		}
