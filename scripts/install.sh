@@ -6,7 +6,6 @@ DEFAULT_VERSION="1.0.18"
 GITHUB_REPO="btcq-org/qbtc"
 INSTALL_DIR="/usr/local/bin"
 QBTCD_HOME="$HOME/.qbtc"
-BIFROST_HOME="$HOME/.bifrost"
 ARCH="linux-amd64"
 GENESIS_URL="https://sgp1.vultrobjects.com/genesis/genesis.json"
 GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-946674.bin"
@@ -22,11 +21,9 @@ NC='\033[0m' # No Color
 
 # ========== STATE ==========
 INSTALLED_QBTCD=false
-INSTALLED_BIFROST=false
 INSTALLED_COSMOVISOR=false
 USE_COSMOVISOR=false
 SETUP_QBTCD_SERVICE=false
-SETUP_BIFROST_SERVICE=false
 VERSION=""
 
 # ========== UTILITY FUNCTIONS ==========
@@ -109,7 +106,7 @@ show_help() {
     cat << EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Install qbtcd and bifrost binaries from GitHub releases.
+Install the qbtcd binary from GitHub releases.
 
 Options:
     -v, --version VERSION    Specify version to install (default: $DEFAULT_VERSION)
@@ -209,57 +206,6 @@ download_and_install_qbtcd() {
     rm -rf "$tmp_dir"
     print_success "qbtcd installed successfully"
     INSTALLED_QBTCD=true
-}
-
-download_and_install_bifrost() {
-    print_header "Installing bifrost"
-
-    local archive="bifrost-${VERSION}-${ARCH}.tar.gz"
-    local url="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${archive}"
-    local checksum_url="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/sha256sum.txt"
-    local tmp_dir
-    local expected_checksum
-
-    tmp_dir=$(mktemp -d)
-
-    print_info "Downloading bifrost v${VERSION}..."
-    if ! curl -fsSL "$url" -o "$tmp_dir/$archive"; then
-        print_error "Failed to download bifrost from $url"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-
-    print_info "Downloading checksum file..."
-    if ! curl -fsSL "$checksum_url" -o "$tmp_dir/sha256sum.txt"; then
-        print_error "Failed to download checksum file from $checksum_url"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-
-    print_info "Verifying checksum..."
-    expected_checksum=$(grep "  ${archive}$" "$tmp_dir/sha256sum.txt" | awk '{print $1}')
-    if [[ -z "$expected_checksum" ]]; then
-        print_error "Checksum for $archive not found in sha256sum.txt"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-
-    if ! (cd "$tmp_dir" && echo "$expected_checksum  $archive" | sha256sum -c --status); then
-        print_error "Checksum verification failed for $archive"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-    print_success "Checksum verified"
-
-    print_info "Extracting archive..."
-    tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
-
-    print_info "Installing bifrost to ${INSTALL_DIR} (requires sudo)..."
-    sudo install -m 755 "$tmp_dir/bifrost" "$INSTALL_DIR/bifrost"
-
-    rm -rf "$tmp_dir"
-    print_success "bifrost installed successfully"
-    INSTALLED_BIFROST=true
 }
 
 download_and_install_cosmovisor() {
@@ -405,49 +351,6 @@ init_qbtcd() {
     print_success "qbtcd initialized at $QBTCD_HOME"
 }
 
-create_bifrost_config() {
-    print_header "Creating bifrost configuration"
-
-    if [[ -d "$BIFROST_HOME" ]]; then
-        print_info "Directory $BIFROST_HOME already exists."
-        if ! ask_yn "Delete existing directory and recreate?" "n"; then
-            print_info "Skipping bifrost config creation."
-            return 0
-        fi
-        rm -rf "$BIFROST_HOME"
-    fi
-
-    print_info "Creating bifrost directories..."
-    mkdir -p "$BIFROST_HOME/db"
-
-    print_info "Creating config template..."
-    cat > "$BIFROST_HOME/config.json" << EOF
-{
-  "listen_addr": "0.0.0.0:30006",
-  "http_listen_addr": "0.0.0.0:30007",
-  "external_ip": "",
-  "root_path": "$HOME/.bifrost/",
-  "key_name": "bifrost-p2p-key",
-  "start_block_height": 0,
-  "bitcoin": {
-    "host": "127.0.0.1",
-    "port": 8332,
-    "rpc_user": "bitcoinrpc",
-    "password": "securepassword",
-    "local_db_path": "$HOME/.bifrost/db"
-  },
-  "qbtc_home": "$HOME/.qbtc",
-  "ebifrost_address": "localhost:50051",
-  "qbtc_grpc_address": "localhost:9090",
-  "cometbft_rpc_address": "http://localhost:26657",
-  "backoff_time_in_minutes": 1
-}
-EOF
-
-    chmod 600 "$BIFROST_HOME/config.json"
-    print_success "Bifrost config template created at $BIFROST_HOME/config.json"
-}
-
 # ========== SYSTEMD FUNCTIONS ==========
 
 setup_qbtcd_systemd() {
@@ -522,49 +425,6 @@ EOF
     SETUP_QBTCD_SERVICE=true
 }
 
-setup_bifrost_systemd() {
-    print_header "Setting up bifrost systemd service"
-
-    local service_file="/etc/systemd/system/bifrost.service"
-    local service_user
-    local service_group
-    service_user=$(whoami)
-    service_group=$(id -gn "$service_user" 2>/dev/null)
-    if [[ -z "$service_group" ]]; then
-        print_error "Failed to resolve primary group for '$service_user'"
-        return 1
-    fi
-
-    print_info "Using user: $service_user, group: $service_group"
-    print_info "Creating systemd service file..."
-
-    sudo tee "$service_file" > /dev/null << EOF
-[Unit]
-Description=Bifrost Service
-
-[Service]
-Type=simple
-User=${service_user}
-Group=${service_group}
-ExecStart=${INSTALL_DIR}/bifrost start --config ${BIFROST_HOME}/config.json
-Restart=always
-RestartSec=10
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    print_info "Reloading systemd daemon..."
-    sudo systemctl daemon-reload
-
-    print_info "Enabling bifrost service..."
-    sudo systemctl enable bifrost
-
-    print_success "bifrost systemd service created and enabled"
-    SETUP_BIFROST_SERVICE=true
-}
-
 # ========== SUMMARY ==========
 
 print_summary() {
@@ -577,75 +437,40 @@ print_summary() {
     if $INSTALLED_COSMOVISOR; then
         echo "  - cosmovisor -> ${INSTALL_DIR}/cosmovisor"
     fi
-    if $INSTALLED_BIFROST; then
-        echo "  - bifrost v${VERSION} -> ${INSTALL_DIR}/bifrost"
-    fi
 
     echo ""
     echo "Directories:"
     if [[ -d "$QBTCD_HOME" ]]; then
         echo "  - qbtcd home: $QBTCD_HOME"
     fi
-    if [[ -d "$BIFROST_HOME" ]]; then
-        echo "  - bifrost home: $BIFROST_HOME"
-        echo "  - bifrost config: $BIFROST_HOME/config.json"
-    fi
 
-    if $SETUP_QBTCD_SERVICE || $SETUP_BIFROST_SERVICE; then
+    if $SETUP_QBTCD_SERVICE; then
         echo ""
         echo "Systemd services:"
-        if $SETUP_QBTCD_SERVICE; then
-            if $USE_COSMOVISOR; then
-                echo "  - qbtcd.service (user: $(whoami), via cosmovisor)"
-            else
-                echo "  - qbtcd.service (user: $(whoami))"
-            fi
-        fi
-        if $SETUP_BIFROST_SERVICE; then
-            echo "  - bifrost.service (user: $(whoami))"
+        if $USE_COSMOVISOR; then
+            echo "  - qbtcd.service (user: $(whoami), via cosmovisor)"
+        else
+            echo "  - qbtcd.service (user: $(whoami))"
         fi
     fi
 
     echo ""
     echo -e "${YELLOW}Next steps:${NC}"
-    local step=1
 
-    if [[ -d "$BIFROST_HOME" ]]; then
-        echo "  ${step}. Edit bifrost config: vim $BIFROST_HOME/config.json"
-        echo "     - Update Bitcoin RPC settings if not using localhost:8332 with user/password"
-        echo "     - Set external_ip if running a public node"
-        ((step++))
-    fi
-
-    if $SETUP_QBTCD_SERVICE || $SETUP_BIFROST_SERVICE; then
-        if $SETUP_QBTCD_SERVICE; then
-            echo "  ${step}. Start qbtcd: sudo systemctl start qbtcd"
-            ((step++))
-        fi
-        if $SETUP_BIFROST_SERVICE; then
-            echo "  ${step}. Start bifrost: sudo systemctl start bifrost"
-            ((step++))
-        fi
+    if $SETUP_QBTCD_SERVICE; then
+        echo "  1. Start qbtcd: sudo systemctl start qbtcd"
         echo ""
         echo "Service management commands:"
-        echo "  sudo systemctl status qbtcd bifrost    # Check status"
-        echo "  sudo journalctl -u qbtcd -f            # View qbtcd logs"
-        echo "  sudo journalctl -u bifrost -f          # View bifrost logs"
+        echo "  sudo systemctl status qbtcd    # Check status"
+        echo "  sudo journalctl -u qbtcd -f    # View qbtcd logs"
     else
-        echo "  ${step}. Start qbtcd: qbtcd start --home $QBTCD_HOME"
-        ((step++))
-        echo "  ${step}. Start bifrost: bifrost start --config $BIFROST_HOME/config.json"
+        echo "  1. Start qbtcd: qbtcd start --home $QBTCD_HOME"
     fi
 
     echo ""
-    if $INSTALLED_QBTCD || $INSTALLED_BIFROST; then
+    if $INSTALLED_QBTCD; then
         echo "Verify installation:"
-        if $INSTALLED_QBTCD; then
-            echo "  qbtcd version"
-        fi
-        if $INSTALLED_BIFROST; then
-            echo "  bifrost --version"
-        fi
+        echo "  qbtcd version"
     fi
 }
 
@@ -676,13 +501,6 @@ main() {
         fi
     fi
 
-    # Install bifrost
-    if ask_yn "Install bifrost?" "y"; then
-        download_and_install_bifrost
-    else
-        print_info "Skipping bifrost installation."
-    fi
-
     # Initialize qbtcd config
     if $INSTALLED_QBTCD; then
         if ask_yn "Initialize qbtcd config?" "y"; then
@@ -695,27 +513,10 @@ main() {
         fi
     fi
 
-    # Create bifrost config template
-    if $INSTALLED_BIFROST; then
-        if ask_yn "Create bifrost config template?" "y"; then
-            create_bifrost_config
-        fi
-    fi
-
-    # Setup systemd services
-    if $INSTALLED_QBTCD || $INSTALLED_BIFROST; then
-        if check_systemctl && ask_yn "Setup systemd services?" "y"; then
-            if $INSTALLED_QBTCD; then
-                if ask_yn "Create qbtcd systemd service?" "y"; then
-                    setup_qbtcd_systemd
-                fi
-            fi
-
-            if $INSTALLED_BIFROST; then
-                if ask_yn "Create bifrost systemd service?" "y"; then
-                    setup_bifrost_systemd
-                fi
-            fi
+    # Setup systemd service
+    if $INSTALLED_QBTCD; then
+        if check_systemctl && ask_yn "Setup qbtcd systemd service?" "y"; then
+            setup_qbtcd_systemd
         fi
     fi
 

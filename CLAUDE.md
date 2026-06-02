@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Build
 
 ```bash
-# Build all binaries (qbtcd, bifrost, utxo-indexer)
+# Build all binaries (qbtcd, utxo-indexer)
 make build
 
 # Install qbtcd to $GOPATH/bin
@@ -146,8 +146,9 @@ Off-chain:
 On-chain (x/qbtc module):
   MsgClaimWithProof → ZK Verifier → BankKeeper.MintCoins
                                   → mark UTXO as claimed
-Background:
-  Bifrost (P2P) → observes Bitcoin blocks → indexes UTXOs via gRPC
+Background (in each validator):
+  In-node observer → builds minimal UTXO delta → ABCI vote extension (digest)
+                   → proposer injects once >2/3 attest → delta applied to UTXO set
 ```
 
 ### Key Packages
@@ -157,9 +158,8 @@ Background:
 | `app/` | Cosmos SDK app wiring; all module keepers connected here |
 | `x/qbtc/keeper/` | Core state: UTXOs, claims, ZK verifying key; handles `MsgClaimWithProof` |
 | `x/qbtc/zk/` | ZK proof system: five circuits, PLONK verifier, trusted setup |
-| `x/qbtc/ebifrost/` | EnshrinedBifrost — P2P gossip embedded inside the validator node |
-| `bifrost/` | Standalone bifrost daemon (separate process, same P2P protocol) |
-| `bitcoin/` | Bitcoin RPC client for UTXO indexing |
+| `x/qbtc/ebifrost/` | Embedded Bitcoin observer + ABCI vote-extension handlers; builds minimal UTXO deltas |
+| `bitcoin/` | Bitcoin RPC client (block/UTXO fetch) |
 | `cmd/zkprover/` | CLI tool users run to generate proofs locally |
 | `cmd/proof-service/` | HTTP service wrapper around zkprover for remote proof generation |
 
@@ -169,9 +169,9 @@ Background:
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 
-### Bifrost / P2P
+### Bitcoin observation (vote extensions)
 
-The `EnshrinedBifrost` (`x/qbtc/ebifrost/`) runs as an embedded service inside each validator, using libp2p for gossip. A separate standalone `bifrost` daemon (`bifrost/`) can also be run for distributed Bitcoin block observation. Both use the same P2P protocol and submit observed Bitcoin block data via gRPC to `qbtcd`.
+Each validator's `qbtcd` observes Bitcoin directly via its configured RPC endpoint (`x/qbtc/ebifrost/`), builds a minimal UTXO delta per block, and attests the delta's digest through ABCI 2.0 vote extensions. The proposer injects the agreed delta once a >2/3 supermajority has attested it, and it is applied to the UTXO set during block execution. There is no separate daemon and no gossip network; Bitcoin RPC is configured in `app.toml [ebifrost]`.
 
 ### Claim Message Flow
 
