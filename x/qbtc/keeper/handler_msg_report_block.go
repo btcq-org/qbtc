@@ -177,7 +177,11 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, 
 		if out.Value == 0 {
 			continue
 		}
-		totalOutput += uint64(out.Value * 1e8)
+		amount, err := types.BTCToSatoshis(out.Value)
+		if err != nil {
+			return fee, fmt.Errorf("fail to convert output value to satoshis: %w", err)
+		}
+		totalOutput += amount
 	}
 	if totalInput > 0 && totalInput > totalOutput {
 		// calculate the transaction fee
@@ -375,16 +379,20 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 		if out.Value == 0 {
 			continue
 		}
+		amount, err := types.BTCToSatoshis(out.Value)
+		if err != nil {
+			return fmt.Errorf("fail to convert output value to satoshis: %w", err)
+		}
 		// when none of the txout has been claimed before, each utxo can claim the same amount as its value
 		// when any of the txout has been claimed before, each utxo can claim an amount proportional to its value
-		entitleAmount := uint64(out.Value * 1e8)
+		entitleAmount := amount
 		if hasClaim {
-			entitleAmount = totalClaimableAmount * uint64(out.Value*1e8) / totalOutputAmount
+			entitleAmount = totalClaimableAmount * amount / totalOutputAmount
 		}
 		utxo := types.UTXO{
 			Txid:           txID,
 			Vout:           out.N,
-			Amount:         uint64(out.Value * 1e8),
+			Amount:         amount,
 			EntitledAmount: entitleAmount,
 			ScriptPubKey: &types.ScriptPubKeyResult{
 				Hex:     out.ScriptPubKey.Hex,
@@ -411,14 +419,18 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 			continue
 		}
 
-		entitleAmount := uint64(out.Value * 1e8)
+		amount, err := types.BTCToSatoshis(out.Value)
+		if err != nil {
+			return fmt.Errorf("fail to convert output value to satoshis: %w", err)
+		}
+		entitleAmount := amount
 		if entitleAmount > totalFee {
 			entitleAmount = entitleAmount - totalFee
 		}
 		utxo := types.UTXO{
 			Txid:           txID,
 			Vout:           out.N,
-			Amount:         uint64(out.Value * 1e8),
+			Amount:         amount,
 			EntitledAmount: entitleAmount,
 			ScriptPubKey: &types.ScriptPubKeyResult{
 				Hex:     out.ScriptPubKey.Hex,

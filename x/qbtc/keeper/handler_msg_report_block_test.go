@@ -80,7 +80,9 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, utxo.EntitledAmount, uint64(313461773))
+				// exact fee for this block is 65602 sats; the pre-fix truncating
+				// conversion accumulated 133 extra satoshis of fee
+				require.Equal(st, utxo.EntitledAmount, uint64(313461906))
 
 			},
 		},
@@ -96,7 +98,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, uint64(2502676488), utxo.EntitledAmount)
+				require.Equal(st, uint64(2502676489), utxo.EntitledAmount)
 
 				key1 := "e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714-0"
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
@@ -132,7 +134,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, uint64(2502666488), utxo.EntitledAmount)
+				require.Equal(st, uint64(2502666489), utxo.EntitledAmount)
 
 				key1 := "2bda3732778da19cbf8799aceed3a6ab270948aeac85678bee013ddf3070687e-0"
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
@@ -202,7 +204,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 				utxo, err := f.keeper.Utxoes.Get(f.ctx, coinbaseKey)
 				require.NoError(st, err)
 				require.NotNil(st, utxo)
-				require.Equal(st, uint64(2502666488), utxo.EntitledAmount)
+				require.Equal(st, uint64(2502666489), utxo.EntitledAmount)
 
 				key1 := "bfa3ed4869f33192946dcc03d7789d6be32aa07f083e9752fcea2a5568a9ea47-0"
 				utxo1, err := f.keeper.Utxoes.Get(f.ctx, key1)
