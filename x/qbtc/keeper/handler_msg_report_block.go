@@ -281,6 +281,10 @@ func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, tx btcjson.TxRawResult)
 		if err != nil {
 			return false, err
 		}
+		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
+			// source address unknown, can't confirm the tx is sent to itself
+			return false, nil
+		}
 		sourceAddress = append(sourceAddress, utxo.ScriptPubKey.Address)
 	}
 
