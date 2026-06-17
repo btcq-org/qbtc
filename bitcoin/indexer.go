@@ -207,11 +207,16 @@ func (i *Indexer) ExportUTXO(outPath string) (err error) {
 			continue
 		}
 		fields := strings.Split(string(k), "-")
+		amount, err := qbtctypes.BTCToSatoshis(vOut.Value)
+		if err != nil {
+			// dropping a UTXO would make its coins unclaimable, so abort the export
+			return fmt.Errorf("failed to convert value of utxo %s to satoshis: %w", string(k), err)
+		}
 		pVout := qbtctypes.UTXO{
 			Txid:           fields[0],
 			Vout:           vOut.N,
-			Amount:         uint64(vOut.Value * 1e8), // convert to satoshis
-			EntitledAmount: uint64(vOut.Value * 1e8),
+			Amount:         amount,
+			EntitledAmount: amount,
 			ScriptPubKey: &qbtctypes.ScriptPubKeyResult{
 				Hex:     vOut.ScriptPubKey.Hex,
 				Type:    vOut.ScriptPubKey.Type,
