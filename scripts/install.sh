@@ -2,14 +2,14 @@
 set -e
 
 # ========== DEFAULTS ==========
-DEFAULT_VERSION="1.0.18"
+DEFAULT_VERSION="1.0.21"
 GITHUB_REPO="btcq-org/qbtc"
 INSTALL_DIR="/usr/local/bin"
 QBTCD_HOME="$HOME/.qbtc"
 BIFROST_HOME="$HOME/.bifrost"
 ARCH="linux-amd64"
 GENESIS_URL="https://sgp1.vultrobjects.com/genesis/genesis.json"
-GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-946674.bin"
+GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-954355.bin"
 COSMOVISOR_URL="https://github.com/cosmos/cosmos-sdk/releases/download/cosmovisor%2Fv1.7.1/cosmovisor-v1.7.1-linux-amd64.tar.gz"
 STATESYNC_RPC="http://45.76.190.51:26657"
 
