@@ -373,7 +373,7 @@ init_qbtcd() {
 
         if ask_yn "Overwrite existing genesis and data?" "n"; then
             print_info "Running qbtcd init with overwrite..."
-            qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id bqtbc-testnet --overwrite
+            qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id qbtc --overwrite
             qbtcd comet unsafe-reset-all --home "$QBTCD_HOME"
         else
             print_info "Skipping qbtcd initialization."
@@ -381,10 +381,10 @@ init_qbtcd() {
         fi
     else
         print_info "Running qbtcd init..."
-        qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id bqtbc-testnet
+        qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id qbtc
     fi
 
-    qbtcd config set client chain-id qbtc-testnet --home "$QBTCD_HOME"
+    qbtcd config set client chain-id qbtc --home "$QBTCD_HOME"
     print_info "Downloading genesis.json..."
     if ! curl -fsSL "$GENESIS_URL" -o "$QBTCD_HOME/config/genesis.json"; then
         print_error "Failed to download genesis.json"
