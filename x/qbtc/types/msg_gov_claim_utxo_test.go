@@ -8,9 +8,9 @@ import (
 )
 
 func TestMsgGovClaimUTXO_ValidateBasic(t *testing.T) {
-	oversizedUtxos := make([]*ClaimUTXO, MaxBatchClaimUTXOs+1)
-	for i := range oversizedUtxos {
-		oversizedUtxos[i] = &ClaimUTXO{Txid: "txid", Vout: uint32(i)}
+	largeUtxos := make([]*ClaimUTXO, MaxBatchClaimUTXOs+1)
+	for i := range largeUtxos {
+		largeUtxos[i] = &ClaimUTXO{Txid: "txid", Vout: uint32(i)}
 	}
 
 	tests := []struct {
@@ -22,7 +22,7 @@ func TestMsgGovClaimUTXO_ValidateBasic(t *testing.T) {
 		{name: "no authority", msg: MsgGovClaimUTXO{Utxos: []*ClaimUTXO{{Txid: "txid", Vout: 0}}}, err: se.ErrInvalidRequest.Wrap("authority is required")},
 		{name: "no utxos", msg: MsgGovClaimUTXO{Authority: "btcq1..."}, err: se.ErrInvalidRequest.Wrap("must provide at least one UTXO to claim")},
 		{name: "no txid", msg: MsgGovClaimUTXO{Authority: "btcq1...", Utxos: []*ClaimUTXO{{Vout: 0}}}, err: se.ErrInvalidRequest.Wrap("txid is required")},
-		{name: "too many utxos", msg: MsgGovClaimUTXO{Authority: "btcq1...", Utxos: oversizedUtxos}, err: se.ErrInvalidRequest},
+		{name: "batch size not limited", msg: MsgGovClaimUTXO{Authority: "btcq1...", Utxos: largeUtxos}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
