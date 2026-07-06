@@ -90,34 +90,6 @@ func TestMaxBytesMiddleware_StreamingBodyFailsDownstream(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware(t *testing.T) {
-	h := chain(okHandler(), authMiddleware("s3cret", testMetrics()))
-
-	tests := []struct {
-		name   string
-		header string
-		want   int
-	}{
-		{"no header", "", http.StatusUnauthorized},
-		{"wrong scheme", "Basic s3cret", http.StatusUnauthorized},
-		{"wrong token", "Bearer nope", http.StatusUnauthorized},
-		{"correct token", "Bearer s3cret", http.StatusOK},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/prove", nil)
-			if tc.header != "" {
-				req.Header.Set("Authorization", tc.header)
-			}
-			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, req)
-			if rec.Code != tc.want {
-				t.Fatalf("header %q: want %d, got %d", tc.header, tc.want, rec.Code)
-			}
-		})
-	}
-}
-
 func TestConcurrencyMiddleware_ShedsLoadWhenFull(t *testing.T) {
 	slots := make(chan struct{}, 1)
 

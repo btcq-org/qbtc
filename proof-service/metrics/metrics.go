@@ -16,9 +16,8 @@ const (
 	MetricProofsFailed    MetricName = "proofs_failed_total"
 	MetricProofDuration   MetricName = "proof_duration_seconds"
 
-	MetricRequestsBusy         MetricName = "requests_rejected_busy_total"
-	MetricRequestsUnauthorized MetricName = "requests_unauthorized_total"
-	MetricRequestsTooLarge     MetricName = "requests_too_large_total"
+	MetricRequestsBusy     MetricName = "requests_rejected_busy_total"
+	MetricRequestsTooLarge MetricName = "requests_too_large_total"
 
 	MetricProofsInFlight MetricName = "proofs_in_flight"
 )
@@ -50,12 +49,6 @@ var (
 			Subsystem: SubsystemZK,
 			Name:      string(MetricRequestsBusy),
 			Help:      "Total number of requests rejected because all proving slots were busy",
-		}),
-		MetricRequestsUnauthorized: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: NamespaceProofService,
-			Subsystem: SubsystemZK,
-			Name:      string(MetricRequestsUnauthorized),
-			Help:      "Total number of requests rejected for missing or invalid authorization",
 		}),
 		MetricRequestsTooLarge: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: NamespaceProofService,

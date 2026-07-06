@@ -4,6 +4,5 @@
   "chain_id": "qbtc-1",
   "request_timeout_sec": 300,
   "max_concurrent_proofs": 2,
-  "max_request_bytes": 131072,
-  "auth_token": ""
+  "max_request_bytes": 131072
 }

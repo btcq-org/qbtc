@@ -47,8 +47,7 @@ func TestGetConfig_ExplicitValuesOverrideDefaults(t *testing.T) {
 		"chain_id": "qbtc-1",
 		"request_timeout_sec": 60,
 		"max_concurrent_proofs": 8,
-		"max_request_bytes": 4096,
-		"auth_token": "secret"
+		"max_request_bytes": 4096
 	}`
 	if err := os.WriteFile(path, []byte(full), 0o600); err != nil {
 		t.Fatal(err)
@@ -64,8 +63,5 @@ func TestGetConfig_ExplicitValuesOverrideDefaults(t *testing.T) {
 	}
 	if cfg.MaxRequestBytes != 4096 {
 		t.Errorf("MaxRequestBytes = %d, want 4096", cfg.MaxRequestBytes)
-	}
-	if cfg.AuthToken != "secret" {
-		t.Errorf("AuthToken = %q, want %q", cfg.AuthToken, "secret")
 	}
 }

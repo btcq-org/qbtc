@@ -31,10 +31,6 @@ type Config struct {
 	// 128 KiB when unset, which is ample for a signature, pubkey and UTXO list.
 	MaxRequestBytes int64 `mapstructure:"max_request_bytes" json:"max_request_bytes"`
 
-	// AuthToken, when non-empty, requires every /prove request to carry a
-	// matching "Authorization: Bearer <token>" header. Empty disables auth.
-	AuthToken string `mapstructure:"auth_token" json:"-"`
-
 	// BroadcastGRPCAddr is the gRPC endpoint of the qbtc node to broadcast to (e.g. "localhost:9090").
 	// Leave empty to disable on-chain broadcasting.
 	BroadcastGRPCAddr string `mapstructure:"broadcast_grpc_addr" json:"broadcast_grpc_addr,omitempty"`

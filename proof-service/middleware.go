@@ -2,7 +2,6 @@ package proofservice
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"net"
 	"net/http"
@@ -94,22 +93,6 @@ func maxBytesMiddleware(limit int64, m *metrics.Metrics) middleware {
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, limit)
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// authMiddleware enforces a static bearer token when one is configured.
-func authMiddleware(token string, m *metrics.Metrics) middleware {
-	want := []byte("Bearer " + token)
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			got := []byte(r.Header.Get("Authorization"))
-			if subtle.ConstantTimeCompare(got, want) != 1 {
-				m.IncrCounter(metrics.MetricRequestsUnauthorized)
-				writeJSONError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid authorization")
-				return
-			}
 			next.ServeHTTP(w, r)
 		})
 	}
