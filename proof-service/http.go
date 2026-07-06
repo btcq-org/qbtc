@@ -79,11 +79,30 @@ type HealthResponse struct {
 	SetupLoaded bool   `json:"setup_loaded"`
 }
 
-func (s *Service) registerRoutes() *http.ServeMux {
+// buildHandler assembles the routed mux and wraps it in the middleware chain.
+// The /prove path gets the protective controls (body cap, auth, concurrency
+// bound); /health and /metrics stay cheap and unauthenticated so probes and
+// scrapers keep working. recover + access logging wrap everything.
+func (s *Service) buildHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/prove", s.handleProve)
+
+	// Protective controls for the expensive /prove path, ordered so a proving
+	// slot is only ever held by an authorized request.
+	proveMW := make([]middleware, 0, 3)
+	if s.cfg.MaxRequestBytes > 0 {
+		proveMW = append(proveMW, maxBytesMiddleware(s.cfg.MaxRequestBytes, s.metrics))
+	}
+	if s.cfg.AuthToken != "" {
+		proveMW = append(proveMW, authMiddleware(s.cfg.AuthToken, s.metrics))
+	}
+	if s.provingSem != nil {
+		proveMW = append(proveMW, concurrencyMiddleware(s.provingSem, s.metrics))
+	}
+	mux.Handle("/prove", chain(http.HandlerFunc(s.handleProve), proveMW...))
 	mux.HandleFunc("/health", s.handleHealth)
-	return mux
+	metrics.RegisterHandlers(mux)
+
+	return chain(mux, recoverMiddleware(s.logger), requestLogMiddleware(s.logger))
 }
 
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {

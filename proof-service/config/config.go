@@ -21,6 +21,20 @@ type Config struct {
 	// RequestTimeoutSec is the maximum time allowed for proof generation.
 	RequestTimeoutSec int `mapstructure:"request_timeout_sec" json:"request_timeout_sec"`
 
+	// MaxConcurrentProofs caps how many proofs may be generated at once. Each
+	// proof uses roughly one core per CPU and ~3GB of RAM, so this bounds peak
+	// memory/CPU. Requests that arrive while all slots are busy get HTTP 503.
+	// Defaults to 2 when unset.
+	MaxConcurrentProofs int `mapstructure:"max_concurrent_proofs" json:"max_concurrent_proofs"`
+
+	// MaxRequestBytes caps the accepted request body size in bytes. Defaults to
+	// 128 KiB when unset, which is ample for a signature, pubkey and UTXO list.
+	MaxRequestBytes int64 `mapstructure:"max_request_bytes" json:"max_request_bytes"`
+
+	// AuthToken, when non-empty, requires every /prove request to carry a
+	// matching "Authorization: Bearer <token>" header. Empty disables auth.
+	AuthToken string `mapstructure:"auth_token" json:"-"`
+
 	// BroadcastGRPCAddr is the gRPC endpoint of the qbtc node to broadcast to (e.g. "localhost:9090").
 	// Leave empty to disable on-chain broadcasting.
 	BroadcastGRPCAddr string `mapstructure:"broadcast_grpc_addr" json:"broadcast_grpc_addr,omitempty"`
@@ -34,10 +48,12 @@ type Config struct {
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		HTTPListenAddr:    "0.0.0.0:8090",
-		SetupDir:          "./zk-setup",
-		ChainID:           "qbtc-1",
-		RequestTimeoutSec: 300,
+		HTTPListenAddr:      "127.0.0.1:8090",
+		SetupDir:            "./zk-setup",
+		ChainID:             "qbtc-1",
+		RequestTimeoutSec:   300,
+		MaxConcurrentProofs: 2,
+		MaxRequestBytes:     128 << 10,
 	}
 }
 
@@ -47,6 +63,16 @@ func DefaultConfig() *Config {
 func GetConfig(configPath ...string) (*Config, error) {
 	viper.Reset()
 	viper.SetConfigType("json")
+
+	// Seed defaults so configs written before these fields existed still get
+	// safe middleware limits rather than zero values.
+	def := DefaultConfig()
+	viper.SetDefault("http_listen_addr", def.HTTPListenAddr)
+	viper.SetDefault("setup_dir", def.SetupDir)
+	viper.SetDefault("chain_id", def.ChainID)
+	viper.SetDefault("request_timeout_sec", def.RequestTimeoutSec)
+	viper.SetDefault("max_concurrent_proofs", def.MaxConcurrentProofs)
+	viper.SetDefault("max_request_bytes", def.MaxRequestBytes)
 
 	if len(configPath) == 1 && configPath[0] != "" {
 		path := configPath[0]

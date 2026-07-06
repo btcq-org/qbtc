@@ -15,6 +15,12 @@ const (
 	MetricProofsGenerated MetricName = "proofs_generated_total"
 	MetricProofsFailed    MetricName = "proofs_failed_total"
 	MetricProofDuration   MetricName = "proof_duration_seconds"
+
+	MetricRequestsBusy         MetricName = "requests_rejected_busy_total"
+	MetricRequestsUnauthorized MetricName = "requests_unauthorized_total"
+	MetricRequestsTooLarge     MetricName = "requests_too_large_total"
+
+	MetricProofsInFlight MetricName = "proofs_in_flight"
 )
 
 const (
@@ -38,6 +44,33 @@ var (
 			Subsystem: SubsystemZK,
 			Name:      string(MetricProofsFailed),
 			Help:      "Total number of proof generation failures",
+		}),
+		MetricRequestsBusy: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: NamespaceProofService,
+			Subsystem: SubsystemZK,
+			Name:      string(MetricRequestsBusy),
+			Help:      "Total number of requests rejected because all proving slots were busy",
+		}),
+		MetricRequestsUnauthorized: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: NamespaceProofService,
+			Subsystem: SubsystemZK,
+			Name:      string(MetricRequestsUnauthorized),
+			Help:      "Total number of requests rejected for missing or invalid authorization",
+		}),
+		MetricRequestsTooLarge: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: NamespaceProofService,
+			Subsystem: SubsystemZK,
+			Name:      string(MetricRequestsTooLarge),
+			Help:      "Total number of requests rejected for exceeding the max body size",
+		}),
+	}
+
+	gauges = map[MetricName]prometheus.Gauge{
+		MetricProofsInFlight: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: NamespaceProofService,
+			Subsystem: SubsystemZK,
+			Name:      string(MetricProofsInFlight),
+			Help:      "Number of proof generations currently in progress",
 		}),
 	}
 
@@ -63,6 +96,9 @@ func NewMetrics() *Metrics {
 		for _, histogram := range histograms {
 			prometheus.MustRegister(histogram)
 		}
+		for _, gauge := range gauges {
+			prometheus.MustRegister(gauge)
+		}
 	})
 	return &Metrics{}
 }
@@ -78,6 +114,20 @@ func (m *Metrics) IncrCounter(name MetricName) {
 func (m *Metrics) ObserveHistogram(name MetricName, value float64) {
 	if hist, ok := histograms[name]; ok {
 		hist.Observe(value)
+	}
+}
+
+// IncrGauge increments the specified gauge metric.
+func (m *Metrics) IncrGauge(name MetricName) {
+	if gauge, ok := gauges[name]; ok {
+		gauge.Inc()
+	}
+}
+
+// DecrGauge decrements the specified gauge metric.
+func (m *Metrics) DecrGauge(name MetricName) {
+	if gauge, ok := gauges[name]; ok {
+		gauge.Dec()
 	}
 }
 
