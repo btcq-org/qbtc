@@ -1,11 +1,9 @@
 package metrics
 
 import (
-	"net/http"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // MetricName identifies a specific metric.
@@ -16,8 +14,7 @@ const (
 	MetricProofsFailed    MetricName = "proofs_failed_total"
 	MetricProofDuration   MetricName = "proof_duration_seconds"
 
-	MetricRequestsBusy     MetricName = "requests_rejected_busy_total"
-	MetricRequestsTooLarge MetricName = "requests_too_large_total"
+	MetricRequestsBusy MetricName = "requests_rejected_busy_total"
 
 	MetricProofsInFlight MetricName = "proofs_in_flight"
 )
@@ -49,12 +46,6 @@ var (
 			Subsystem: SubsystemZK,
 			Name:      string(MetricRequestsBusy),
 			Help:      "Total number of requests rejected because all proving slots were busy",
-		}),
-		MetricRequestsTooLarge: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: NamespaceProofService,
-			Subsystem: SubsystemZK,
-			Name:      string(MetricRequestsTooLarge),
-			Help:      "Total number of requests rejected for exceeding the max body size",
 		}),
 	}
 
@@ -122,9 +113,4 @@ func (m *Metrics) DecrGauge(name MetricName) {
 	if gauge, ok := gauges[name]; ok {
 		gauge.Dec()
 	}
-}
-
-// RegisterHandlers registers the /metrics endpoint on the provided mux.
-func RegisterHandlers(mux *http.ServeMux) {
-	mux.Handle("/metrics", promhttp.Handler())
 }
