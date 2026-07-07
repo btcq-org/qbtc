@@ -39,6 +39,9 @@ type Service struct {
 	// Metrics
 	metrics *metrics.Metrics
 
+	// provingSem bounds concurrent proof generations (nil when unlimited).
+	provingSem chan struct{}
+
 	// Shutdown coordination
 	stopChan chan struct{}
 	wg       *sync.WaitGroup
@@ -88,6 +91,12 @@ func NewService(cfg config.Config) (*Service, error) {
 	// Create metrics
 	m := metrics.NewMetrics()
 
+	// Bound concurrent proving to protect memory/CPU.
+	var provingSem chan struct{}
+	if cfg.MaxConcurrentProofs > 0 {
+		provingSem = make(chan struct{}, cfg.MaxConcurrentProofs)
+	}
+
 	// Create HTTP server (handler set in Start)
 	hs := &http.Server{
 		Addr:         cfg.HTTPListenAddr,
@@ -105,6 +114,7 @@ func NewService(cfg config.Config) (*Service, error) {
 		broadcaster: broadcaster,
 		hs:          hs,
 		metrics:     m,
+		provingSem:  provingSem,
 		stopChan:    make(chan struct{}),
 		wg:          &sync.WaitGroup{},
 	}, nil
@@ -112,10 +122,7 @@ func NewService(cfg config.Config) (*Service, error) {
 
 // Start starts the HTTP server.
 func (s *Service) Start(ctx context.Context) error {
-	// Register routes
-	mux := s.registerRoutes()
-	metrics.RegisterHandlers(mux)
-	s.hs.Handler = mux
+	s.hs.Handler = s.buildHandler()
 
 	s.wg.Add(1)
 	go func() {

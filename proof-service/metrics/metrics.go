@@ -1,11 +1,9 @@
 package metrics
 
 import (
-	"net/http"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // MetricName identifies a specific metric.
@@ -15,6 +13,10 @@ const (
 	MetricProofsGenerated MetricName = "proofs_generated_total"
 	MetricProofsFailed    MetricName = "proofs_failed_total"
 	MetricProofDuration   MetricName = "proof_duration_seconds"
+
+	MetricRequestsBusy MetricName = "requests_rejected_busy_total"
+
+	MetricProofsInFlight MetricName = "proofs_in_flight"
 )
 
 const (
@@ -38,6 +40,21 @@ var (
 			Subsystem: SubsystemZK,
 			Name:      string(MetricProofsFailed),
 			Help:      "Total number of proof generation failures",
+		}),
+		MetricRequestsBusy: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: NamespaceProofService,
+			Subsystem: SubsystemZK,
+			Name:      string(MetricRequestsBusy),
+			Help:      "Total number of requests rejected because all proving slots were busy",
+		}),
+	}
+
+	gauges = map[MetricName]prometheus.Gauge{
+		MetricProofsInFlight: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: NamespaceProofService,
+			Subsystem: SubsystemZK,
+			Name:      string(MetricProofsInFlight),
+			Help:      "Number of proof generations currently in progress",
 		}),
 	}
 
@@ -63,6 +80,9 @@ func NewMetrics() *Metrics {
 		for _, histogram := range histograms {
 			prometheus.MustRegister(histogram)
 		}
+		for _, gauge := range gauges {
+			prometheus.MustRegister(gauge)
+		}
 	})
 	return &Metrics{}
 }
@@ -81,7 +101,16 @@ func (m *Metrics) ObserveHistogram(name MetricName, value float64) {
 	}
 }
 
-// RegisterHandlers registers the /metrics endpoint on the provided mux.
-func RegisterHandlers(mux *http.ServeMux) {
-	mux.Handle("/metrics", promhttp.Handler())
+// IncrGauge increments the specified gauge metric.
+func (m *Metrics) IncrGauge(name MetricName) {
+	if gauge, ok := gauges[name]; ok {
+		gauge.Inc()
+	}
+}
+
+// DecrGauge decrements the specified gauge metric.
+func (m *Metrics) DecrGauge(name MetricName) {
+	if gauge, ok := gauges[name]; ok {
+		gauge.Dec()
+	}
 }

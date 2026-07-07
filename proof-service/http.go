@@ -3,10 +3,14 @@ package proofservice
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/btcq-org/qbtc/proof-service/metrics"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // ProveRequest is the JSON request body for POST /prove.
@@ -79,11 +83,35 @@ type HealthResponse struct {
 	SetupLoaded bool   `json:"setup_loaded"`
 }
 
-func (s *Service) registerRoutes() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/prove", s.handleProve)
-	mux.HandleFunc("/health", s.handleHealth)
-	return mux
+// buildHandler builds the echo router with its middleware. Recover, request ID
+// and access logging wrap every route; the expensive /prove path additionally
+// gets the body-size cap and the concurrency bound. /health and /metrics stay
+// cheap so probes and scrapers keep working. The existing net/http handlers are
+// mounted unchanged via echo.WrapHandler.
+func (s *Service) buildHandler() http.Handler {
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+
+	e.Use(echomw.Recover())
+	e.Use(echomw.RequestID())
+	e.Use(requestLogger(s.logger))
+
+	// Protective controls for the expensive /prove path, ordered so a proving
+	// slot is only ever held once the request has passed the cheaper checks.
+	proveMW := make([]echo.MiddlewareFunc, 0, 2)
+	if s.cfg.MaxRequestBytes > 0 {
+		proveMW = append(proveMW, echomw.BodyLimit(strconv.FormatInt(s.cfg.MaxRequestBytes, 10)))
+	}
+	if s.provingSem != nil {
+		proveMW = append(proveMW, concurrencyMiddleware(s.provingSem, s.metrics))
+	}
+
+	e.POST("/prove", echo.WrapHandler(http.HandlerFunc(s.handleProve)), proveMW...)
+	e.GET("/health", echo.WrapHandler(http.HandlerFunc(s.handleHealth)))
+	e.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
+
+	return e
 }
 
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
