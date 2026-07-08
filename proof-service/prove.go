@@ -3,11 +3,13 @@ package proofservice
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"net/http"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/btcsuite/btcd/btcec/v2"
+	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 )
 
 func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
@@ -128,6 +130,18 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
 	s.logger.Info().Str("message_hash", hex.EncodeToString(messageHash[:])).Msg("computed message hash")
 
+	// 8b. Fail fast: verify the ECDSA signature natively (microseconds) before
+	// committing to the ~18s in-circuit prove. The circuit proves this exact
+	// relation, so a signature that does not verify here can never yield a
+	// valid proof; rejecting it now avoids wasting proving capacity.
+	if err := verifyECDSASignature(pubKey, messageHash[:], sigRBytes, sigSBytes); err != nil {
+		return nil, http.StatusBadRequest, &ErrorResponse{
+			Error:   "signature does not verify against the public key and claim message",
+			Code:    "INVALID_SIGNATURE",
+			Details: err.Error(),
+		}
+	}
+
 	// 9. Create prover and generate proof
 	prover := zk.NewProver(s.cs, s.pk)
 
@@ -175,4 +189,28 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 	}
 
 	return resp, http.StatusOK, nil
+}
+
+// verifyECDSASignature checks that (r, s) is a valid secp256k1 ECDSA signature
+// of hash under pubKey. rBytes and sBytes must each be 32 bytes. It enforces
+// that r and s are in the valid range [1, n-1] and performs the full native
+// verification, matching what the circuit proves in-circuit.
+func verifyECDSASignature(pubKey *btcec.PublicKey, hash, rBytes, sBytes []byte) error {
+	var r, s btcec.ModNScalar
+	if r.SetByteSlice(rBytes) {
+		return errors.New("signature_r is not less than the curve order")
+	}
+	if s.SetByteSlice(sBytes) {
+		return errors.New("signature_s is not less than the curve order")
+	}
+	if r.IsZero() {
+		return errors.New("signature_r must be non-zero")
+	}
+	if s.IsZero() {
+		return errors.New("signature_s must be non-zero")
+	}
+	if !btcecdsa.NewSignature(&r, &s).Verify(hash, pubKey) {
+		return errors.New("signature verification failed")
+	}
+	return nil
 }
