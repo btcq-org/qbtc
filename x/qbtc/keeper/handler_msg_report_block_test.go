@@ -2,11 +2,19 @@ package keeper_test
 
 import (
 	"compress/gzip"
+	"context"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
+	sdkmath "cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/btcsuite/btcd/btcjson"
+	"github.com/btcsuite/btcd/btcutil"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -305,4 +313,199 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), utxoAfterClaim.EntitledAmount)
 	// check claimed utxo
+}
+
+const testUtxoAddress = "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC"
+
+func testVout(n uint32, sats int64) btcjson.Vout {
+	return btcjson.Vout{
+		Value: btcutil.Amount(sats).ToBTC(),
+		N:     n,
+		ScriptPubKey: btcjson.ScriptPubKeyResult{
+			Hex:     "76a91488ac",
+			Type:    "pubkeyhash",
+			Address: testUtxoAddress,
+		},
+	}
+}
+
+func testClaimMemoVout(n uint32, qbtcAddr string) btcjson.Vout {
+	return btcjson.Vout{
+		N: n,
+		ScriptPubKey: btcjson.ScriptPubKeyResult{
+			Asm:  "OP_RETURN " + hex.EncodeToString([]byte("claim:"+qbtcAddr)),
+			Type: "nulldata",
+		},
+	}
+}
+
+func setTestUtxo(t *testing.T, f *fixture, txid string, vout uint32, amount, entitled uint64) {
+	utxo := types.UTXO{
+		Txid:           txid,
+		Vout:           vout,
+		Amount:         amount,
+		EntitledAmount: entitled,
+		ScriptPubKey: &types.ScriptPubKeyResult{
+			Hex:     "76a91488ac",
+			Type:    "pubkeyhash",
+			Address: testUtxoAddress,
+		},
+	}
+	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, utxo.GetKey(), utxo))
+}
+
+func getTestEntitlement(t *testing.T, f *fixture, txid string, vout uint32) uint64 {
+	utxo, err := f.keeper.Utxoes.Get(f.ctx, fmt.Sprintf("%s-%d", txid, vout))
+	require.NoError(t, err)
+	return utxo.EntitledAmount
+}
+
+// submitTestBlock builds a block from txs, attests it with the fixture validator and processes it.
+func submitTestBlock(t *testing.T, f *fixture, height uint64, txs []btcjson.TxRawResult) {
+	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Height: int64(height), Tx: txs})
+	require.NoError(t, err)
+	compressed, err := types.GzipDeterministic(content, gzip.BestCompression)
+	require.NoError(t, err)
+	address, err := f.GetConsensusAddress()
+	require.NoError(t, err)
+	signerAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+	signature, err := f.privateKey.Sign(compressed)
+	require.NoError(t, err)
+	msg := &types.MsgBtcBlock{
+		Height:       height,
+		Hash:         fmt.Sprintf("%064x", height),
+		BlockContent: compressed,
+		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
+		Signer:       signerAddr,
+	}
+	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, msg)
+	require.NoError(t, err)
+	lastProcessed, err := f.keeper.GetLastProcessedBlock(f.ctx)
+	require.NoError(t, err)
+	require.Equal(t, height, lastProcessed, "block was not processed")
+}
+
+// A claimed UTXO spent together with a small unclaimed one gives a partially entitled output.
+// Spending that output again must not reset its entitlement to its full value.
+func TestSetMsgReportBlock_PartialEntitlementIsNotReset(t *testing.T) {
+	const (
+		claimedTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+		dustTxid    = "2222222222222222222222222222222222222222222222222222222222222222"
+		txA         = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		txB         = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		claimedSats = 10 * btcutil.SatoshiPerBitcoin
+		dustSats    = 10_000
+		fee         = 2_000
+	)
+	// tx A spends the claimed UTXO plus the dust; its output is entitled to the dust minus the fee
+	tx1 := btcjson.TxRawResult{
+		Txid: txA,
+		Vin:  []btcjson.Vin{{Txid: claimedTxid, Vout: 0}, {Txid: dustTxid, Vout: 0}},
+		Vout: []btcjson.Vout{testVout(0, claimedSats+dustSats-fee)},
+	}
+	// tx B spends that output alone
+	tx2 := btcjson.TxRawResult{
+		Txid: txB,
+		Vin:  []btcjson.Vin{{Txid: txA, Vout: 0}},
+		Vout: []btcjson.Vout{testVout(0, claimedSats+dustSats-2*fee)},
+	}
+
+	for _, sameBlock := range []bool{true, false} {
+		t.Run(fmt.Sprintf("same block %v", sameBlock), func(st *testing.T) {
+			f := initFixture(st)
+			setTestUtxo(st, f, claimedTxid, 0, claimedSats, 0)
+			setTestUtxo(st, f, dustTxid, 0, dustSats, dustSats)
+
+			if sameBlock {
+				submitTestBlock(st, f, 800000, []btcjson.TxRawResult{tx1, tx2})
+			} else {
+				submitTestBlock(st, f, 800000, []btcjson.TxRawResult{tx1})
+				require.Equal(st, uint64(dustSats-fee), getTestEntitlement(st, f, txA, 0))
+				submitTestBlock(st, f, 800001, []btcjson.TxRawResult{tx2})
+			}
+			require.Equal(st, uint64(dustSats-2*fee), getTestEntitlement(st, f, txB, 0))
+		})
+	}
+}
+
+// The same loop, but tx B is a memo claim, which mints in the block that contains it.
+func TestSetMsgReportBlock_PartialEntitlementMemoClaim(t *testing.T) {
+	const (
+		claimedTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+		dustTxid    = "2222222222222222222222222222222222222222222222222222222222222222"
+		txA         = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		txB         = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		claimedSats = 10 * btcutil.SatoshiPerBitcoin
+		dustSats    = 10_000
+		fee         = 2_000
+	)
+	f := initFixture(t)
+	minted := sdkmath.ZeroInt()
+	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, coins sdk.Coins) error {
+			minted = minted.Add(coins.AmountOf(sdk.DefaultBondDenom))
+			return nil
+		}).AnyTimes()
+	f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	setTestUtxo(t, f, claimedTxid, 0, claimedSats, 0)
+	setTestUtxo(t, f, dustTxid, 0, dustSats, dustSats)
+	memoAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+
+	submitTestBlock(t, f, 800000, []btcjson.TxRawResult{
+		{
+			Txid: txA,
+			Vin:  []btcjson.Vin{{Txid: claimedTxid, Vout: 0}, {Txid: dustTxid, Vout: 0}},
+			Vout: []btcjson.Vout{testVout(0, claimedSats+dustSats-fee)},
+		},
+		{
+			Txid: txB,
+			Vin:  []btcjson.Vin{{Txid: txA, Vout: 0}},
+			Vout: []btcjson.Vout{testVout(0, claimedSats+dustSats-2*fee), testClaimMemoVout(1, memoAddr)},
+		},
+	})
+	require.Equal(t, sdkmath.NewInt(dustSats-2*fee).String(), minted.String())
+	require.Equal(t, uint64(0), getTestEntitlement(t, f, txB, 0))
+}
+
+// claimable * amount does not fit in uint64 here (5e9 * 5e9 = 2.5e19).
+func TestSetMsgReportBlock_EntitlementDoesNotOverflow(t *testing.T) {
+	const (
+		claimedTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+		openTxid    = "2222222222222222222222222222222222222222222222222222222222222222"
+		txA         = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		fiftyBTC    = 50 * btcutil.SatoshiPerBitcoin
+	)
+	f := initFixture(t)
+	setTestUtxo(t, f, claimedTxid, 0, fiftyBTC, 0)
+	setTestUtxo(t, f, openTxid, 0, fiftyBTC, fiftyBTC)
+
+	submitTestBlock(t, f, 800000, []btcjson.TxRawResult{{
+		Txid: txA,
+		Vin:  []btcjson.Vin{{Txid: claimedTxid, Vout: 0}, {Txid: openTxid, Vout: 0}},
+		Vout: []btcjson.Vout{testVout(0, fiftyBTC), testVout(1, fiftyBTC)},
+	}})
+	require.Equal(t, uint64(fiftyBTC/2), getTestEntitlement(t, f, txA, 0))
+	require.Equal(t, uint64(fiftyBTC/2), getTestEntitlement(t, f, txA, 1))
+}
+
+// When every input is fully entitled, each output keeps its full value.
+func TestSetMsgReportBlock_UnclaimedInputsKeepFullEntitlement(t *testing.T) {
+	const (
+		inTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+		txA    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	)
+	f := initFixture(t)
+	setTestUtxo(t, f, inTxid, 0, 100_000_003, 100_000_003)
+	setTestUtxo(t, f, inTxid, 1, 7, 7)
+
+	submitTestBlock(t, f, 800000, []btcjson.TxRawResult{{
+		Txid: txA,
+		Vin:  []btcjson.Vin{{Txid: inTxid, Vout: 0}, {Txid: inTxid, Vout: 1}},
+		Vout: []btcjson.Vout{testVout(0, 33_333_333), testVout(1, 66_666_667), testVout(2, 1)},
+	}})
+	require.Equal(t, uint64(33_333_333), getTestEntitlement(t, f, txA, 0))
+	require.Equal(t, uint64(66_666_667), getTestEntitlement(t, f, txA, 1))
+	require.Equal(t, uint64(1), getTestEntitlement(t, f, txA, 2))
 }
