@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -9,6 +10,11 @@ import (
 )
 
 func TestGenesisState_Validate(t *testing.T) {
+	// verifying key set up from the Hermez Powers of Tau with the claim circuit's
+	// number of public inputs; see x/qbtc/zk/vk_origin_test.go
+	hermezVK, err := os.ReadFile("../zk/testdata/hermez08_64public.vk")
+	require.NoError(t, err)
+
 	tests := []struct {
 		desc     string
 		genState *types.GenesisState
@@ -40,6 +46,13 @@ func TestGenesisState_Validate(t *testing.T) {
 			},
 			valid:  false,
 			errMsg: "failed to deserialize verifying key",
+		},
+		{
+			desc: "valid VK from the Hermez Powers of Tau",
+			genState: &types.GenesisState{
+				ZkVerifyingKey: hermezVK,
+			},
+			valid: true,
 		},
 	}
 	for _, tc := range tests {

@@ -60,7 +60,8 @@ type BTCPubKeyOwnershipCircuit struct {
 // Define implements the gnark circuit interface.
 // The circuit proves:
 //  1. The signature is valid for the given public key and message.
-//  2. SHA256 of the SEC-compressed public key equals PubKeyHashSHA256.
+//  2. The public key is on secp256k1, and SHA256 of its SEC-compressed
+//     encoding equals PubKeyHashSHA256.
 //     (RIPEMD160 of PubKeyHashSHA256 vs. the Bitcoin AddressHash is checked
 //     natively by the verifier.)
 //  3. The proof is bound to the destination address and chain ID via
@@ -68,6 +69,10 @@ type BTCPubKeyOwnershipCircuit struct {
 func (c *BTCPubKeyOwnershipCircuit) Define(api frontend.API) error {
 	// Get the base field for point operations
 	baseField, err := emulated.NewField[Secp256k1Fp](api)
+	if err != nil {
+		return err
+	}
+	curve, err := sw_emulated.New[Secp256k1Fp, Secp256k1Fr](api, sw_emulated.GetSecp256k1Params())
 	if err != nil {
 		return err
 	}
@@ -89,13 +94,14 @@ func (c *BTCPubKeyOwnershipCircuit) Define(api frontend.API) error {
 	// ========================================
 	// Step 2: Bind the public key to PubKeyHashSHA256
 	// ========================================
-	// SEC-compressed encoding is produced off-circuit by a hint and then
-	// fully constrained against (PublicKeyX, PublicKeyY) — see compressPubKeyFromPoint.
+	// The key must be on secp256k1, and its SEC-compressed encoding is built
+	// from the canonical bits of (PublicKeyX, PublicKeyY) — see
+	// compressCheckedPubKey.
 	pubKeyPoint := &sw_emulated.AffinePoint[Secp256k1Fp]{
 		X: c.PublicKeyX,
 		Y: c.PublicKeyY,
 	}
-	compressedPubKey := compressPubKeyFromPoint(api, baseField, pubKeyPoint)
+	compressedPubKey := compressCheckedPubKey(api, baseField, curve, pubKeyPoint)
 
 	sha256Result := computeSHA256Circuit(api, compressedPubKey[:])
 	for i := 0; i < 32; i++ {

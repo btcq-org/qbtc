@@ -30,7 +30,9 @@ import (
 const (
 	// HermezPtauURL is the URL template for downloading Hermez Powers of Tau files.
 	// Use %d to specify the power (e.g., 16 for 2^16 constraints).
-	HermezPtauURL = "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_%02d.ptau"
+	// The files are listed in https://github.com/iden3/snarkjs#7-prepare-phase-2;
+	// the former storage.googleapis.com/zkevm/ptau location returns HTTP 403.
+	HermezPtauURL = "https://circom.info/powersOfTau28_hez_final_%02d.ptau"
 
 	// DefaultPtauPower is the default power for the PTAU file (2^21 = ~2M constraints).
 	// This is more than enough for our circuit.
@@ -39,8 +41,11 @@ const (
 
 // Blake2b hashes for Hermez Powers of Tau ceremony outputs.
 // From official snarkjs docs: https://github.com/iden3/snarkjs#7-prepare-phase-2
+// A power without an entry here cannot be used.
 var ptauBlake2bHashes = map[int]string{
 	21: "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678",
+	22: "0d64f63dba1a6f11139df765cb690da69d9b2f469a1ddd0de5e4aa628abb28f787f04c6a5fb84a235ec5ea7f41d0548746653ecab0559add658a83502d1cb21b",
+	23: "3063a0bd81d68711197c8820a92466d51aeac93e915f5136d74f63c394ee6d88c5e8016231ea6580bec02e25d491f319d92e77f5c7f46a9caa8f3b53c0ea544f",
 }
 
 // Secp256k1Fp is the base field of secp256k1
@@ -152,7 +157,8 @@ func SetupCircuitWithOptions(circuit frontend.Circuit, opts SetupOptions) (*Setu
 		if power == 0 {
 			power = DefaultPtauPower
 		}
-		srs, srsLagrange, err = LoadOrDownloadHermezSRS(opts.CacheDir, power, cs.GetNbConstraints())
+		// The PLONK domain holds one row per public input plus one per constraint.
+		srs, srsLagrange, err = LoadOrDownloadHermezSRS(opts.CacheDir, power, cs.GetNbConstraints()+cs.GetNbPublicVariables())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load/download Hermez SRS: %w", err)
 		}
@@ -220,7 +226,13 @@ func DownloadFile(url, localFilePathName string) error {
 
 // LoadOrDownloadHermezSRS loads the Hermez Powers of Tau SRS from cache,
 // or downloads it if not cached. The SRS is converted to gnark format.
+// minConstraints is the number of PLONK rows: constraints plus public inputs.
 func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*kzg.SRS, *kzg.SRS, error) {
+	expectedHash, ok := ptauBlake2bHashes[power]
+	if !ok {
+		return nil, nil, fmt.Errorf("no pinned Blake2b hash for PTAU power %d", power)
+	}
+
 	// Ensure cache directory exists
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create cache dir: %w", err)
@@ -258,17 +270,16 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*k
 		if err := DownloadFile(ptauURL, rawSRSLagrangePath); err != nil {
 			return nil, nil, fmt.Errorf("failed to download PTAU file: %w", err)
 		}
-
-		// Verify Blake2b hash (security check against tampering)
-		// Hashes from: https://github.com/iden3/snarkjs#7-prepare-phase-2
-		if expectedHash, ok := ptauBlake2bHashes[power]; ok {
-			if err := verifyFileBlake2b(rawSRSLagrangePath, expectedHash); err != nil {
-				os.Remove(rawSRSLagrangePath) // Remove corrupted/tampered file
-				return nil, nil, fmt.Errorf("PTAU hash verification failed: %w", err)
-			}
-			fmt.Printf("PTAU Blake2b hash verified for power %d\n", power)
-		}
 	}
+
+	// Verify Blake2b hash (security check against tampering), also for a
+	// PTAU file that was already in the cache.
+	// Hashes from: https://github.com/iden3/snarkjs#7-prepare-phase-2
+	if err := verifyFileBlake2b(rawSRSLagrangePath, expectedHash); err != nil {
+		os.Remove(rawSRSLagrangePath) // Remove corrupted/tampered file
+		return nil, nil, fmt.Errorf("PTAU hash verification failed: %w", err)
+	}
+	fmt.Printf("PTAU Blake2b hash verified for power %d\n", power)
 	file, err := os.Open(rawSRSLagrangePath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open downloaded PTAU file: %w", err)

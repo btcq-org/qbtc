@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/consensys/gnark/backend/plonk"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -51,7 +52,8 @@ func (gs GenesisState) Validate() error {
 }
 
 // ValidateVerifyingKey validates that the verifying key bytes are well-formed.
-// This ensures the VK can be deserialized and is within size bounds.
+// This ensures the VK can be deserialized, is within size bounds, was set up
+// from the Hermez Powers of Tau, and has the claim circuit's public inputs.
 func ValidateVerifyingKey(vkBytes []byte) error {
 	// Check size bounds
 	if len(vkBytes) < MinVerifyingKeySize {
@@ -68,5 +70,6 @@ func ValidateVerifyingKey(vkBytes []byte) error {
 		return fmt.Errorf("failed to deserialize verifying key: %w", err)
 	}
 
-	return nil
+	// Reject keys from the unsafe test SRS or with the wrong number of public inputs
+	return zk.ValidateClaimVerifyingKey(vk)
 }
