@@ -524,15 +524,15 @@ secp256k1 operations are emulated over BN254's scalar field using gnark's `std/m
 
 ### 10.2 Constraint Count
 
-Constraint breakdown with gnark v0.16.3. Components were compiled on their own, so they share range-check tables and do not add up exactly to the total:
+Constraint breakdown with gnark v0.16.4. Components were compiled on their own, so they share range-check tables and do not add up exactly to the total:
 
 | Component                          | Constraints   |
 | ---------------------------------- | ------------- |
-| ECDSA verification                 | ~694,000      |
+| ECDSA verification                 | ~687,000      |
 | Public key checks and compression  | ~7,000        |
-| SHA-256 (in circuit)               | ~497,000      |
+| SHA-256 (in circuit)               | ~496,000      |
 | RIPEMD-160                         | native (~µs)  |
-| **Total**                          | **1,211,406** |
+| **Total**                          | **1,202,299** |
 
 With gnark v0.14.0 the total was 979,212. The gnark v0.16 soundness fixes ([GHSA-3mvx-pp85-pm65](https://github.com/Consensys/gnark/security/advisories/GHSA-3mvx-pp85-pm65)) add range checks to `std/math/uints`, which roughly triples the cost of SHA-256. The circuit now needs a 2²¹ PLONK domain.
 

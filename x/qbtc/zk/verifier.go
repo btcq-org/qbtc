@@ -24,7 +24,9 @@ type Verifier struct {
 // The KZG pairing check uses the key's precomputed pairing lines, which are
 // serialized separately from its G2 points. They are recomputed here from the
 // G2 points, so a key with missing (zero) or mismatched lines cannot weaken
-// verification; zero lines make the pairing check accept any input.
+// verification; zero lines make the pairing check accept any input. The lines
+// are written into vk in place, so callers must not share vk with concurrent
+// users.
 func NewVerifier(vk plonk.VerifyingKey) *Verifier {
 	if key, ok := vk.(*plonkbn254.VerifyingKey); ok {
 		key.Kzg.Lines[0] = bn254.PrecomputeLines(key.Kzg.G2[0])

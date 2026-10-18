@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/plonk"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
