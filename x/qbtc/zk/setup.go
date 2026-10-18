@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark-crypto/ecc/bn254/kzg"
 	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/backend/plonk"
@@ -30,7 +31,9 @@ import (
 const (
 	// HermezPtauURL is the URL template for downloading Hermez Powers of Tau files.
 	// Use %d to specify the power (e.g., 16 for 2^16 constraints).
-	HermezPtauURL = "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_%02d.ptau"
+	// The files are listed in https://github.com/iden3/snarkjs#7-prepare-phase-2;
+	// the former storage.googleapis.com/zkevm/ptau location returns HTTP 403.
+	HermezPtauURL = "https://circom.info/powersOfTau28_hez_final_%02d.ptau"
 
 	// DefaultPtauPower is the default power for the PTAU file (2^21 = ~2M constraints).
 	// This is more than enough for our circuit.
@@ -39,8 +42,11 @@ const (
 
 // Blake2b hashes for Hermez Powers of Tau ceremony outputs.
 // From official snarkjs docs: https://github.com/iden3/snarkjs#7-prepare-phase-2
+// A power without an entry here cannot be used.
 var ptauBlake2bHashes = map[int]string{
 	21: "9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678",
+	22: "0d64f63dba1a6f11139df765cb690da69d9b2f469a1ddd0de5e4aa628abb28f787f04c6a5fb84a235ec5ea7f41d0548746653ecab0559add658a83502d1cb21b",
+	23: "3063a0bd81d68711197c8820a92466d51aeac93e915f5136d74f63c394ee6d88c5e8016231ea6580bec02e25d491f319d92e77f5c7f46a9caa8f3b53c0ea544f",
 }
 
 // Secp256k1Fp is the base field of secp256k1
@@ -152,7 +158,8 @@ func SetupCircuitWithOptions(circuit frontend.Circuit, opts SetupOptions) (*Setu
 		if power == 0 {
 			power = DefaultPtauPower
 		}
-		srs, srsLagrange, err = LoadOrDownloadHermezSRS(opts.CacheDir, power, cs.GetNbConstraints())
+		// The PLONK domain holds one row per public input plus one per constraint.
+		srs, srsLagrange, err = LoadOrDownloadHermezSRS(opts.CacheDir, power, cs.GetNbConstraints()+cs.GetNbPublicVariables())
 		if err != nil {
 			return nil, fmt.Errorf("failed to load/download Hermez SRS: %w", err)
 		}
@@ -218,9 +225,18 @@ func DownloadFile(url, localFilePathName string) error {
 	return nil
 }
 
-// LoadOrDownloadHermezSRS loads the Hermez Powers of Tau SRS from cache,
-// or downloads it if not cached. The SRS is converted to gnark format.
+// LoadOrDownloadHermezSRS returns the Hermez Powers of Tau SRS for the given
+// power, and its Lagrange form for a PLONK domain of minConstraints rows
+// (constraints plus public inputs). The PTAU file is downloaded into cacheDir
+// if missing and is checked against its pinned Blake2b hash on every use; the
+// gnark SRS is always derived from that verified file, never read from a
+// converted cache.
 func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*kzg.SRS, *kzg.SRS, error) {
+	expectedHash, ok := ptauBlake2bHashes[power]
+	if !ok {
+		return nil, nil, fmt.Errorf("no pinned Blake2b hash for PTAU power %d", power)
+	}
+
 	// Ensure cache directory exists
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create cache dir: %w", err)
@@ -233,54 +249,52 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*k
 			minConstraints, maxConstraints, power)
 	}
 
-	// Paths for cached files
-	srsPath := filepath.Join(cacheDir, fmt.Sprintf("srs_bn254_%d.dat", power))
-	srsLagrangePath := filepath.Join(cacheDir, fmt.Sprintf("srs_lagrange_bn254_%d_%d.dat", power, minConstraints))
-	rawSRSLagrangePath := filepath.Join(cacheDir, fmt.Sprintf("raw_srs_lagrange_bn254_%d_%d.dat", power, minConstraints))
-	// Check if cached files exist
-	if fileExists(srsPath) && fileExists(srsLagrangePath) {
-		fmt.Printf("Loading cached SRS from %s\n", cacheDir)
-		srs, err := LoadBN254SRSFromFile(srsPath)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load cached SRS: %w", err)
-		}
-		srsLagrange, err := LoadBN254SRSFromFile(srsLagrangePath)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load cached SRS Lagrange: %w", err)
-		}
-		return srs, srsLagrange, nil
-	}
-
-	if !fileExists(rawSRSLagrangePath) {
+	ptauPath := filepath.Join(cacheDir, fmt.Sprintf("powersOfTau28_hez_final_%02d.ptau", power))
+	if !fileExists(ptauPath) {
 		ptauURL := fmt.Sprintf(HermezPtauURL, power)
-		// Download and convert the PTAU file
 		fmt.Printf("Downloading Hermez Powers of Tau (2^%d), from %s...\n", power, ptauURL)
-		if err := DownloadFile(ptauURL, rawSRSLagrangePath); err != nil {
+		if err := DownloadFile(ptauURL, ptauPath); err != nil {
 			return nil, nil, fmt.Errorf("failed to download PTAU file: %w", err)
 		}
-
-		// Verify Blake2b hash (security check against tampering)
-		// Hashes from: https://github.com/iden3/snarkjs#7-prepare-phase-2
-		if expectedHash, ok := ptauBlake2bHashes[power]; ok {
-			if err := verifyFileBlake2b(rawSRSLagrangePath, expectedHash); err != nil {
-				os.Remove(rawSRSLagrangePath) // Remove corrupted/tampered file
-				return nil, nil, fmt.Errorf("PTAU hash verification failed: %w", err)
-			}
-			fmt.Printf("PTAU Blake2b hash verified for power %d\n", power)
-		}
 	}
-	file, err := os.Open(rawSRSLagrangePath)
+
+	// Verify Blake2b hash (security check against tampering), also for a
+	// PTAU file that was already in the cache.
+	// Hashes from: https://github.com/iden3/snarkjs#7-prepare-phase-2
+	if err := verifyFileBlake2b(ptauPath, expectedHash); err != nil {
+		os.Remove(ptauPath) // Remove corrupted/tampered file
+		return nil, nil, fmt.Errorf("PTAU hash verification failed: %w", err)
+	}
+	fmt.Printf("PTAU Blake2b hash verified for power %d\n", power)
+
+	file, err := os.Open(ptauPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open downloaded PTAU file: %w", err)
+		return nil, nil, fmt.Errorf("failed to open PTAU file: %w", err)
 	}
 	defer file.Close()
-	srs, err := ptau.ToSRS(file)
+	return srsFromPTAU(file, minConstraints)
+}
+
+// srsFromPTAU converts a PTAU file to a gnark KZG SRS and its Lagrange form for
+// a PLONK domain of minConstraints rows.
+//
+// ptau.ToSRS leaves the verifying key's precomputed pairing lines at zero.
+// The KZG pairing check uses those lines, and with zero lines it accepts any
+// input, so they are computed here from the SRS's G2 points.
+func srsFromPTAU(r io.Reader, minConstraints int) (*kzg.SRS, *kzg.SRS, error) {
+	srs, err := ptau.ToSRS(r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert PTAU to gnark SRS: %w", err)
 	}
+	srs.Vk.Lines[0] = bn254.PrecomputeLines(srs.Vk.G2[0])
+	srs.Vk.Lines[1] = bn254.PrecomputeLines(srs.Vk.G2[1])
+
 	// Generate Lagrange form for PLONK
 	// We need the next power of 2 that fits the constraint count
 	lagrangeSize := nextPowerOfTwo(minConstraints)
+	if lagrangeSize > len(srs.Pk.G1) {
+		return nil, nil, fmt.Errorf("PTAU has %d G1 points, need %d", len(srs.Pk.G1), lagrangeSize)
+	}
 	fmt.Printf("Generating Lagrange SRS for size %d...\n", lagrangeSize)
 
 	srsLagrange, err := kzg.ToLagrangeG1(srs.Pk.G1[:lagrangeSize])
@@ -294,15 +308,6 @@ func LoadOrDownloadHermezSRS(cacheDir string, power int, minConstraints int) (*k
 			G1: srsLagrange,
 		},
 		Vk: srs.Vk,
-	}
-
-	// Cache the converted SRS
-	fmt.Printf("Caching SRS to %s\n", cacheDir)
-	if err := saveBN254SRSToFile(srs, srsPath); err != nil {
-		fmt.Printf("Warning: failed to cache SRS: %v\n", err)
-	}
-	if err := saveBN254SRSToFile(srsLagrangeResult, srsLagrangePath); err != nil {
-		fmt.Printf("Warning: failed to cache SRS Lagrange: %v\n", err)
 	}
 
 	return srs, srsLagrangeResult, nil
@@ -344,17 +349,6 @@ func verifyFileBlake2b(filePath, expectedHash string) error {
 		return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
 	}
 	return nil
-}
-
-func saveBN254SRSToFile(srs *kzg.SRS, path string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = srs.WriteTo(f)
-	return err
 }
 
 // SerializeVerifyingKey serializes the verifying key to bytes

@@ -225,7 +225,9 @@ gnark's standard `ecdsa.Verify` gadget verifies the ECDSA signature against the 
 
 #### Constraint Group 2: Public Key Commitment
 
-`SHA256(SEC-compressed pubkey) == PubKeyHashSHA256`.
+The public key is a finite point on secp256k1, and `SHA256(SEC-compressed pubkey) == PubKeyHashSHA256`.
+
+`ecdsa.Verify` does not check that the key is on the curve, so the circuit asserts it (`compressCheckedPubKey`). gnark's `AssertIsOnCurve` accepts `(0, 0)` as the point at infinity, so that point is rejected separately.
 
 **What this proves**: The public key used to verify the signature matches the claimed SHA256 commitment. The verifier then natively applies RIPEMD160 to recover the Bitcoin `AddressHash`.
 
@@ -237,14 +239,14 @@ The verifier independently computes the expected message hash from the claim par
 
 ### 4.4 Public Key Compression (In-Circuit)
 
-**File**: `x/qbtc/zk/hash.go`, function `compressPubKeyFromPoint`
+**File**: `x/qbtc/zk/hash.go`, functions `compressCheckedPubKey` and `compressPubKeyFromPoint`
 
 Bitcoin uses compressed public keys (33 bytes):
 
 - Byte 0: `0x02` if Y is even, `0x03` if Y is odd
 - Bytes 1-32: X coordinate (big-endian)
 
-The circuit extracts bits from X and Y coordinates, determines Y parity from the LSB, constructs the prefix byte, and packs X bits into 32 big-endian bytes.
+The circuit extracts the canonical bits (below the field modulus) of the X and Y coordinates with `ToBitsCanonical`, determines Y parity from the LSB, constructs the prefix byte, and packs X bits into 32 big-endian bytes. With plain `ToBits`, a witness could give X as `x + p`, which is the same point but would hash to a different byte string.
 
 ### 4.5 Pubkey Hashing (Split Between Circuit and Verifier)
 
@@ -306,16 +308,20 @@ PLONK requires a universal SRS derived from a Powers of Tau ceremony.
 
 **Production**: Uses the Hermez/Polygon Powers of Tau ceremony:
 
-- URL: `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_21.ptau`
+- URL: `https://circom.info/powersOfTau28_hez_final_21.ptau` (the former `storage.googleapis.com/zkevm/ptau` location returns HTTP 403)
 - Default power: 21 (2²¹ = ~2M constraints)
 - Participants: 54+ independent contributors
 - Security: 1-of-N honest participant assumption
 
-**Blake2b hash** (from [snarkjs docs](https://github.com/iden3/snarkjs#7-prepare-phase-2)):
+**Blake2b hashes** (from [snarkjs docs](https://github.com/iden3/snarkjs#7-prepare-phase-2)):
 
 - Power 21: `9aef0573cef4ded9c4a75f148709056bf989f80dad96876aadeb6f1c6d062391f07a394a9e756d16f7eb233198d5b69407cca44594c763ab4a5b67ae73254678`
+- Power 22: `0d64f63dba1a6f11139df765cb690da69d9b2f469a1ddd0de5e4aa628abb28f787f04c6a5fb84a235ec5ea7f41d0548746653ecab0559add658a83502d1cb21b`
+- Power 23: `3063a0bd81d68711197c8820a92466d51aeac93e915f5136d74f63c394ee6d88c5e8016231ea6580bec02e25d491f319d92e77f5c7f46a9caa8f3b53c0ea544f`
 
-Downloaded PTAU files are verified against this hash before use.
+PTAU files are verified against these hashes before use, including a file already in the cache. A power without a pinned hash is refused. The gnark SRS is always derived from the verified PTAU file; converted SRS files are not cached.
+
+**Verifying key check**: genesis validation (`qbtcd genesis validate`) rejects a verifying key whose KZG `[τ]G2` point is not the Hermez one, or whose number of public inputs is not 64. A key from the unsafe test SRS fails this check. See `zk.ValidateClaimVerifyingKey`.
 
 ### 6.2 Setup Modes
 
@@ -334,6 +340,9 @@ The Hermez PTAU format is converted to gnark's SRS format:
 1. Parse PTAU sections (G1 points, G2 points)
 2. Validate all points are on the curve
 3. Construct gnark SRS structure with proving and verifying keys
+4. Compute the KZG verifying key's precomputed pairing lines from its G2 points (`srsFromPTAU`)
+
+Step 4 matters: `gnark-ptau`'s `ToSRS` leaves the pairing lines at zero, and the KZG pairing check uses the lines, not the G2 points. With zero lines the pairing check accepts any input, which removes PLONK's soundness. Verifying keys built before this fix (including the first qbtc chain's key) have zero lines. As a second safeguard, `NewVerifier` recomputes the lines from the key's G2 points, and genesis validation rejects a key whose lines do not match.
 
 **Security Note**: The toxic waste τ is never reconstructed. Only the points [τⁱ]G are used.
 
@@ -515,19 +524,21 @@ secp256k1 operations are emulated over BN254's scalar field using gnark's `std/m
 
 ### 10.2 Constraint Count
 
-Approximate constraint breakdown (after moving RIPEMD160 out of the circuit):
+Constraint breakdown with gnark v0.16.4. Components were compiled on their own, so they share range-check tables and do not add up exactly to the total:
 
-| Component              | Constraints  |
-| ---------------------- | ------------ |
-| ECDSA verification     | ~800,000     |
-| Public key compression | ~5,000       |
-| SHA-256 (in circuit)   | ~170,000     |
-| RIPEMD-160             | native (~µs) |
-| **Total**              | **~979,000** |
+| Component                          | Constraints   |
+| ---------------------------------- | ------------- |
+| ECDSA verification                 | ~687,000      |
+| Public key checks and compression  | ~7,000        |
+| SHA-256 (in circuit)               | ~496,000      |
+| RIPEMD-160                         | native (~µs)  |
+| **Total**                          | **1,202,299** |
+
+With gnark v0.14.0 the total was 979,212. The gnark v0.16 soundness fixes ([GHSA-3mvx-pp85-pm65](https://github.com/Consensys/gnark/security/advisories/GHSA-3mvx-pp85-pm65)) add range checks to `std/math/uints`, which roughly triples the cost of SHA-256. The circuit now needs a 2²¹ PLONK domain.
 
 ### 10.3 Performance Characteristics
 
-Measured on an Intel i7-6700 @ 3.40GHz, 8 threads, PLONK/BN254, test SRS:
+Measured on an Intel i7-6700 @ 3.40GHz, 8 threads, PLONK/BN254, test SRS, with gnark v0.14.0 (before the 1.21M-constraint circuit; expect slower proving now):
 
 | Operation           | Time    | Memory  |
 | ------------------- | ------- | ------- |

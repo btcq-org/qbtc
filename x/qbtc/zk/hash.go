@@ -24,26 +24,42 @@ func bytesToScalar(api frontend.API, bytes []frontend.Variable) emulated.Element
 	return emulated.Element[Secp256k1Fr]{Limbs: limbs}
 }
 
+// compressCheckedPubKey asserts that pubKey is a finite point on secp256k1 and
+// returns its 33-byte SEC-compressed encoding. ecdsa.Verify does not check that
+// the key is on the curve. gnark's AssertIsOnCurve accepts (0, 0) as the point
+// at infinity, so that case is rejected here explicitly, even though
+// ecdsa.Verify rejects it too.
+func compressCheckedPubKey(
+	api frontend.API,
+	field *emulated.Field[Secp256k1Fp],
+	curve *sw_emulated.Curve[Secp256k1Fp, Secp256k1Fr],
+	pubKey *sw_emulated.AffinePoint[Secp256k1Fp],
+) [33]frontend.Variable {
+	curve.AssertIsOnCurve(pubKey)
+	isInfinity := api.And(field.IsZero(&pubKey.X), field.IsZero(&pubKey.Y))
+	api.AssertIsEqual(isInfinity, 0)
+	return compressPubKeyFromPoint(api, field, pubKey)
+}
+
 // compressPubKeyFromPoint returns the 33-byte SEC-compressed encoding of a
 // secp256k1 point: prefix byte (0x02 for even Y, 0x03 for odd Y) followed by
-// big-endian X. We decompose X and Y into bits via field.ToBits and repack X
-// into bytes; the bit-decomposition relation ties the bytes to pubKey.X
-// implicitly, so no extra equality check is needed.
+// big-endian X. We decompose X and Y into bits via field.ToBitsCanonical and
+// repack X into bytes; the bit-decomposition relation ties the bytes to
+// pubKey.X implicitly, so no extra equality check is needed.
 //
-// A hint-based variant (producing bytes off-circuit and then asserting
-// equality against pubKey.X) was benchmarked and came out ~1,200 constraints
-// more expensive: the AssertIsEqual + packLimbs range-checks + ToBitsCanonical
-// on Y together cost more than the single ToBits(X) they save. ToBits-based
-// compression is the cheaper construction for this circuit shape.
+// The canonical decomposition asserts each coordinate is below the field
+// modulus. With plain ToBits, a witness could encode X as x+p (or flip the
+// parity of Y the same way), which describes the same point but hashes a
+// different byte string.
 func compressPubKeyFromPoint(
 	api frontend.API,
 	field *emulated.Field[Secp256k1Fp],
 	pubKey *sw_emulated.AffinePoint[Secp256k1Fp],
 ) [33]frontend.Variable {
 	var result [33]frontend.Variable
-	// field.ToBits returns bits in little-endian order: bit[0] is LSB.
-	xBits := field.ToBits(&pubKey.X)
-	yBits := field.ToBits(&pubKey.Y)
+	// field.ToBitsCanonical returns bits in little-endian order: bit[0] is LSB.
+	xBits := field.ToBitsCanonical(&pubKey.X)
+	yBits := field.ToBitsCanonical(&pubKey.Y)
 	yParity := yBits[0]
 	result[0] = api.Add(2, yParity)
 	for byteIdx := 0; byteIdx < 32; byteIdx++ {

@@ -1,7 +1,7 @@
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT := $(shell git log -1 --format='%H')
 APPNAME := qbtc
-REQUIRE_GO_VERSION = 1.25
+REQUIRE_GO_VERSION = 1.26
 
 # do not override user values
 ifeq (,$(VERSION))
