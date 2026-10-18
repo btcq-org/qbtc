@@ -16,10 +16,6 @@ import (
 )
 
 const (
-	// ebifrostSignerAcc is the dummy address to submit injected transactions.
-	// generated: bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte("ebifrost_signer")))
-	// nolint:unused
-	ebifrostSignerAcc = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
 	// number of most recent blocks to keep in the cache
 	// nolint:unused
 	cachedBlocks = 10
@@ -172,7 +168,7 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 				Hash:         b.Hash,
 				BlockContent: b.BlockContent,
 				Attestations: b.Attestations,
-				Signer:       ebifrostSignerAcc,
+				Signer:       types.EBifrostSignerAddress,
 			}
 			return block, nil
 		},

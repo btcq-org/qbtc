@@ -238,8 +238,6 @@ func TestSetMsgReportBlock(t *testing.T) {
 			assert.Nil(st, err, "failed to compress block data")
 			address, err := f.GetConsensusAddress()
 			assert.Nil(st, err)
-			signerAddr, err := f.GetRandomQbtcAddress()
-			assert.NoError(st, err)
 			signature, err := f.privateKey.Sign(compressedContent)
 			assert.Nil(st, err, "failed to sign compressed data")
 			msg := &types.MsgBtcBlock{
@@ -252,7 +250,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 						Signature: signature,
 					},
 				},
-				Signer: signerAddr,
+				Signer: types.EBifrostSignerAddress,
 			}
 			if tc.setup != nil {
 				tc.setup(st, f)
@@ -276,13 +274,11 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 	assert.Nil(t, err, "failed to compress block data")
 	address, err := f.GetConsensusAddress()
 	assert.Nil(t, err)
-	signerAddr, err := f.GetRandomQbtcAddress()
-	assert.NoError(t, err)
 	signature, err := f.privateKey.Sign(compressedContent)
 	assert.Nil(t, err, "failed to sign compressed data")
 	msg := &types.MsgBtcBlock{
-		Height:       700000,
-		Hash:         "0000000000000000000a025260e08314c2f60e060c283140000001976a9144eb2d3adc8a627687d62e13a56df89bc777ffc8988ac",
+		Height:       300003,
+		Hash:         "000000000000000082aee4ff546c1db5e1aa5f9bfbaa0c76300a792b3e91fce7",
 		BlockContent: compressedContent,
 		Attestations: []*types.Attestation{
 			{
@@ -290,7 +286,7 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 				Signature: signature,
 			},
 		},
-		Signer: signerAddr,
+		Signer: types.EBifrostSignerAddress,
 	}
 	// preload utxo to be claimed
 	utxoToClaim := types.UTXO{
