@@ -319,7 +319,7 @@ PLONK requires a universal SRS derived from a Powers of Tau ceremony.
 - Power 22: `0d64f63dba1a6f11139df765cb690da69d9b2f469a1ddd0de5e4aa628abb28f787f04c6a5fb84a235ec5ea7f41d0548746653ecab0559add658a83502d1cb21b`
 - Power 23: `3063a0bd81d68711197c8820a92466d51aeac93e915f5136d74f63c394ee6d88c5e8016231ea6580bec02e25d491f319d92e77f5c7f46a9caa8f3b53c0ea544f`
 
-PTAU files are verified against these hashes before use, including a file already in the cache. A power without a pinned hash is refused.
+PTAU files are verified against these hashes before use, including a file already in the cache. A power without a pinned hash is refused. The gnark SRS is always derived from the verified PTAU file; converted SRS files are not cached.
 
 **Verifying key check**: genesis validation (`qbtcd genesis validate`) rejects a verifying key whose KZG `[τ]G2` point is not the Hermez one, or whose number of public inputs is not 64. A key from the unsafe test SRS fails this check. See `zk.ValidateClaimVerifyingKey`.
 
@@ -340,6 +340,9 @@ The Hermez PTAU format is converted to gnark's SRS format:
 1. Parse PTAU sections (G1 points, G2 points)
 2. Validate all points are on the curve
 3. Construct gnark SRS structure with proving and verifying keys
+4. Compute the KZG verifying key's precomputed pairing lines from its G2 points (`srsFromPTAU`)
+
+Step 4 matters: `gnark-ptau`'s `ToSRS` leaves the pairing lines at zero, and the KZG pairing check uses the lines, not the G2 points. With zero lines the pairing check accepts any input, which removes PLONK's soundness. Verifying keys built before this fix (including the first qbtc chain's key) have zero lines. As a second safeguard, `NewVerifier` recomputes the lines from the key's G2 points, and genesis validation rejects a key whose lines do not match.
 
 **Security Note**: The toxic waste τ is never reconstructed. Only the points [τⁱ]G are used.
 

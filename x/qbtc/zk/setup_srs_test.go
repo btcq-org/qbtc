@@ -17,7 +17,7 @@ func TestLoadOrDownloadHermezSRS_RequiresPinnedHash(t *testing.T) {
 // A PTAU file already in the cache is hash-checked too, not only a fresh download.
 func TestLoadOrDownloadHermezSRS_ChecksCachedPTAU(t *testing.T) {
 	dir := t.TempDir()
-	raw := filepath.Join(dir, fmt.Sprintf("raw_srs_lagrange_bn254_%d_%d.dat", DefaultPtauPower, 1))
+	raw := filepath.Join(dir, fmt.Sprintf("powersOfTau28_hez_final_%02d.ptau", DefaultPtauPower))
 	require.NoError(t, os.WriteFile(raw, []byte("not a ptau file"), 0o600))
 
 	_, _, err := LoadOrDownloadHermezSRS(dir, DefaultPtauPower, 1)

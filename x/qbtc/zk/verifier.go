@@ -6,7 +6,9 @@ import (
 	"sync"
 
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark/backend/plonk"
+	plonkbn254 "github.com/consensys/gnark/backend/plonk/bn254"
 	"github.com/consensys/gnark/frontend"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck // Bitcoin address hash is defined in terms of RIPEMD160.
 )
@@ -17,8 +19,17 @@ type Verifier struct {
 	vk plonk.VerifyingKey
 }
 
-// NewVerifier creates a new verifier with the given verifying key
+// NewVerifier creates a new verifier with the given verifying key.
+//
+// The KZG pairing check uses the key's precomputed pairing lines, which are
+// serialized separately from its G2 points. They are recomputed here from the
+// G2 points, so a key with missing (zero) or mismatched lines cannot weaken
+// verification; zero lines make the pairing check accept any input.
 func NewVerifier(vk plonk.VerifyingKey) *Verifier {
+	if key, ok := vk.(*plonkbn254.VerifyingKey); ok {
+		key.Kzg.Lines[0] = bn254.PrecomputeLines(key.Kzg.G2[0])
+		key.Kzg.Lines[1] = bn254.PrecomputeLines(key.Kzg.G2[1])
+	}
 	return &Verifier{vk: vk}
 }
 
@@ -28,7 +39,7 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Verifier{vk: vk}, nil
+	return NewVerifier(vk), nil
 }
 
 // VerifyProof verifies a PLONK proof for a signature-based Bitcoin address claim.

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/consensys/gnark/backend/plonk"
 	plonkbn254 "github.com/consensys/gnark/backend/plonk/bn254"
 )
@@ -28,6 +29,11 @@ const (
 // A key built from the unsafe test SRS (TestSetupOptions) fails, because its
 // [τ]G2 point differs.
 //
+// The KZG pairing check uses the key's precomputed pairing lines, not its G2
+// points, and the lines are serialized separately. They are recomputed from
+// the checked G2 points and must match, or a key could carry the Hermez G2
+// bytes while verifying against a different τ.
+//
 // This does not prove that vk belongs to BTCPubKeyOwnershipCircuit; compare the
 // key's hash with the published setup output for that.
 func ValidateClaimVerifyingKey(vk plonk.VerifyingKey) error {
@@ -46,6 +52,11 @@ func ValidateClaimVerifyingKey(vk plonk.VerifyingKey) error {
 	}
 	if hex.EncodeToString(tauG2[:]) != hermezKzgTauG2 {
 		return fmt.Errorf("verifying key [τ]G2 does not match the Hermez Powers of Tau; it was not set up from the production SRS")
+	}
+	for i := range key.Kzg.G2 {
+		if bn254.PrecomputeLines(key.Kzg.G2[i]) != key.Kzg.Lines[i] {
+			return fmt.Errorf("verifying key KZG precomputed lines do not match its G2 points")
+		}
 	}
 	return nil
 }
