@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/bits"
 	"slices"
 	"strings"
 	"time"
@@ -168,7 +169,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, blockHeight uint64) (uint64, error) {
 	defer telemetry.MeasureSince(time.Now(), "process_transaction")
 	fee := uint64(0)
-	totalClaimable, totalInput, hasClaimed, err := s.processVIn(ctx, tx.Vin)
+	totalClaimable, totalInput, err := s.processVIn(ctx, tx.Vin)
 	if err != nil {
 		return fee, err
 	}
@@ -192,7 +193,7 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, 
 			totalClaimable = 0
 		}
 	}
-	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, hasClaimed, totalOutput, blockHeight); err != nil {
+	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, totalOutput, blockHeight); err != nil {
 		return fee, err
 	}
 
@@ -336,12 +337,12 @@ func getUTXOKey(txID string, vOut uint32) string {
 }
 
 // processVIn remove the UTXOs from the key value store since it has been spent , can't be claim anymore
-// return the total amount that can be claimed
-func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint64, bool, error) {
+// return the total amount that can be claimed and the total input amount.
+// An input that is not in the store contributes nothing to either total.
+func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint64, error) {
 	defer telemetry.MeasureSince(time.Now(), "process_vin")
 	totalClaimableAmount := uint64(0)
 	totalInputAmount := uint64(0)
-	hasClaimed := false
 	for _, in := range ins {
 		if in.IsCoinBase() {
 			continue
@@ -351,31 +352,38 @@ func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint
 		if err != nil {
 			// UTXO not found, it must have been spent already
 			// on production environment , it should not happen, because we will load all unspent UTXOs from bitcoin node at genesis
-			if !errors.Is(err, collections.ErrNotFound) {
-				ctx.Logger().Error("failed to get UTXO", "key", key, "error", err)
-			} else {
-				hasClaimed = true
+			if errors.Is(err, collections.ErrNotFound) {
+				continue
 			}
-			continue
-		}
-		if existingUtxo.EntitledAmount == 0 {
-			hasClaimed = true
+			return 0, 0, fmt.Errorf("fail to get UTXO %s: %w", key, err)
 		}
 		totalClaimableAmount = totalClaimableAmount + existingUtxo.EntitledAmount
 		totalInputAmount = totalInputAmount + existingUtxo.Amount
 		// delete the UTXO since it has been spent
 		if err := s.k.Utxoes.Remove(ctx, key); err != nil {
-			return 0, 0, false, fmt.Errorf("fail to delete UTXO,error: %w", err)
+			return 0, 0, fmt.Errorf("fail to delete UTXO,error: %w", err)
 		}
 	}
-	return totalClaimableAmount, totalInputAmount, hasClaimed, nil
+	return totalClaimableAmount, totalInputAmount, nil
+}
+
+// proportionalEntitlement returns totalClaimable * amount / totalOutput, rounded down.
+// totalClaimable is capped at totalOutput, so the result never exceeds amount and
+// the 128-bit quotient always fits in uint64.
+func proportionalEntitlement(totalClaimable, amount, totalOutput uint64) uint64 {
+	if totalOutput == 0 {
+		return 0
+	}
+	totalClaimable = min(totalClaimable, totalOutput)
+	hi, lo := bits.Mul64(totalClaimable, amount)
+	quo, _ := bits.Div64(hi, lo, totalOutput)
+	return quo
 }
 
 func (s *msgServer) processVOuts(ctx sdk.Context,
 	outs []btcjson.Vout,
 	txID string,
 	totalClaimableAmount uint64,
-	hasClaim bool,
 	totalOutputAmount uint64,
 	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_vout")
@@ -387,12 +395,10 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 		if err != nil {
 			return fmt.Errorf("fail to convert output value to satoshis: %w", err)
 		}
-		// when none of the txout has been claimed before, each utxo can claim the same amount as its value
-		// when any of the txout has been claimed before, each utxo can claim an amount proportional to its value
-		entitleAmount := amount
-		if hasClaim {
-			entitleAmount = totalClaimableAmount * amount / totalOutputAmount
-		}
+		// each output can claim an amount proportional to its value, so the outputs together
+		// never get more than the inputs had. When every input is fully entitled, the claimable
+		// total equals the output total and each output gets its full value.
+		entitleAmount := proportionalEntitlement(totalClaimableAmount, amount, totalOutputAmount)
 		utxo := types.UTXO{
 			Txid:           txID,
 			Vout:           out.N,
