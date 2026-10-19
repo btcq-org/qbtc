@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"cosmossdk.io/collections"
 	sdkmath "cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -508,4 +509,91 @@ func TestSetMsgReportBlock_UnclaimedInputsKeepFullEntitlement(t *testing.T) {
 	require.Equal(t, uint64(33_333_333), getTestEntitlement(t, f, txA, 0))
 	require.Equal(t, uint64(66_666_667), getTestEntitlement(t, f, txA, 1))
 	require.Equal(t, uint64(1), getTestEntitlement(t, f, txA, 2))
+}
+
+// An input that is not in the store contributes nothing to the claimable or
+// input totals. The outputs share the known claimable total pro rata, so they
+// never get more than the known inputs had.
+func TestSetMsgReportBlock_MissingInput(t *testing.T) {
+	const (
+		missingTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+		knownTxid   = "2222222222222222222222222222222222222222222222222222222222222222"
+		txA         = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	)
+	cases := []struct {
+		name       string
+		outputs    []int64
+		entitlement []uint64
+	}{
+		// known input 100,000 < outputs 150,000: no fee can be computed, so the
+		// full known 100,000 is split pro rata
+		{"outputs above known inputs", []int64{90_000, 60_000}, []uint64{60_000, 40_000}},
+		// known input 100,000 > outputs 80,000: the 20,000 fee comes off the
+		// claimable total, and each output gets its full value
+		{"outputs below known inputs", []int64{50_000, 30_000}, []uint64{50_000, 30_000}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(st *testing.T) {
+			f := initFixture(st)
+			setTestUtxo(st, f, knownTxid, 0, 100_000, 100_000)
+			vouts := make([]btcjson.Vout, len(tc.outputs))
+			for i, sats := range tc.outputs {
+				vouts[i] = testVout(uint32(i), sats)
+			}
+			submitTestBlock(st, f, 800000, []btcjson.TxRawResult{{
+				Txid: txA,
+				Vin:  []btcjson.Vin{{Txid: missingTxid, Vout: 0}, {Txid: knownTxid, Vout: 0}},
+				Vout: vouts,
+			}})
+			for i, want := range tc.entitlement {
+				require.Equal(st, want, getTestEntitlement(st, f, txA, uint32(i)))
+			}
+		})
+	}
+}
+
+// A UTXO record that cannot be read (here: bytes that do not decode) fails the
+// block instead of being skipped as if the input did not exist.
+func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
+	const (
+		badTxid = "3333333333333333333333333333333333333333333333333333333333333333"
+		txA     = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	)
+	f := initFixture(t)
+	badKey := fmt.Sprintf("%s-0", badTxid)
+	rawKey, err := collections.EncodeKeyWithPrefix(types.UTXOKeys.Bytes(), collections.StringKey, badKey)
+	require.NoError(t, err)
+	sdk.UnwrapSDKContext(f.ctx).KVStore(f.storeKey).Set(rawKey, []byte{0xff, 0xff, 0xff})
+	_, err = f.keeper.Utxoes.Get(f.ctx, badKey)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, collections.ErrNotFound)
+
+	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Height: 800000, Tx: []btcjson.TxRawResult{{
+		Txid: txA,
+		Vin:  []btcjson.Vin{{Txid: badTxid, Vout: 0}},
+		Vout: []btcjson.Vout{testVout(0, 90_000)},
+	}}})
+	require.NoError(t, err)
+	compressed, err := types.GzipDeterministic(content, gzip.BestCompression)
+	require.NoError(t, err)
+	address, err := f.GetConsensusAddress()
+	require.NoError(t, err)
+	signerAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+	signature, err := f.privateKey.Sign(compressed)
+	require.NoError(t, err)
+	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, &types.MsgBtcBlock{
+		Height:       800000,
+		Hash:         fmt.Sprintf("%064x", 800000),
+		BlockContent: compressed,
+		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
+		Signer:       signerAddr,
+	})
+	require.ErrorContains(t, err, "fail to get UTXO")
+
+	lastProcessed, err := f.keeper.GetLastProcessedBlock(f.ctx)
+	require.NoError(t, err)
+	require.Zero(t, lastProcessed, "the block must not be applied")
+	_, err = f.keeper.Utxoes.Get(f.ctx, fmt.Sprintf("%s-0", txA))
+	require.ErrorIs(t, err, collections.ErrNotFound)
 }
