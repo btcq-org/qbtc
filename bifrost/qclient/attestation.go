@@ -42,8 +42,12 @@ func (c *Client) VerifyAttestation(ctx context.Context, block types.BlockGossip)
 		return fmt.Errorf("failed to get consensus public key for validator %s: %w", validator.OperatorAddress, err)
 	}
 
-	// Verify signature against block content
-	if !publicKey.VerifySignature(block.BlockContent, block.Attestation.Signature) {
+	// Attestations sign the uncompressed block commit
+	signBytes, _, err := types.DecodeBtcBlockContent(block.BlockContent)
+	if err != nil {
+		return fmt.Errorf("invalid block content: %w", err)
+	}
+	if !publicKey.VerifySignature(signBytes, block.Attestation.Signature) {
 		return fmt.Errorf("signature verification failed for validator %s", validator.OperatorAddress)
 	}
 

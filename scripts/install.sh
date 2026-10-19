@@ -440,7 +440,8 @@ create_bifrost_config() {
   "ebifrost_address": "localhost:50051",
   "qbtc_grpc_address": "localhost:9090",
   "cometbft_rpc_address": "http://localhost:26657",
-  "backoff_time_in_minutes": 1
+  "backoff_time_in_minutes": 1,
+  "confirmation_depth": 6
 }
 EOF
 

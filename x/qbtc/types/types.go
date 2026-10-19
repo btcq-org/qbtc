@@ -3,8 +3,6 @@ package types
 import (
 	"bytes"
 	"compress/gzip"
-	"fmt"
-	"io"
 	"time"
 )
 
@@ -36,31 +34,3 @@ func GzipDeterministic(data []byte, level int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// MaxDecompressedBlockSize is the maximum allowed size of decompressed block data (50MB).
-// This prevents zip bomb DoS attacks where a small compressed payload decompresses to
-// gigabytes of data, causing all validators to OOM simultaneously.
-const MaxDecompressedBlockSize = 50 * 1024 * 1024
-
-// GzipUnzip decompresses gzip-compressed bytes and returns raw bytes.
-// The decompressed output is capped at MaxDecompressedBlockSize to prevent zip bomb attacks.
-func GzipUnzip(data []byte) ([]byte, error) {
-	if len(data) == 0 {
-		return data, nil
-	}
-	r, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("gzip new reader: %w", err)
-	}
-	defer func() {
-		_ = r.Close()
-	}()
-	limited := io.LimitReader(r, MaxDecompressedBlockSize+1)
-	out, err := io.ReadAll(limited)
-	if err != nil {
-		return nil, fmt.Errorf("gzip read: %w", err)
-	}
-	if len(out) > MaxDecompressedBlockSize {
-		return nil, fmt.Errorf("decompressed data exceeds maximum allowed size of %d bytes", MaxDecompressedBlockSize)
-	}
-	return out, nil
-}

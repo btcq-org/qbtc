@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -264,7 +263,13 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 		return fmt.Errorf("failed to verify attestation: %w", err)
 	}
 
-	key := block.GetKey()
+	// attestations sign the uncompressed commit, so key by it: two validators'
+	// compressed bytes may differ for the same block
+	signBytes, _, err := types.DecodeBtcBlockContent(block.BlockContent)
+	if err != nil {
+		return fmt.Errorf("invalid block content for block %s at height %d: %w", block.Hash, block.Height, err)
+	}
+	key := types.BlockAttestationKey(block.Hash, block.Height, signBytes)
 	existingContent, err := p.db.Get([]byte(key), nil)
 	if err != nil {
 		if errors.Is(err, leveldb.ErrNotFound) {
@@ -285,9 +290,6 @@ func (p *PubSubService) aggregateAttestations(block types.BlockGossip) error {
 	var msgBlock types.MsgBtcBlock
 	if err := proto.Unmarshal(existingContent, &msgBlock); err != nil {
 		return fmt.Errorf("failed to unmarshal existing block gossip message: %w", err)
-	}
-	if !bytes.Equal(msgBlock.BlockContent, block.BlockContent) {
-		return fmt.Errorf("block content mismatch for block %s at height %d", block.Hash, block.Height)
 	}
 	msgBlock.Attestations = append(msgBlock.Attestations, block.Attestation)
 
