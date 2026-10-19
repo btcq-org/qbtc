@@ -16,10 +16,6 @@ import (
 )
 
 const (
-	// ebifrostSignerAcc is the dummy address to submit injected transactions.
-	// generated: bech32.ConvertAndEncode(prefix, crypto.AddressHash([]byte("ebifrost_signer")))
-	// nolint:unused
-	ebifrostSignerAcc = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
 	// number of most recent blocks to keep in the cache
 	// nolint:unused
 	cachedBlocks = 10
@@ -149,21 +145,27 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 	// for each btc block cached in EBifrost cache , we only removed it when QBTC already process pass the block height
 	// We do not remove it when it is include in the proposal , because the MsgReportBlock handler will ignore the block if it is not the next block height
 	// This is to prevent the block being dropped if the proposal is not committed
+	// startBlockHeight 0 means no block has been processed yet.
 	for _, item := range eb.btcBlockCache.Get() {
-		if item.Height <= startBlockHeight {
+		if startBlockHeight != 0 && item.Height <= startBlockHeight {
 			eb.MarkBlockAsProcessed(ctx, item)
 		}
 	}
 
 	// process btcq blocks
+	// idx is the number of blocks already included, so the next block must be at
+	// firstHeight+idx. Before any block is processed, the first cached block
+	// sets firstHeight, as ProcessProposal expects.
+	firstHeight := startBlockHeight + 1
+	freshChain := startBlockHeight == 0
 	blocks := eb.btcBlockCache.ProcessForProposal(
 		func(b *types.MsgBtcBlock, idx int) bool {
-			if startBlockHeight == 0 {
-				startBlockHeight = b.Height
-				return true
+			if freshChain && idx == 0 {
+				firstHeight = b.Height
 			}
-			ctx.Logger().Info("checking btc block for inclusion", "blockHeight", b.Height, "expectedHeight", startBlockHeight+uint64(idx+1), "idx", idx)
-			return b.Height == startBlockHeight+uint64(idx+1)
+			expectedHeight := firstHeight + uint64(idx)
+			ctx.Logger().Info("checking btc block for inclusion", "blockHeight", b.Height, "expectedHeight", expectedHeight, "idx", idx)
+			return b.Height == expectedHeight
 		},
 		func(b *types.MsgBtcBlock) (sdk.Msg, error) {
 			// construct a new message with the signer set to the ebifrost signer
@@ -172,7 +174,7 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 				Hash:         b.Hash,
 				BlockContent: b.BlockContent,
 				Attestations: b.Attestations,
-				Signer:       ebifrostSignerAcc,
+				Signer:       types.EBifrostSignerAddress,
 			}
 			return block, nil
 		},
@@ -194,10 +196,13 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 		eb.logger,
 	)
 
+	// blocks is a consecutive run of heights. Stop at the first block that does
+	// not fit, so the injected blocks stay consecutive: ProcessProposal rejects a
+	// gap, and every proposer with the same cache would build the same gap.
 	for _, bz := range blocks {
 		addLen := cmttypes.ComputeProtoSizeForTxs([]cmttypes.Tx{bz})
 		if txBzLen+addLen > maxTxBytes {
-			continue
+			break
 		}
 		txBzLen += addLen
 		injectTxs = append(injectTxs, bz)

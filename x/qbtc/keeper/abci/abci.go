@@ -1,8 +1,11 @@
 package abci
 
 import (
+	"fmt"
+
 	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -97,12 +100,55 @@ func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrep
 }
 
 func (h *ProposalHandler) ProcessProposal(ctx sdk.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	txs := make([]sdk.Tx, 0, len(req.Txs))
 	for _, bz := range req.Txs {
-		_, err := h.decoder(bz)
+		tx, err := h.decoder(bz)
 		if err != nil {
 			return nil, err
 		}
+		txs = append(txs, tx)
+	}
+
+	lastProcessedBlock, err := h.keeper.GetLastProcessedBlock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkInjectedBlocks(lastProcessedBlock, txs); err != nil {
+		ctx.Logger().Error("rejecting proposal", "error", err)
+		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
 
 	return h.processProposalHandler(ctx, req)
+}
+
+// checkInjectedBlocks rejects a proposal that carries a top-level MsgBtcBlock
+// outside a proposer-injected transaction, or injected blocks whose heights do
+// not run consecutively from lastProcessedBlock+1 (from the first block's
+// height when no block has been processed yet, as in PrepareProposal). The
+// block handler also binds each block's content to its height; this check
+// rejects a bad proposal before it is executed.
+func checkInjectedBlocks(lastProcessedBlock uint64, txs []sdk.Tx) error {
+	next := lastProcessedBlock + 1
+	anyStart := lastProcessedBlock == 0
+	for _, tx := range txs {
+		injected := ebifrost.IsInjectTx(tx)
+		for _, msg := range tx.GetMsgs() {
+			block, ok := msg.(*types.MsgBtcBlock)
+			if !ok {
+				continue
+			}
+			if !injected {
+				return fmt.Errorf("MsgBtcBlock at height %d is not in an inject transaction", block.Height)
+			}
+			if anyStart {
+				next = block.Height
+				anyStart = false
+			}
+			if block.Height != next {
+				return fmt.Errorf("injected block height %d, expected %d", block.Height, next)
+			}
+			next++
+		}
+	}
+	return nil
 }

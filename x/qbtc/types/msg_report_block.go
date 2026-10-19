@@ -9,6 +9,13 @@ import (
 
 var _ sdk.Msg = &MsgBtcBlock{}
 
+// EBifrostSignerAddress is the signer of every MsgBtcBlock that the block
+// proposer injects. It is the truncated SHA-256 of "ebifrost_signer", not the
+// address of any public key, so no one can sign for it. The block handler
+// rejects MsgBtcBlock with any other signer, which keeps the message off every
+// path where a user picks the signer (a normal tx, authz MsgExec, wasm, ICA).
+const EBifrostSignerAddress = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
+
 func (m *MsgBtcBlock) ValidateBasic() error {
 	if len(m.Hash) == 0 {
 		return errors.ErrInvalidRequest.Wrap("block hash cannot be empty")

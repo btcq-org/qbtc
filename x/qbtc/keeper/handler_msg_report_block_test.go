@@ -238,8 +238,6 @@ func TestSetMsgReportBlock(t *testing.T) {
 			assert.Nil(st, err, "failed to compress block data")
 			address, err := f.GetConsensusAddress()
 			assert.Nil(st, err)
-			signerAddr, err := f.GetRandomQbtcAddress()
-			assert.NoError(st, err)
 			signature, err := f.privateKey.Sign(compressedContent)
 			assert.Nil(st, err, "failed to sign compressed data")
 			msg := &types.MsgBtcBlock{
@@ -252,7 +250,7 @@ func TestSetMsgReportBlock(t *testing.T) {
 						Signature: signature,
 					},
 				},
-				Signer: signerAddr,
+				Signer: types.EBifrostSignerAddress,
 			}
 			if tc.setup != nil {
 				tc.setup(st, f)
@@ -276,13 +274,11 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 	assert.Nil(t, err, "failed to compress block data")
 	address, err := f.GetConsensusAddress()
 	assert.Nil(t, err)
-	signerAddr, err := f.GetRandomQbtcAddress()
-	assert.NoError(t, err)
 	signature, err := f.privateKey.Sign(compressedContent)
 	assert.Nil(t, err, "failed to sign compressed data")
 	msg := &types.MsgBtcBlock{
-		Height:       700000,
-		Hash:         "0000000000000000000a025260e08314c2f60e060c283140000001976a9144eb2d3adc8a627687d62e13a56df89bc777ffc8988ac",
+		Height:       300003,
+		Hash:         "000000000000000082aee4ff546c1db5e1aa5f9bfbaa0c76300a792b3e91fce7",
 		BlockContent: compressedContent,
 		Attestations: []*types.Attestation{
 			{
@@ -290,7 +286,7 @@ func TestSetMsgReportBlock_WithClaim(t *testing.T) {
 				Signature: signature,
 			},
 		},
-		Signer: signerAddr,
+		Signer: types.EBifrostSignerAddress,
 	}
 	// preload utxo to be claimed
 	utxoToClaim := types.UTXO{
@@ -363,13 +359,11 @@ func getTestEntitlement(t *testing.T, f *fixture, txid string, vout uint32) uint
 
 // submitTestBlock builds a block from txs, attests it with the fixture validator and processes it.
 func submitTestBlock(t *testing.T, f *fixture, height uint64, txs []btcjson.TxRawResult) {
-	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Height: int64(height), Tx: txs})
+	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Hash: fmt.Sprintf("%064x", height), Height: int64(height), Tx: txs})
 	require.NoError(t, err)
 	compressed, err := types.GzipDeterministic(content, gzip.BestCompression)
 	require.NoError(t, err)
 	address, err := f.GetConsensusAddress()
-	require.NoError(t, err)
-	signerAddr, err := f.GetRandomQbtcAddress()
 	require.NoError(t, err)
 	signature, err := f.privateKey.Sign(compressed)
 	require.NoError(t, err)
@@ -378,7 +372,7 @@ func submitTestBlock(t *testing.T, f *fixture, height uint64, txs []btcjson.TxRa
 		Hash:         fmt.Sprintf("%064x", height),
 		BlockContent: compressed,
 		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
-		Signer:       signerAddr,
+		Signer:       types.EBifrostSignerAddress,
 	}
 	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, msg)
 	require.NoError(t, err)
@@ -568,7 +562,7 @@ func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, collections.ErrNotFound)
 
-	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Height: 800000, Tx: []btcjson.TxRawResult{{
+	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Hash: fmt.Sprintf("%064x", 800000), Height: 800000, Tx: []btcjson.TxRawResult{{
 		Txid: txA,
 		Vin:  []btcjson.Vin{{Txid: badTxid, Vout: 0}},
 		Vout: []btcjson.Vout{testVout(0, 90_000)},
@@ -578,8 +572,6 @@ func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
 	require.NoError(t, err)
 	address, err := f.GetConsensusAddress()
 	require.NoError(t, err)
-	signerAddr, err := f.GetRandomQbtcAddress()
-	require.NoError(t, err)
 	signature, err := f.privateKey.Sign(compressed)
 	require.NoError(t, err)
 	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, &types.MsgBtcBlock{
@@ -587,7 +579,7 @@ func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
 		Hash:         fmt.Sprintf("%064x", 800000),
 		BlockContent: compressed,
 		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
-		Signer:       signerAddr,
+		Signer:       types.EBifrostSignerAddress,
 	})
 	require.ErrorContains(t, err, "fail to get UTXO")
 

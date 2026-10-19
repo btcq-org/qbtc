@@ -77,14 +77,20 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	defer telemetry.MeasureSince(time.Now(), "msg_report_block")
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	// MsgBtcBlock may only come from the block proposer's injection path. The
+	// ante handler only sees top-level messages, so a message nested in authz
+	// MsgExec, a wasm contract or an ICA packet reaches this handler directly;
+	// on all of those paths the signer is an account the sender controls.
+	if msg.Signer != types.EBifrostSignerAddress {
+		return nil, sdkerror.ErrUnauthorized.Wrap("MsgBtcBlock is only accepted from the block proposer's injection path")
+	}
 	lastProcessedBlock, err := s.k.GetLastProcessedBlock(ctx)
 	if err != nil {
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
 	}
 	// check if the block height is the next block height
 	if msg.Height != lastProcessedBlock+1 && lastProcessedBlock != 0 {
-		sdkCtx.Logger().Error("block height is not the next block height - ignore", "reportedHeight", msg.Height, "lastProcessedBlock", lastProcessedBlock)
-		return &types.MsgEmpty{}, nil
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("block height %d is not the next block height %d", msg.Height, lastProcessedBlock+1)
 	}
 
 	if err := msg.ValidateBasic(); err != nil {
@@ -102,6 +108,13 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	var block btcjson.GetBlockVerboseTxResult
 	if err := json.Unmarshal(rawBlockContent, &block); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("failed to unmarshal block content")
+	}
+	// The attestations sign BlockContent only. Bind the unsigned Height and Hash
+	// to the height and hash inside the signed content, so attested content can
+	// only be applied at its own height.
+	if block.Height < 0 || uint64(block.Height) != msg.Height || block.Hash != msg.Hash {
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("block content (height %d, hash %s) does not match the message (height %d, hash %s)",
+			block.Height, block.Hash, msg.Height, msg.Hash)
 	}
 	cacheContext, writeCache := sdkCtx.CacheContext()
 	claimTxIds := make([]string, 0)
@@ -411,13 +424,32 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 			},
 			BlockHeight: blockHeight,
 		}
-		if err := s.k.Utxoes.Set(ctx, utxo.GetKey(), utxo); err != nil {
-			ctx.Logger().Error("failed to save UTXO", "key", utxo.GetKey(), "error", err)
-			return fmt.Errorf("fail to save UTXO,error: %w", err)
+		if err := s.setNewUTXO(ctx, utxo); err != nil {
+			return err
 		}
 	}
 	return nil
 }
+
+// setNewUTXO stores a UTXO created by a block. A record with the same key must
+// not exist: overwriting one would reset its entitlement, and it can only exist
+// if the same outputs are processed twice.
+func (s *msgServer) setNewUTXO(ctx sdk.Context, utxo types.UTXO) error {
+	key := utxo.GetKey()
+	exists, err := s.k.Utxoes.Has(ctx, key)
+	if err != nil {
+		return fmt.Errorf("fail to check UTXO %s: %w", key, err)
+	}
+	if exists {
+		return fmt.Errorf("UTXO %s already exists", key)
+	}
+	if err := s.k.Utxoes.Set(ctx, key, utxo); err != nil {
+		ctx.Logger().Error("failed to save UTXO", "key", key, "error", err)
+		return fmt.Errorf("fail to save UTXO,error: %w", err)
+	}
+	return nil
+}
+
 func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	outs []btcjson.Vout,
 	txID string,
@@ -449,9 +481,8 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 			},
 			BlockHeight: blockHeight,
 		}
-		if err := s.k.Utxoes.Set(ctx, utxo.GetKey(), utxo); err != nil {
-			ctx.Logger().Error("failed to save UTXO", "key", utxo.GetKey(), "error", err)
-			return fmt.Errorf("fail to save UTXO,error: %w", err)
+		if err := s.setNewUTXO(ctx, utxo); err != nil {
+			return err
 		}
 	}
 	return nil

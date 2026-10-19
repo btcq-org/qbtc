@@ -21,6 +21,12 @@ type wInjectTx struct {
 	cdc codec.Codec
 }
 
+// IsInjectTx reports whether tx is a proposer-injected transaction.
+func IsInjectTx(tx sdk.Tx) bool {
+	_, ok := tx.(wInjectTx)
+	return ok
+}
+
 func NewInjectTx(cdc codec.Codec, msgs []sdk.Msg) wInjectTx {
 	msgsAny := make([]*codectypes.Any, len(msgs))
 	for i, msg := range msgs {

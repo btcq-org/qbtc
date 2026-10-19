@@ -9,7 +9,10 @@ import (
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/testutil"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,4 +99,64 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 	}
 
 	_ = eb.btcBlockCache.Get()
+}
+
+// The injected blocks must be a consecutive run from the last processed height
+// (or from the first cached block on a fresh chain): ProcessProposal rejects a
+// gap. A block too big for the remaining space ends the run.
+func TestProposalInjectTxs_ConsecutiveHeights(t *testing.T) {
+	registry := codectypes.NewInterfaceRegistry()
+	types.RegisterInterfaces(registry)
+	cdc := codec.NewProtoCodec(registry)
+	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
+	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+
+	block := func(height uint64, contentSize int) *types.MsgBtcBlock {
+		return &types.MsgBtcBlock{
+			Height:       height,
+			Hash:         fmt.Sprintf("hash-%d", height),
+			BlockContent: make([]byte, contentSize),
+			Attestations: []*types.Attestation{{Address: "validator", Signature: []byte{1}}},
+		}
+	}
+	const maxTxBytes = 2_000
+
+	cases := []struct {
+		name          string
+		lastProcessed uint64
+		blocks        []*types.MsgBtcBlock
+		wantHeight    []uint64
+	}{
+		{"first block too big", 100, []*types.MsgBtcBlock{block(101, 5_000), block(102, 100)}, nil},
+		{"middle block too big", 100, []*types.MsgBtcBlock{block(101, 100), block(102, 5_000), block(103, 100)}, []uint64{101}},
+		{"all fit", 100, []*types.MsgBtcBlock{block(101, 100), block(102, 100)}, []uint64{101, 102}},
+		{"gap in the cache", 100, []*types.MsgBtcBlock{block(101, 100), block(103, 100)}, []uint64{101}},
+		// before any block is processed, the first cached block sets the start
+		{"fresh chain", 0, []*types.MsgBtcBlock{block(500, 100), block(501, 100), block(502, 100)}, []uint64{500, 501, 502}},
+		{"fresh chain from height 0", 0, []*types.MsgBtcBlock{block(0, 100), block(1, 100), block(2, 100)}, []uint64{0, 1, 2}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eb := &EnshrinedBifrost{
+				logger:        log.NewNopLogger(),
+				cdc:           cdc,
+				subscribers:   make(map[string][]chan *EventNotification),
+				btcBlockCache: NewInjectCache[*types.MsgBtcBlock](),
+			}
+			for _, b := range tc.blocks {
+				eb.btcBlockCache.Add(b)
+			}
+
+			txs, _ := eb.ProposalInjectTxs(ctx, maxTxBytes, tc.lastProcessed)
+
+			decode := TxDecoder(cdc, func([]byte) (sdk.Tx, error) { return nil, fmt.Errorf("not an inject tx") })
+			var heights []uint64
+			for _, bz := range txs {
+				tx, err := decode(bz)
+				require.NoError(t, err)
+				heights = append(heights, tx.GetMsgs()[0].(*types.MsgBtcBlock).Height)
+			}
+			require.Equal(t, tc.wantHeight, heights)
+		})
+	}
 }
