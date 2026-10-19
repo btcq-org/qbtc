@@ -359,13 +359,11 @@ func getTestEntitlement(t *testing.T, f *fixture, txid string, vout uint32) uint
 
 // submitTestBlock builds a block from txs, attests it with the fixture validator and processes it.
 func submitTestBlock(t *testing.T, f *fixture, height uint64, txs []btcjson.TxRawResult) {
-	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Height: int64(height), Tx: txs})
+	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Hash: fmt.Sprintf("%064x", height), Height: int64(height), Tx: txs})
 	require.NoError(t, err)
 	compressed, err := types.GzipDeterministic(content, gzip.BestCompression)
 	require.NoError(t, err)
 	address, err := f.GetConsensusAddress()
-	require.NoError(t, err)
-	signerAddr, err := f.GetRandomQbtcAddress()
 	require.NoError(t, err)
 	signature, err := f.privateKey.Sign(compressed)
 	require.NoError(t, err)
@@ -374,7 +372,7 @@ func submitTestBlock(t *testing.T, f *fixture, height uint64, txs []btcjson.TxRa
 		Hash:         fmt.Sprintf("%064x", height),
 		BlockContent: compressed,
 		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
-		Signer:       signerAddr,
+		Signer:       types.EBifrostSignerAddress,
 	}
 	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, msg)
 	require.NoError(t, err)
@@ -564,7 +562,7 @@ func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, collections.ErrNotFound)
 
-	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Height: 800000, Tx: []btcjson.TxRawResult{{
+	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{Hash: fmt.Sprintf("%064x", 800000), Height: 800000, Tx: []btcjson.TxRawResult{{
 		Txid: txA,
 		Vin:  []btcjson.Vin{{Txid: badTxid, Vout: 0}},
 		Vout: []btcjson.Vout{testVout(0, 90_000)},
@@ -574,8 +572,6 @@ func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
 	require.NoError(t, err)
 	address, err := f.GetConsensusAddress()
 	require.NoError(t, err)
-	signerAddr, err := f.GetRandomQbtcAddress()
-	require.NoError(t, err)
 	signature, err := f.privateKey.Sign(compressed)
 	require.NoError(t, err)
 	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, &types.MsgBtcBlock{
@@ -583,7 +579,7 @@ func TestSetMsgReportBlock_UnreadableInputFailsBlock(t *testing.T) {
 		Hash:         fmt.Sprintf("%064x", 800000),
 		BlockContent: compressed,
 		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
-		Signer:       signerAddr,
+		Signer:       types.EBifrostSignerAddress,
 	})
 	require.ErrorContains(t, err, "fail to get UTXO")
 
