@@ -190,10 +190,13 @@ func (eb *EnshrinedBifrost) ProposalInjectTxs(ctx sdk.Context, maxTxBytes int64,
 		eb.logger,
 	)
 
+	// blocks is a consecutive run of heights. Stop at the first block that does
+	// not fit, so the injected blocks stay consecutive: ProcessProposal rejects a
+	// gap, and every proposer with the same cache would build the same gap.
 	for _, bz := range blocks {
 		addLen := cmttypes.ComputeProtoSizeForTxs([]cmttypes.Tx{bz})
 		if txBzLen+addLen > maxTxBytes {
-			continue
+			break
 		}
 		txBzLen += addLen
 		injectTxs = append(injectTxs, bz)

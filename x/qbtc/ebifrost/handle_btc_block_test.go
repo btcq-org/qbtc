@@ -9,7 +9,10 @@ import (
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/testutil"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,4 +99,58 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 	}
 
 	_ = eb.btcBlockCache.Get()
+}
+
+// A block too big for the remaining space must end the injected run, not be
+// skipped, or the proposal has a gap that ProcessProposal rejects.
+func TestProposalInjectTxs_StopsAtBlockThatDoesNotFit(t *testing.T) {
+	registry := codectypes.NewInterfaceRegistry()
+	types.RegisterInterfaces(registry)
+	cdc := codec.NewProtoCodec(registry)
+	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
+	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+
+	block := func(height uint64, contentSize int) *types.MsgBtcBlock {
+		return &types.MsgBtcBlock{
+			Height:       height,
+			Hash:         fmt.Sprintf("hash-%d", height),
+			BlockContent: make([]byte, contentSize),
+			Attestations: []*types.Attestation{{Address: "validator", Signature: []byte{1}}},
+		}
+	}
+	const maxTxBytes = 2_000
+
+	cases := []struct {
+		name       string
+		blocks     []*types.MsgBtcBlock
+		wantHeight []uint64
+	}{
+		{"first block too big", []*types.MsgBtcBlock{block(101, 5_000), block(102, 100)}, nil},
+		{"middle block too big", []*types.MsgBtcBlock{block(101, 100), block(102, 5_000), block(103, 100)}, []uint64{101}},
+		{"all fit", []*types.MsgBtcBlock{block(101, 100), block(102, 100)}, []uint64{101, 102}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eb := &EnshrinedBifrost{
+				logger:        log.NewNopLogger(),
+				cdc:           cdc,
+				subscribers:   make(map[string][]chan *EventNotification),
+				btcBlockCache: NewInjectCache[*types.MsgBtcBlock](),
+			}
+			for _, b := range tc.blocks {
+				eb.btcBlockCache.Add(b)
+			}
+
+			txs, _ := eb.ProposalInjectTxs(ctx, maxTxBytes, 100)
+
+			decode := TxDecoder(cdc, func([]byte) (sdk.Tx, error) { return nil, fmt.Errorf("not an inject tx") })
+			var heights []uint64
+			for _, bz := range txs {
+				tx, err := decode(bz)
+				require.NoError(t, err)
+				heights = append(heights, tx.GetMsgs()[0].(*types.MsgBtcBlock).Height)
+			}
+			require.Equal(t, tc.wantHeight, heights)
+		})
+	}
 }
