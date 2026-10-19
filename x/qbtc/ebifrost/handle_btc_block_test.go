@@ -101,9 +101,10 @@ func TestMarkBlockAsProcessed_ConcurrentAccess(t *testing.T) {
 	_ = eb.btcBlockCache.Get()
 }
 
-// A block too big for the remaining space must end the injected run, not be
-// skipped, or the proposal has a gap that ProcessProposal rejects.
-func TestProposalInjectTxs_StopsAtBlockThatDoesNotFit(t *testing.T) {
+// The injected blocks must be a consecutive run from the last processed height
+// (or from the first cached block on a fresh chain): ProcessProposal rejects a
+// gap. A block too big for the remaining space ends the run.
+func TestProposalInjectTxs_ConsecutiveHeights(t *testing.T) {
 	registry := codectypes.NewInterfaceRegistry()
 	types.RegisterInterfaces(registry)
 	cdc := codec.NewProtoCodec(registry)
@@ -121,13 +122,18 @@ func TestProposalInjectTxs_StopsAtBlockThatDoesNotFit(t *testing.T) {
 	const maxTxBytes = 2_000
 
 	cases := []struct {
-		name       string
-		blocks     []*types.MsgBtcBlock
-		wantHeight []uint64
+		name          string
+		lastProcessed uint64
+		blocks        []*types.MsgBtcBlock
+		wantHeight    []uint64
 	}{
-		{"first block too big", []*types.MsgBtcBlock{block(101, 5_000), block(102, 100)}, nil},
-		{"middle block too big", []*types.MsgBtcBlock{block(101, 100), block(102, 5_000), block(103, 100)}, []uint64{101}},
-		{"all fit", []*types.MsgBtcBlock{block(101, 100), block(102, 100)}, []uint64{101, 102}},
+		{"first block too big", 100, []*types.MsgBtcBlock{block(101, 5_000), block(102, 100)}, nil},
+		{"middle block too big", 100, []*types.MsgBtcBlock{block(101, 100), block(102, 5_000), block(103, 100)}, []uint64{101}},
+		{"all fit", 100, []*types.MsgBtcBlock{block(101, 100), block(102, 100)}, []uint64{101, 102}},
+		{"gap in the cache", 100, []*types.MsgBtcBlock{block(101, 100), block(103, 100)}, []uint64{101}},
+		// before any block is processed, the first cached block sets the start
+		{"fresh chain", 0, []*types.MsgBtcBlock{block(500, 100), block(501, 100), block(502, 100)}, []uint64{500, 501, 502}},
+		{"fresh chain from height 0", 0, []*types.MsgBtcBlock{block(0, 100), block(1, 100), block(2, 100)}, []uint64{0, 1, 2}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,7 +147,7 @@ func TestProposalInjectTxs_StopsAtBlockThatDoesNotFit(t *testing.T) {
 				eb.btcBlockCache.Add(b)
 			}
 
-			txs, _ := eb.ProposalInjectTxs(ctx, maxTxBytes, 100)
+			txs, _ := eb.ProposalInjectTxs(ctx, maxTxBytes, tc.lastProcessed)
 
 			decode := TxDecoder(cdc, func([]byte) (sdk.Tx, error) { return nil, fmt.Errorf("not an inject tx") })
 			var heights []uint64
