@@ -41,6 +41,7 @@ require (
 	github.com/btcsuite/btcd v0.24.2
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
 	github.com/btcsuite/btcd/btcutil v1.1.6
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/cometbft/cometbft v0.38.22
 	github.com/consensys/gnark v0.16.4
 	github.com/consensys/gnark-crypto v0.21.1-0.20260913224755-1409fe592052
@@ -172,7 +173,6 @@ require (
 	github.com/bombsimon/wsl/v5 v5.2.0 // indirect
 	github.com/breml/bidichk v0.3.3 // indirect
 	github.com/breml/errchkjson v0.4.1 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
 	github.com/bufbuild/buf v1.58.0 // indirect
 	github.com/bufbuild/protocompile v0.14.1 // indirect

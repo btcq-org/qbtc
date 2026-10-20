@@ -16,6 +16,7 @@ import (
 
 	"github.com/btcq-org/qbtc/bifrost/keystore"
 	"github.com/btcq-org/qbtc/bifrost/p2p"
+	"github.com/btcq-org/qbtc/bitcoin"
 	cmtconfig "github.com/cometbft/cometbft/config"
 	types "github.com/cometbft/cometbft/types"
 	tmtime "github.com/cometbft/cometbft/types/time"
@@ -438,7 +439,11 @@ func initTestnetFiles(
 		}
 	}
 
-	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers); err != nil {
+	anchor, err := fetchBtcAnchor(args)
+	if err != nil {
+		return err
+	}
+	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers, anchor); err != nil {
 		return err
 	}
 	// copy gentx file
@@ -458,7 +463,7 @@ func initTestnetFiles(
 			}
 		}
 	}
-	err := collectGenFiles(
+	err = collectGenFiles(
 		clientCtx, nodeConfig, nodeIDs, valPubKeys,
 		genBalIterator,
 		clientCtx.TxConfig.SigningContext().ValidatorAddressCodec(),
@@ -530,10 +535,52 @@ func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress
 	return writeFile(filepath.Join(outputDir, "config.json"), outputDir, bifrostConfigJSON)
 }
 
+// btcAnchor is the Bitcoin block the chain starts after: the block at the
+// bifrost start height - 1, and the timestamp of its difficulty period's first
+// block.
+type btcAnchor struct {
+	initialHeight   uint64
+	header          []byte
+	periodStartTime uint32
+}
+
+// fetchBtcAnchor reads the anchor from the Bitcoin node bifrost will use.
+func fetchBtcAnchor(args initArgs) (*btcAnchor, error) {
+	client, err := bitcoin.NewBtcClient(bitcoin.Config{
+		Host:     args.bitcoinRPCHost,
+		Port:     args.bitcoinRPCPort,
+		RPCUser:  args.bitcoinRPCUser,
+		Password: args.bitcoinRPCPassword,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bitcoin client: %w", err)
+	}
+	defer client.Close()
+
+	anchorHeight := args.bifrostStartBlockHeight - 1
+	header, err := client.GetBlockHeaderAt(anchorHeight)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get anchor header at height %d: %w", anchorHeight, err)
+	}
+	periodStart, err := client.GetBlockHeaderAt(anchorHeight - anchorHeight%2016)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get difficulty period start header: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := header.Serialize(&buf); err != nil {
+		return nil, err
+	}
+	return &btcAnchor{
+		initialHeight:   uint64(args.bifrostStartBlockHeight),
+		header:          buf.Bytes(),
+		periodStartTime: uint32(periodStart.Timestamp.Unix()),
+	}, nil
+}
+
 func initGenFiles(
 	clientCtx client.Context, mbm module.BasicManager, chainID string,
 	genAccounts []authtypes.GenesisAccount, genBalances []banktypes.Balance,
-	genFiles []string, numValidators int, p2pPeers []PeerInfo,
+	genFiles []string, numValidators int, p2pPeers []PeerInfo, anchor *btcAnchor,
 ) error {
 	appGenState := mbm.DefaultGenesis(clientCtx.Codec)
 
@@ -570,6 +617,9 @@ func initGenFiles(
 			PeerAddress: peerAddress,
 		}
 	}
+	btcqGenesis.BtcInitialHeight = anchor.initialHeight
+	btcqGenesis.BtcAnchorHeader = anchor.header
+	btcqGenesis.BtcAnchorPeriodStartTime = anchor.periodStartTime
 	appGenState[qbtctypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(&btcqGenesis)
 	appGenStateJSON, err := json.MarshalIndent(appGenState, "", "  ")
 	if err != nil {

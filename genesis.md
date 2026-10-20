@@ -23,6 +23,20 @@
 # update genesis file to include verify key
 jq --arg key "$(cat output.txt)" '.app_state.qbtc.zk_verifying_key = $key' genesis.json > tmp.json
 
+# set the Bitcoin anchor: START is the first Bitcoin height the chain processes,
+# and the anchor is the block before it (see docs/BTC_BLOCK_INGESTION.md)
+START=<first bitcoin height>
+ANCHOR=$((START - 1))
+HEADER_HEX=$(bitcoin-cli getblockheader "$(bitcoin-cli getblockhash $ANCHOR)" false)
+PERIOD_START_TIME=$(bitcoin-cli getblockheader "$(bitcoin-cli getblockhash $((ANCHOR - ANCHOR % 2016)))" | jq .time)
+jq --arg start "$START" \
+   --arg header "$(echo -n "$HEADER_HEX" | xxd -r -p | base64)" \
+   --argjson period "$PERIOD_START_TIME" \
+   '.app_state.qbtc.btc_initial_height = $start
+    | .app_state.qbtc.btc_anchor_header = $header
+    | .app_state.qbtc.btc_anchor_period_start_time = $period' tmp.json > genesis.json
+
+./qbtcd genesis validate-genesis
 ```
 
 ## setup firewall

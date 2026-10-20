@@ -1,8 +1,10 @@
 package bitcoin
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/btcsuite/btcd/btcjson"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -99,7 +102,50 @@ func (c *BtcClient) GetBlockVerboseTxs(hash string) (*btcjson.GetBlockVerboseTxR
 	return &block, extractBTCError(err)
 }
 
-// GetBlockHash returns the hash of the block in best-block-chain at the given height.
+// GetBlockHeaderAt returns the header of the best-chain block at height.
+func (c *BtcClient) GetBlockHeaderAt(height int64) (*wire.BlockHeader, error) {
+	hash, err := c.GetBlockHash(height)
+	if err != nil {
+		return nil, err
+	}
+	var headerHex string
+	if err := c.client.Call(&headerHex, "getblockheader", hash, false); err != nil {
+		return nil, extractBTCError(err)
+	}
+	raw, err := hex.DecodeString(headerHex)
+	if err != nil {
+		return nil, fmt.Errorf("decode header %s hex: %w", hash, err)
+	}
+	var header wire.BlockHeader
+	if err := header.Deserialize(bytes.NewReader(raw)); err != nil {
+		return nil, fmt.Errorf("decode header %s: %w", hash, err)
+	}
+	if got := header.BlockHash().String(); got != hash {
+		return nil, fmt.Errorf("node returned header %s for %s", got, hash)
+	}
+	return &header, nil
+}
+
+// GetBlock returns the raw block with the given hash (getblock verbosity 0).
+func (c *BtcClient) GetBlock(hash string) (*wire.MsgBlock, error) {
+	var blockHex string
+	if err := c.client.Call(&blockHex, "getblock", hash, 0); err != nil {
+		return nil, extractBTCError(err)
+	}
+	raw, err := hex.DecodeString(blockHex)
+	if err != nil {
+		return nil, fmt.Errorf("decode block %s hex: %w", hash, err)
+	}
+	var block wire.MsgBlock
+	if err := block.Deserialize(bytes.NewReader(raw)); err != nil {
+		return nil, fmt.Errorf("decode block %s: %w", hash, err)
+	}
+	if got := block.BlockHash().String(); got != hash {
+		return nil, fmt.Errorf("node returned block %s for %s", got, hash)
+	}
+	return &block, nil
+}
+
 func (c *BtcClient) GetBlockHash(height int64) (string, error) {
 	var hash string
 	err := c.client.Call(&hash, "getblockhash", height)

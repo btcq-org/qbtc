@@ -16,6 +16,18 @@ message Attestation {
   bytes signature = 2;
 }
 
+// BtcBlockCommit is the Bitcoin block content that validators attest to.
+// The chain recomputes every txid from txs, checks the merkle root against
+// the header, and checks the header's proof of work, difficulty and link to
+// the previous block, so the content does not rest on the attestations alone.
+message BtcBlockCommit {
+  // The 80-byte serialized block header.
+  bytes header = 1;
+  // Every transaction of the block, in block order, each in Bitcoin's
+  // serialization without witness data, so its double SHA-256 is its txid.
+  repeated bytes txs = 2;
+}
+
 message MsgBtcBlock {
   option (cosmos.msg.v1.signer) = "signer";
   option (amino.name) = "btcq/MsgBtcBlock";
@@ -23,10 +35,11 @@ message MsgBtcBlock {
   // The height of the reported Bitcoin block
   uint64 height = 1;
 
-  // The hash of the reported Bitcoin block
+  // The hash of the reported Bitcoin block, in the usual (byte-reversed) hex
   string hash = 2;
 
-  // compressed bytes of BTC block
+  // The gzip-compressed proto encoding of the block's BtcBlockCommit.
+  // Attestations sign the uncompressed encoding.
   bytes block_content = 3;
 
   repeated Attestation attestations = 4;

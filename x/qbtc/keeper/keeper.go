@@ -37,6 +37,11 @@ type Keeper struct {
 
 	LastProcessedBlock collections.Item[uint64]
 
+	// Bitcoin chain state that the next reported block must extend
+	BtcTipHeader       collections.Item[[]byte]
+	BtcPeriodStartTime collections.Item[uint64]
+	BtcNetwork         collections.Item[string]
+
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
@@ -66,6 +71,9 @@ func NewKeeper(
 		StringParams:       collections.NewMap(sb, types.StringParamKeys, "string_params", collections.StringKey, collections.StringValue),
 		ZkVerifyingKey:     collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),
 		LastProcessedBlock: collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
+		BtcTipHeader:       collections.NewItem(sb, types.BtcTipHeaderKey, "btc_tip_header", collections.BytesValue),
+		BtcPeriodStartTime: collections.NewItem(sb, types.BtcPeriodStartTimeKey, "btc_period_start_time", collections.Uint64Value),
+		BtcNetwork:         collections.NewItem(sb, types.BtcNetworkKey, "btc_network", collections.StringValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {

@@ -21,6 +21,22 @@ type Config struct {
 	QBTCGRPCAddress      string         `mapstructure:"qbtc_grpc_address" json:"qbtc_grpc_address"`
 	CometBFTRPCAddress   string         `mapstructure:"cometbft_rpc_address" json:"cometbft_rpc_address"`
 	BackoffTimeInMinutes int64          `mapstructure:"backoff_time_in_minutes" json:"backoff_time_in_minutes"`
+	// ConfirmationDepth is how many confirmations a Bitcoin block needs before
+	// bifrost attests to it (the block itself counts as one). qbtc does not
+	// handle reorgs: a reorg deeper than this stops Bitcoin ingestion at the
+	// next block until it is rolled back. 0 means DefaultConfirmationDepth.
+	ConfirmationDepth int64 `mapstructure:"confirmation_depth" json:"confirmation_depth"`
+}
+
+// DefaultConfirmationDepth is the default ConfirmationDepth.
+const DefaultConfirmationDepth = 6
+
+// GetConfirmationDepth returns ConfirmationDepth, or the default if unset.
+func (c *Config) GetConfirmationDepth() int64 {
+	if c.ConfirmationDepth <= 0 {
+		return DefaultConfirmationDepth
+	}
+	return c.ConfirmationDepth
 }
 
 type P2PConfig struct {
@@ -47,6 +63,7 @@ func DefaultConfig() *Config {
 		QBTCGRPCAddress:      "localhost:9090",
 		CometBFTRPCAddress:   "http://localhost:26657",
 		BackoffTimeInMinutes: 1,
+		ConfirmationDepth:    DefaultConfirmationDepth,
 	}
 }
 
