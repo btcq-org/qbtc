@@ -94,6 +94,12 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 		validatorsByAddr[consAddr.String()] = validator
 	}
 
+	// Attestations sign the uncompressed block commit
+	signBytes, _, err := types.DecodeBtcBlockContent(msg.BlockContent)
+	if err != nil {
+		return fmt.Errorf("invalid block content: %w", err)
+	}
+
 	// Track processed validators to avoid duplicates
 	processedValidators := make(map[string]bool, len(msg.Attestations))
 	validPower := math.ZeroInt()
@@ -142,8 +148,7 @@ func (c *Client) CheckAttestationsSuperMajority(ctx context.Context, msg *types.
 			continue
 		}
 
-		// Verify signature against block content
-		if publicKey.VerifySignature(msg.BlockContent, attestation.Signature) {
+		if publicKey.VerifySignature(signBytes, attestation.Signature) {
 			validatorPower := math.NewInt(validator.ConsensusPower(sdk.DefaultPowerReduction))
 			validPower = validPower.Add(validatorPower)
 
