@@ -126,7 +126,6 @@ func (c *BtcClient) GetBlockHeaderAt(height int64) (*wire.BlockHeader, error) {
 	return &header, nil
 }
 
-// GetBlockHash returns the hash of the block in best-block-chain at the given height.
 // GetBlock returns the raw block with the given hash (getblock verbosity 0).
 func (c *BtcClient) GetBlock(hash string) (*wire.MsgBlock, error) {
 	var blockHex string
