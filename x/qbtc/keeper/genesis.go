@@ -57,9 +57,6 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set last processed block height: %w", err)
 		}
 	}
-	if err := k.BtcNetwork.Set(ctx, genState.BtcNetwork); err != nil {
-		return fmt.Errorf("failed to set btc network: %w", err)
-	}
 	// the anchor is the block at BtcInitialHeight - 1; the first reported block must link to it
 	if len(genState.BtcAnchorHeader) > 0 {
 		if err := k.BtcTipHeader.Set(ctx, genState.BtcAnchorHeader); err != nil {
@@ -122,11 +119,6 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 	if lastProcessed > 0 {
 		genesis.BtcInitialHeight = lastProcessed + 1
 	}
-	network, err := k.BtcNetwork.Get(ctx)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
-		return nil, fmt.Errorf("failed to export btc network: %w", err)
-	}
-	genesis.BtcNetwork = network
 	tip, err := k.BtcTipHeader.Get(ctx)
 	switch {
 	case err == nil:

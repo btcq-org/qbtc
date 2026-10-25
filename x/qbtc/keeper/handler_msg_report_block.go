@@ -111,10 +111,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	if err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
 	}
-	params, err := s.k.btcParams(ctx)
-	if err != nil {
-		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get btc network params: %v", err)
-	}
+	params := s.k.btcParams
 	tip, err := s.k.getBtcTip(ctx)
 	if err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("cannot accept block %d: %v", msg.Height, err)

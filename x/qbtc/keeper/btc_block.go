@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"cosmossdk.io/collections"
-	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -21,15 +20,6 @@ import (
 type btcTip struct {
 	header      wire.BlockHeader
 	periodStart int64
-}
-
-// btcParams returns the consensus parameters of the configured Bitcoin network.
-func (k Keeper) btcParams(ctx context.Context) (*chaincfg.Params, error) {
-	network, err := k.BtcNetwork.Get(ctx)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
-		return nil, err
-	}
-	return types.BtcNetworkParams(network)
 }
 
 // getBtcTip returns the stored tip. Without one (no genesis anchor), no Bitcoin

@@ -32,9 +32,8 @@ The chain does not start from Bitcoin's genesis block. `btc_initial_height` is t
 | `btc_initial_height` | First Bitcoin height the chain processes |
 | `btc_anchor_header` | 80-byte header of the block at `btc_initial_height - 1` |
 | `btc_anchor_period_start_time` | Timestamp of the first block of the anchor's difficulty period (height a multiple of 2016), for the next retarget |
-| `btc_network` | `mainnet` (default) or `regtest` (tests and local networks only) |
 
-Without an anchor, no Bitcoin block is accepted. `qbtcd genesis validate` checks that the anchor header meets its own proof-of-work target. Validators must check that the anchor is the real block at `btc_initial_height - 1`. `ExportGenesis` writes the current tip as the anchor, so an exported chain continues at the next block. The multi-node testnet generator reads the anchor from its Bitcoin node; `genesis.md` shows how to set it by hand.
+Without an anchor, no Bitcoin block is accepted. The chain applies Bitcoin mainnet's consensus rules; other networks are only used in tests. `qbtcd genesis validate` checks that the anchor header meets its own proof-of-work target. Validators must check that the anchor is the real block at `btc_initial_height - 1`. `ExportGenesis` writes the current tip as the anchor, so an exported chain continues at the next block. The multi-node testnet generator reads the anchor from its Bitcoin node; `genesis.md` shows how to set it by hand.
 
 ## Trust model
 

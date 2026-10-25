@@ -103,11 +103,10 @@ func getLastProcessed(t *testing.T, f *fixture) uint64 {
 }
 
 // setBtcAnchor stores header as the tip at height, as InitGenesis does.
-func setBtcAnchor(t *testing.T, f *fixture, network string, height uint64, header *wire.BlockHeader) {
+func setBtcAnchor(t *testing.T, f *fixture, height uint64, header *wire.BlockHeader) {
 	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, header.Serialize(&buf))
-	require.NoError(t, f.keeper.BtcNetwork.Set(f.ctx, network))
 	require.NoError(t, f.keeper.BtcTipHeader.Set(f.ctx, buf.Bytes()))
 	require.NoError(t, f.keeper.BtcPeriodStartTime.Set(f.ctx, uint64(header.Timestamp.Unix())))
 	require.NoError(t, f.keeper.LastProcessedBlock.Set(f.ctx, height))
@@ -148,17 +147,19 @@ type regtestChain struct {
 	height uint64
 }
 
-// newRegtestChain anchors the fixture's keeper at a mined regtest block at height.
+// newRegtestChain switches the fixture's keeper to regtest rules and anchors it
+// at a mined regtest block at height.
 func newRegtestChain(t *testing.T, f *fixture, height uint64) *regtestChain {
 	t.Helper()
 	c := &regtestChain{t: t, f: f, params: &chaincfg.RegressionNetParams, height: height}
+	f.keeper.SetBtcParamsForTesting(c.params)
 	c.tip = wire.BlockHeader{
 		Version:   4,
 		Timestamp: time.Unix(1_700_000_000, 0),
 		Bits:      c.params.PowLimitBits,
 	}
 	mineHeader(t, &c.tip, c.params)
-	setBtcAnchor(t, f, types.BtcNetworkRegtest, height, &c.tip)
+	setBtcAnchor(t, f, height, &c.tip)
 	return c
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 )
 
@@ -18,26 +17,7 @@ const (
 	// Bitcoin's 4M weight limit bounds a block without witness data to 1 MB;
 	// the rest is headroom for the proto encoding.
 	MaxBtcBlockCommitSize = 4 * 1024 * 1024
-
-	// BtcNetworkMainnet and BtcNetworkRegtest are the supported values of the
-	// genesis btc_network field. An empty value means mainnet.
-	BtcNetworkMainnet = "mainnet"
-	BtcNetworkRegtest = "regtest"
 )
-
-// BtcNetworkParams returns the consensus parameters for a genesis btc_network
-// value. Only mainnet and regtest are supported: testnet and signet use
-// minimum-difficulty rules that need more than the previous header.
-func BtcNetworkParams(network string) (*chaincfg.Params, error) {
-	switch network {
-	case "", BtcNetworkMainnet:
-		return &chaincfg.MainNetParams, nil
-	case BtcNetworkRegtest:
-		return &chaincfg.RegressionNetParams, nil
-	default:
-		return nil, fmt.Errorf("unsupported btc network %q", network)
-	}
-}
 
 // NewBtcBlockCommit builds the commit for a Bitcoin block: its serialized
 // header and each transaction without witness data.

@@ -41,9 +41,6 @@ message GenesisState {
   // block at a height that is a multiple of 2016). Needed to check the
   // difficulty retarget at the next period boundary.
   uint32 btc_anchor_period_start_time = 8;
-  // The Bitcoin network whose consensus rules apply: "mainnet" (the default
-  // when empty) or "regtest" (tests and local networks only).
-  string btc_network = 9;
 }
 
 message GenesisPeerAddress {

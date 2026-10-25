@@ -79,15 +79,6 @@ func TestParseBtcBlockCommit_Rejects(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestBtcNetworkParams(t *testing.T) {
-	for _, network := range []string{"", BtcNetworkMainnet, BtcNetworkRegtest} {
-		_, err := BtcNetworkParams(network)
-		require.NoError(t, err, network)
-	}
-	_, err := BtcNetworkParams("testnet3")
-	require.ErrorContains(t, err, "unsupported")
-}
-
 // Real mainnet headers: 919295 and the first block of its difficulty period.
 const (
 	anchorHeader919295 = "0400f02f5ce8660343f270c5c0cb90d2c069e5a69b54b0f76e8a000000000000000000007dc9b6f78b18d51ce2bc08fbb99ef79b18fbf19d5450b0bc14fa1c924c40d6756881f068b4dd0117d2dc74d5"
@@ -113,7 +104,6 @@ func TestGenesisState_ValidateBtcAnchor(t *testing.T) {
 		{"anchor without proof of work", GenesisState{BtcInitialHeight: 919296, BtcAnchorHeader: badPoW, BtcAnchorPeriodStartTime: periodStart917280}, "proof-of-work"},
 		{"no period start", GenesisState{BtcInitialHeight: 919296, BtcAnchorHeader: anchor}, "btc_anchor_period_start_time"},
 		{"period start after the anchor", GenesisState{BtcInitialHeight: 919296, BtcAnchorHeader: anchor, BtcAnchorPeriodStartTime: 2_000_000_000}, "btc_anchor_period_start_time"},
-		{"unsupported network", GenesisState{BtcNetwork: "signet"}, "btc_network"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

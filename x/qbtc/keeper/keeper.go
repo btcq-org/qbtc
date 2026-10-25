@@ -11,6 +11,7 @@ import (
 	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -28,6 +29,10 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	authKeeper    types.AuthKeeper
 
+	// btcParams are the Bitcoin consensus rules reported blocks must follow:
+	// mainnet, except in tests.
+	btcParams *chaincfg.Params
+
 	// Collections
 	Schema            collections.Schema
 	Utxoes            collections.Map[string, types.UTXO]
@@ -40,7 +45,6 @@ type Keeper struct {
 	// Bitcoin chain state that the next reported block must extend
 	BtcTipHeader       collections.Item[[]byte]
 	BtcPeriodStartTime collections.Item[uint64]
-	BtcNetwork         collections.Item[string]
 
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
@@ -65,6 +69,7 @@ func NewKeeper(
 		bankKeeper:         bankKeeper,
 		authority:          authority,
 		authKeeper:         authKeeper,
+		btcParams:          &chaincfg.MainNetParams,
 		Utxoes:             collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
 		NodePeerAddresses:  collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:     collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
@@ -73,7 +78,6 @@ func NewKeeper(
 		LastProcessedBlock: collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
 		BtcTipHeader:       collections.NewItem(sb, types.BtcTipHeaderKey, "btc_tip_header", collections.BytesValue),
 		BtcPeriodStartTime: collections.NewItem(sb, types.BtcPeriodStartTimeKey, "btc_period_start_time", collections.Uint64Value),
-		BtcNetwork:         collections.NewItem(sb, types.BtcNetworkKey, "btc_network", collections.StringValue),
 	}
 	schema, err := sb.Build()
 	if err != nil {

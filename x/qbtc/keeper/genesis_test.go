@@ -32,9 +32,7 @@ func TestGenesis_BtcAnchor(t *testing.T) {
 		BtcInitialHeight:         800001,
 		BtcAnchorHeader:          anchor.Bytes(),
 		BtcAnchorPeriodStartTime: uint32(c.tip.Timestamp.Unix()),
-		BtcNetwork:               types.BtcNetworkRegtest,
 	}
-	require.NoError(t, genesisState.Validate())
 
 	imported := initFixture(t)
 	require.NoError(t, imported.keeper.InitGenesis(imported.ctx, genesisState))
@@ -43,7 +41,6 @@ func TestGenesis_BtcAnchor(t *testing.T) {
 	require.Equal(t, genesisState.BtcInitialHeight, exported.BtcInitialHeight)
 	require.Equal(t, genesisState.BtcAnchorHeader, exported.BtcAnchorHeader)
 	require.Equal(t, genesisState.BtcAnchorPeriodStartTime, exported.BtcAnchorPeriodStartTime)
-	require.Equal(t, genesisState.BtcNetwork, exported.BtcNetwork)
 
 	// after one more block, the export anchors at that block
 	block := c.nextBlock(c.coinbase())
@@ -54,5 +51,4 @@ func TestGenesis_BtcAnchor(t *testing.T) {
 	require.NoError(t, block.Header.Serialize(&tip))
 	require.Equal(t, uint64(800002), exported.BtcInitialHeight)
 	require.Equal(t, tip.Bytes(), exported.BtcAnchorHeader)
-	require.NoError(t, exported.Validate())
 }

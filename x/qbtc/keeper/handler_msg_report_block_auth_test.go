@@ -93,7 +93,7 @@ func TestSetMsgReportBlock_DoesNotOverwriteUTXOs(t *testing.T) {
 	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil))
 
 	// Rewind the tip so the same block passes the height and link checks again.
-	setBtcAnchor(t, f, types.BtcNetworkRegtest, 800000, &anchor)
+	setBtcAnchor(t, f, 800000, &anchor)
 	err := submitBlockMsg(f, attestedBlockMsg(t, f, 800001, block))
 	require.ErrorContains(t, err, "already exists")
 	require.Zero(t, getTestEntitlement(t, f, coinbase.TxHash().String(), 0))
@@ -224,7 +224,7 @@ func TestSetMsgReportBlock_CoinbaseHeight(t *testing.T) {
 	f := initFixture(t)
 	block, height := loadMainnetBlock(t, "../../../testdata/block/300003.json")
 	// claim the block is one lower than it is
-	setBtcAnchor(t, f, "", height-2, mainnetHeader(t, mainnetHeader300002))
+	setBtcAnchor(t, f, height-2, mainnetHeader(t, mainnetHeader300002))
 	err := submitBlockMsg(f, attestedBlockMsg(t, f, height-1, block))
 	require.ErrorContains(t, err, "coinbase encodes height 300003, not 300002")
 }

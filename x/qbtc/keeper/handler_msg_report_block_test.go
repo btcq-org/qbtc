@@ -100,7 +100,7 @@ func TestSetMsgReportBlock_MainnetBlocks(t *testing.T) {
 		t.Run(tc.name, func(st *testing.T) {
 			f := initFixture(st)
 			block, height := loadMainnetBlock(st, tc.fileName)
-			setBtcAnchor(st, f, "", height-1, mainnetHeader(st, tc.prevHeader))
+			setBtcAnchor(st, f, height-1, mainnetHeader(st, tc.prevHeader))
 			if tc.setup != nil {
 				tc.setup(st, f)
 			}

@@ -42,9 +42,6 @@ var (
 	// BtcPeriodStartTimeKey stores the timestamp of the first block of the
 	// tip's difficulty period.
 	BtcPeriodStartTimeKey = collections.NewPrefix("btc_period_start_time")
-
-	// BtcNetworkKey stores the Bitcoin network whose consensus rules apply.
-	BtcNetworkKey = collections.NewPrefix("btc_network")
 )
 
 const (
