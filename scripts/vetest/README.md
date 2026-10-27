@@ -37,7 +37,14 @@ scripts/vetest/run.sh --keep              # leave the network up for inspection
 scripts/vetest/run.sh --no-build          # reuse the qbtcd-vetest:* images
 scripts/vetest/run.sh --vendor            # build from a host-vendored context (see below)
 scripts/vetest/run.sh --clean             # remove containers, network and out/
+scripts/vetest/run.sh --output-dir /data/vetest-out   # custom output directory (created if missing)
+scripts/vetest/run.sh --restore-honest    # --keep network only: recreate validator 0 on the normal image
 ```
+
+`run.sh` generates the nodes with `--timeout-propose 10s` (`TIMEOUT_PROPOSE`
+env). The generator's default of 3 s (`qbtcd multi-node --timeout-propose`) is
+tight for proposals that carry several mainnet blocks (multi-MB): validators
+would prevote nil before evaluating them.
 
 Re-runs are idempotent: leftovers of an earlier run are removed first. Results
 are printed as a table and written to `out/results.json`; per-scenario logs are
@@ -68,7 +75,7 @@ UPSTREAM=rpc:http://user:pass@host:8332 scripts/vetest/run.sh
 
 The host must be reachable from the proxy container. Blocks are cached on disk
 in `.cache/btc` (gitignored), so every block is downloaded once, also across
-runs. `run.sh` prefetches about 280 blocks (roughly 450 MB) before starting the
+runs. `run.sh` prefetches about 400 blocks (roughly 650 MB) before starting the
 chain; the first run is bounded by upstream speed.
 
 The chain starts at a mainnet height chosen so that `BACKLOG` confirmed blocks
@@ -94,7 +101,7 @@ Validators have equal stake, so one validator is 25% of the power.
 | S5 Three Bitcoin nodes down | consensus height advances >= 5 while the last processed Bitcoin height stays; restoring resumes ingestion |
 | S6 One validator offline | `docker stop` validator 3: consensus and ingestion continue (3/4); restart: it catches up, refills its block cache (`btc block cached`) and its votes return (4/4) |
 | S7 Two validators offline | with two of four validators stopped (50% < 2/3) the chain halts for >= 35 s; after restarting both it recovers and ingestion continues |
-| S8 Malicious proposer | validator 0 restarted on the `vetest_malicious` image with `QBTC_VETEST_MALICIOUS=forge`, then `noevidence`: the other nodes log `rejecting proposal`, the chain keeps committing through other proposers, applied hashes equal mainnet; the honest image is restored afterwards |
+| S8 Malicious proposer | validator 0 restarted on the `vetest_malicious` image with `QBTC_VETEST_MALICIOUS=forge`, then `noevidence`: the other nodes log `rejecting proposal`, the chain keeps committing through other proposers, applied hashes equal mainnet; blocks are fed one at a time so validator 0 always has something to forge (`forge` keeps the header and only the coinbase transaction); the honest image is always restored afterwards, also on failure (`run.sh --restore-honest` does it by hand) |
 | S9 Claim | a fresh secp256k1 key (signing through the TSS emulator) owns a P2WPKH genesis UTXO; `zkprover` makes the PLONK proof bound to the chain ID and a fresh qbtc address; `MsgClaimWithProof` is submitted with `tx qbtc claim-with-proof`; the destination balance equals the entitled amount, the UTXO's entitled amount is 0, and an identical second claim is rejected |
 
 S7 note: with four equal validators, two offline leaves 50% of the power, so the

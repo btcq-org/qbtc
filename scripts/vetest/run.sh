@@ -41,15 +41,12 @@ ENABLE_HEIGHT=${ENABLE_HEIGHT:-10}             # consensus vote_extensions_enabl
 DEPTH=${CONFIRMATION_DEPTH:-6}                 # [ebifrost] confirmation_depth
 POLL_INTERVAL=${POLL_INTERVAL:-2s}             # [ebifrost] poll_interval
 BACKLOG=${BACKLOG:-150}                        # confirmed blocks to ingest right after activation
-EXTRA_BLOCKS=${EXTRA_BLOCKS:-130}              # prefetched blocks the scenarios release in batches
+EXTRA_BLOCKS=${EXTRA_BLOCKS:-250}              # prefetched blocks the scenarios release in batches
 BATCH=${BATCH:-14}                             # blocks released per scenario phase
 INITIAL_HEIGHT=${BTC_INITIAL_HEIGHT:-}         # default: derived from the mainnet tip
 PREFETCH_TIMEOUT=${PREFETCH_TIMEOUT:-3600}
 
-NET="$OUT/net"
-CTX="$OUT/ctx"
-LOGS="$OUT/logs"
-RESULTS_TSV="$OUT/results.tsv"
+TIMEOUT_PROPOSE=${TIMEOUT_PROPOSE:-10s}          # consensus.timeout_propose: multi-MB proposals need more than 3s
 
 KEEP=0
 FOLLOW=0
@@ -57,6 +54,7 @@ GENESIS_UTXOS=()
 ONLY=""
 NO_BUILD=0
 CLEAN_ONLY=0
+RESTORE_HONEST=0
 
 usage() {
   sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -76,6 +74,9 @@ Options:
   --no-build         reuse existing qbtcd-vetest:* images
   --backlog N        confirmed blocks to ingest at activation (default 150)
   --btc-initial-height H   fix the first Bitcoin height instead of deriving it from the tip
+  --output-dir DIR   write logs and state to DIR (created when missing; default scripts/vetest/out)
+  --restore-honest   recreate validator 0 on the normal image (no malicious override) in an
+                     already-running --keep network, then exit
   --clean            remove containers, network and scripts/vetest/out, then exit
   -h, --help
 EOF
@@ -93,6 +94,8 @@ while [ $# -gt 0 ]; do
     --backlog) BACKLOG="${2:?}"; shift ;;
     --btc-initial-height) INITIAL_HEIGHT="${2:?}"; shift ;;
     --clean) CLEAN_ONLY=1 ;;
+    --restore-honest) RESTORE_HONEST=1 ;;
+    --output-dir) OUT="${2:?--output-dir needs a path}"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -104,7 +107,12 @@ if [ "${#GENESIS_UTXOS[@]}" -gt 0 ]; then       # validate before anything is st
 fi
 
 # --------------------------------------------------------------- utilities
-mkdir -p "$OUT"
+mkdir -p "$OUT" || { echo "cannot create the output directory $OUT" >&2; exit 1; }
+OUT="$(cd "$OUT" && pwd)"
+NET="$OUT/net"
+CTX="$OUT/ctx"
+LOGS="$OUT/logs"
+RESULTS_TSV="$OUT/results.tsv"
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT/run.log" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 fail() { echo "ASSERT FAIL: $*" >&2; exit 1; }       # inside a scenario subshell: ends the scenario
@@ -193,6 +201,33 @@ wait_caught_up() { # wait_caught_up <node>
   [ "$1" = 0 ] && ref=1
   wait_until 180 "node $1 to catch up with node $ref" '[ "$(chain_height '"$1"')" -gt 0 ] && [ "$(chain_height '"$1"')" -ge $(( $(chain_height '"$ref"') - 2 )) ]'
 }
+# votes_back_since <since-epoch>: some node logged a "btc vote tally" with power == total since then
+votes_back_since() {
+  local i
+  for i in 0 1 2 3; do
+    if docker logs --since "$(( $(date +%s) - $1 + 3 ))s" "$(cname "$i")" 2>&1 | strip_ansi \
+      | awk '/btc vote tally/ { p = ""; t = ""
+               for (k = 1; k <= NF; k++) { if ($k ~ /^power=/) p = substr($k, 7); if ($k ~ /^total=/) t = substr($k, 7) }
+               if (p != "" && p == t) f = 1 }
+             END { exit f ? 0 : 1 }'; then
+      return 0
+    fi
+  done
+  return 1
+}
+# wait_votes_back <since-epoch> [timeout-s]: wait until all validators vote again after a restore.
+# Tallies only happen while there are blocks to ingest, so one block is released every 6 s meanwhile
+# (slower than ingestion, so the scenario's own batch is not used up).
+wait_votes_back() {
+  local since=$1 timeout=${2:-300} end next=0
+  end=$((SECONDS + timeout))
+  until votes_back_since "$since"; do
+    [ "$SECONDS" -ge "$end" ] && fail "timeout after ${timeout}s waiting for a 'btc vote tally' with power == total"
+    if [ "$SECONDS" -ge "$next" ]; then release_more 1; next=$((SECONDS + 6)); fi
+    sleep 2
+  done
+  echo "  votes are back to total power" >&2
+}
 wait_height_gt() { # wait_height_gt <node> <height> <timeout>
   wait_until "${3:-120}" "node $1 height > $2" '[ "$(chain_height '"$1"')" -gt '"$2"' ]'
 }
@@ -220,6 +255,19 @@ cleanup_previous() {
   rm -rf "$NET" 2>/dev/null || docker run --rm -v "$OUT:/o" alpine:3.23 rm -rf /o/net
   rm -rf "$CTX" "$LOGS" "$RESULTS_TSV" "$OUT/results.json" "$OUT"/*.detail "$OUT"/S*.log "$OUT/claim" "$OUT/avail" "$OUT/network.env"
 }
+
+restore_honest_node0() { # idempotent; returns non-zero instead of failing
+  rm -f "$NET/docker-compose.malicious.yml"
+  dc up -d --no-deps --force-recreate node_0 >/dev/null 2>&1
+}
+if [ "$RESTORE_HONEST" = 1 ]; then
+  need docker
+  [ -f "$NET/docker-compose.yml" ] || die "no network in $NET: start one with run.sh --keep first"
+  restore_honest_node0 || die "could not recreate node_0 on the normal image"
+  echo "node_0 recreated on the normal image"
+  trap - EXIT
+  exit 0
+fi
 
 if [ "$CLEAN_ONLY" = 1 ]; then
   need docker
@@ -364,7 +412,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --network "$NETWORK" \
     --bitcoin-rpc-host "$GEN_BTC_HOST" --bitcoin-rpc-port "$BTC_TOOL_PORT" \
     --bitcoin-rpc-user vetest --bitcoin-rpc-password vetest \
     --node-bitcoin-rpc-host "$NODE_BTC_HOST" --node-bitcoin-rpc-port "$BTC_BASE_PORT" --node-bitcoin-rpc-port-step 1 \
-    --confirmation-depth "$DEPTH" --poll-interval "$POLL_INTERVAL" \
+    --confirmation-depth "$DEPTH" --poll-interval "$POLL_INTERVAL" --timeout-propose "$TIMEOUT_PROPOSE" \
     --vote-extensions-enable-height "$ENABLE_HEIGHT" \
     --docker-image "$IMG_NORMAL" --docker-network "$NETWORK" > "$OUT/generate.log" 2>&1 \
   || { tail -20 "$OUT/generate.log" >&2; die "network generation failed (see $OUT/generate.log)"; }
@@ -513,8 +561,10 @@ s3_one_btc_down() {
   python3 "$LIB" tallies --logs "$d" --after "$L0" --truth "$CONTROL" --power-eq 3/4 --strict --min-count 8
   python3 "$LIB" processed --logs "$d" --after "$L0" --truth "$CONTROL" --min-count 8
   detail "with validator 3's Bitcoin down: >= 8 heights ingested at power 3/4 of total"
+  t1=$(date +%s)
   btc_mode 3 ok
-  t1=$(date +%s); L1=$(lpb 0)
+  wait_votes_back "$t1"
+  L1=$(lpb 0)
   release_more "$BATCH"
   wait_until 300 "ingestion after restoring validator 3" '[ "$(lpb 0)" -ge '"$((L1 + 10))"' ]'
   d=$(snap_logs S3_restored "$t1")
@@ -534,8 +584,10 @@ s4_one_fork() {
   python3 "$LIB" tallies --logs "$d" --after "$L0" --truth "$CONTROL" --two-candidates --min-count 6
   python3 "$LIB" processed --logs "$d" --after "$L0" --truth "$CONTROL" --min-count 8
   detail ">= 6 tallies with two candidates (3/4 mainnet vs 1/4 fork); applied hashes equal mainnet"
+  t1=$(date +%s)
   btc_mode 3 ok
-  t1=$(date +%s); L1=$(lpb 0)
+  wait_votes_back "$t1"
+  L1=$(lpb 0)
   release_more "$BATCH"
   wait_until 300 "ingestion after the fork is repaired" '[ "$(lpb 0)" -ge '"$((L1 + 10))"' ]'
   d=$(snap_logs S4_restored "$t1")
@@ -576,6 +628,7 @@ s6_one_node_offline() {
   t1=$(date +%s)
   docker start "$(cname 3)" >/dev/null
   wait_caught_up 3
+  wait_votes_back "$t1"
   L1=$(lpb 0)
   release_more "$BATCH"
   wait_until 300 "ingestion after validator 3 restarted" '[ "$(lpb 0)" -ge '"$((L1 + 10))"' ]'
@@ -589,7 +642,7 @@ s6_one_node_offline() {
 # --- S7: two validators offline ----------------------------------------------------
 s7_two_nodes_offline() {
   ensure_drained
-  local L0 ha hb
+  local L0 ha hb t1
   L0=$(lpb 0)
   docker stop "$(cname 2)" "$(cname 3)" >/dev/null
   sleep 15
@@ -598,9 +651,11 @@ s7_two_nodes_offline() {
   hb=$(chain_height 0)
   [ "$ha" = "$hb" ] || fail "chain advanced from $ha to $hb with half of the voting power offline (halt expected)"
   detail "chain halted at height $hb for >= 35 s (2 of 4 validators = 50% < 2/3)"
+  t1=$(date +%s)
   docker start "$(cname 2)" "$(cname 3)" >/dev/null
   wait_until 240 "the chain to recover" '[ "$(chain_height 0)" -ge '"$((hb + 3))"' ]'
   wait_caught_up 2; wait_caught_up 3
+  wait_votes_back "$t1"
   release_more "$BATCH"
   wait_until 300 "ingestion after the recovery" '[ "$(lpb 0)" -ge '"$((L0 + 8))"' ]'
   detail "recovered; ingestion continued ($((L0 + 8)) reached)"
@@ -618,16 +673,23 @@ EOF
 }
 s8_malicious_proposer() {
   ensure_drained
-  local mode t0 L0 h0 rej d
+  local mode t0 L0 h0 rej d t1 L1 end next
+  # whatever happens below, validator 0 goes back to the honest image
+  trap 'restore_honest_node0 || true' EXIT
   for mode in forge noevidence; do
     mal_override "$mode"
     docker compose -p "$PROJECT" -f "$NET/docker-compose.yml" -f "$NET/docker-compose.malicious.yml" \
       up -d --no-deps --force-recreate node_0 >/dev/null 2>&1 || fail "could not restart validator 0 on the malicious image"
     wait_caught_up 0
     t0=$(date +%s); L0=$(lpb 1); h0=$(chain_height 1)
+    # feed one block at a time so every proposer, validator 0 included, has newly voted blocks to propose
+    end=$((SECONDS + 600)); next=0
+    until [ "$(count_in_logs "rejecting proposal" "$t0" 1 2 3)" -ge 1 ]; do
+      [ "$SECONDS" -ge "$end" ] && fail "no validator rejected validator 0's '$mode' proposal within 600 s"
+      if [ "$SECONDS" -ge "$next" ]; then release_more 1; next=$((SECONDS + 4)); fi
+      sleep 2
+    done
     release_more "$BATCH"
-    wait_until 300 "other validators to reject validator 0's '$mode' proposals" \
-      '[ "$(count_in_logs "rejecting proposal" '"$t0"' 1 2 3)" -ge 1 ]'
     wait_until 300 "ingestion through the honest proposers ($mode)" '[ "$(lpb 1)" -ge '"$((L0 + 8))"' ]'
     d=$(snap_logs "S8_$mode" "$t0")
     python3 "$LIB" rejects --logs "$d" --nodes 1,2,3 --min 1
@@ -637,10 +699,12 @@ s8_malicious_proposer() {
     detail "$mode: $rej rejections; chain kept committing; applied hashes equal mainnet"
   done
   # back to the honest image
-  rm -f "$NET/docker-compose.malicious.yml"
-  dc up -d --no-deps --force-recreate node_0 >/dev/null 2>&1 || fail "could not restore validator 0"
+  restore_honest_node0 || fail "could not restore validator 0"
+  trap - EXIT
+  t1=$(date +%s)
   wait_caught_up 0
-  local t1 L1; t1=$(date +%s); L1=$(lpb 0)
+  wait_votes_back "$t1"
+  L1=$(lpb 0)
   release_more "$BATCH"
   wait_until 300 "ingestion after restoring the honest image" '[ "$(lpb 0)" -ge '"$((L1 + 8))"' ]'
   d=$(snap_logs S8_restored "$t1")
@@ -681,7 +745,7 @@ s9_claim() {
   [ -n "$dest" ] && [ -n "$claimer" ] || fail "could not create the claim destination key"
   bal=$(qq 0 bank balances "$dest" | jget - balances.0.amount 0)
   [ "$bal" = 0 ] || fail "fresh destination $dest unexpectedly holds $bal"
-  utxo_ent=$(qq 0 qbtc utxo "$CLAIM_TXID" 0 | jget - utxo.entitled_amount 0)
+  utxo_ent=$(qq 0 qbtc utxo --txid "$CLAIM_TXID" --vout 0 | jget - utxo.entitled_amount 0)
   [ "$utxo_ent" = "$CLAIM_AMOUNT" ] || fail "genesis UTXO entitled amount is $utxo_ent, expected $CLAIM_AMOUNT"
   detail "destination $dest; genesis UTXO $CLAIM_TXID:0 entitled $CLAIM_AMOUNT"
 
@@ -697,7 +761,7 @@ s9_claim() {
   [ "$code1" = 0 ] || fail "claim transaction failed: $code1 ($(head -c 400 "$OUT/claim/tx_last.json"))"
   bal=$(qq 0 bank balances "$dest" | jget - balances.0.amount 0)
   [ "$bal" = "$CLAIM_AMOUNT" ] || fail "destination balance is $bal, expected $CLAIM_AMOUNT"
-  utxo_ent=$(qq 0 qbtc utxo "$CLAIM_TXID" 0 | jget - utxo.entitled_amount 0)
+  utxo_ent=$(qq 0 qbtc utxo --txid "$CLAIM_TXID" --vout 0 | jget - utxo.entitled_amount 0)
   [ "$utxo_ent" = 0 ] || fail "UTXO entitled amount is $utxo_ent after the claim, expected 0"
   detail "claim accepted: destination received $bal, UTXO entitled amount is now 0"
 

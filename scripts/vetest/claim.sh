@@ -141,7 +141,7 @@ say "  P2PKH:  $(python3 "$LIB" base58-p2pkh "$HASH160")"
 if [ "$SHOW" = 1 ]; then exit 0; fi
 
 # ------------------------------------------------------------------ the UTXO
-if ! UTXO_JSON=$(qq qbtc utxo "$TXID" "$VOUT" 2>&1); then
+if ! UTXO_JSON=$(qq qbtc utxo --txid "$TXID" --vout "$VOUT" 2>&1); then
   LPB=$(qq qbtc last-processed-block 2>/dev/null | jget - height '?' 2>/dev/null || echo '?')
   die "UTXO $TXID:$VOUT is not in chain state.
   The chain only knows UTXOs that are in genesis or in a Bitcoin block it has ingested, i.e. at
@@ -210,7 +210,7 @@ done
 [ "$RES" = 0 ] || die "the claim failed on chain (code $RES): $(jget "$WORK/tx_result.json" raw_log '' | head -c 400)"
 
 BAL_AFTER=$(bal)
-ENT_AFTER=$(qq qbtc utxo "$TXID" "$VOUT" | jget - utxo.entitled_amount 0)
+ENT_AFTER=$(qq qbtc utxo --txid "$TXID" --vout "$VOUT" | jget - utxo.entitled_amount 0)
 echo "claim accepted (tx $hash)"
 echo "destination:              $DEST"
 echo "balance before:           $BAL_BEFORE"

@@ -58,7 +58,11 @@ fi
 echo "network (small requests)"
 chk() { # chk <description> <url> [curl args...]
   local d=$1 u=$2; shift 2
-  if curl -fsS -L --max-time 20 -o /dev/null "$@" "$u" 2>/dev/null; then ok "$d"; else bad "$d unreachable ($u)"; fi
+  # any HTTP answer counts as reachable (Docker Hub's registry answers 401 without credentials);
+  # only connection failures and timeouts are errors
+  local code
+  code=$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "$@" "$u" 2>/dev/null || true)
+  if [ -n "$code" ] && [ "$code" != 000 ]; then ok "$d"; else bad "$d unreachable ($u)"; fi
 }
 chk "mempool.space (bitcoin upstream)" https://mempool.space/api/blocks/tip/height
 chk "blockstream.info (fallback upstream)" https://blockstream.info/api/blocks/tip/height

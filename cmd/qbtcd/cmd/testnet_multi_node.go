@@ -73,6 +73,7 @@ var (
 	flagConfirmationDepth      = "confirmation-depth"
 	flagPollInterval           = "poll-interval"
 	flagMaxCachedBlocks        = "max-cached-blocks"
+	flagTimeoutPropose         = "timeout-propose"
 )
 
 const nodeDirPerm = 0o755
@@ -111,6 +112,8 @@ type initArgs struct {
 	confirmationDepth      int64
 	pollInterval           string
 	maxCachedBlocks        int64
+	// timeoutPropose is consensus.timeout_propose in each node's config.toml
+	timeoutPropose time.Duration
 }
 
 // NewTestnetMultiNodeCmd returns a cmd to initialize all files for tendermint testnet and application
@@ -209,6 +212,10 @@ Example:
 			if _, err := time.ParseDuration(args.pollInterval); err != nil {
 				return fmt.Errorf("invalid --%s: %w", flagPollInterval, err)
 			}
+			args.timeoutPropose, _ = cmd.Flags().GetDuration(flagTimeoutPropose)
+			if args.timeoutPropose <= 0 {
+				return fmt.Errorf("--%s must be positive", flagTimeoutPropose)
+			}
 			args.maxCachedBlocks, _ = cmd.Flags().GetInt64(flagMaxCachedBlocks)
 			if args.maxCachedBlocks < 1 {
 				return fmt.Errorf("--%s must be at least 1", flagMaxCachedBlocks)
@@ -219,6 +226,7 @@ Example:
 	}
 
 	addTestnetFlagsToCmd(cmd)
+	cmd.Flags().Duration(flagTimeoutPropose, 3*time.Second, "consensus.timeout_propose written to every node's config.toml")
 	cmd.Flags().String(flagPorts, "", "Ports of nodes (default 26657,26654,26651,26648.. )")
 	cmd.Flags().String(flagNodeDirPrefix, "validator", "Prefix the directory name for each node with (node results in node0, node1, ...)")
 	cmd.Flags().String(flagValidatorsStakeAmount, "100000000,100000000,100000000,100000000", "Amount of stake for each validator")
@@ -686,6 +694,7 @@ func collectGenFiles(
 		nodeConfig.ProxyApp = "tcp://127.0.0.1:" + strconv.Itoa(26658-3*i)
 		nodeConfig.Instrumentation.PrometheusListenAddr = ":" + strconv.Itoa(26660+i)
 		nodeConfig.Instrumentation.Prometheus = true
+		nodeConfig.Consensus.TimeoutPropose = args.timeoutPropose
 		cmtconfig.WriteConfigFile(filepath.Join(nodeConfig.RootDir, "config", "config.toml"), nodeConfig)
 		if appState == nil {
 			// set the canonical application state (they should not differ)
