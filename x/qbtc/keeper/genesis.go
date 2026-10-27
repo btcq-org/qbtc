@@ -2,8 +2,10 @@ package keeper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -55,6 +57,15 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set last processed block height: %w", err)
 		}
 	}
+	// the anchor is the block at BtcInitialHeight - 1; the first reported block must link to it
+	if len(genState.BtcAnchorHeader) > 0 {
+		if err := k.BtcTipHeader.Set(ctx, genState.BtcAnchorHeader); err != nil {
+			return fmt.Errorf("failed to set btc anchor header: %w", err)
+		}
+		if err := k.BtcPeriodStartTime.Set(ctx, uint64(genState.BtcAnchorPeriodStartTime)); err != nil {
+			return fmt.Errorf("failed to set btc anchor period start time: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -97,6 +108,28 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 	zkVK, err := k.ZkVerifyingKey.Get(ctx)
 	if err == nil && len(zkVK) > 0 {
 		genesis.ZkVerifyingKey = zkVK
+	}
+
+	// Export the Bitcoin tip as the anchor, so the imported chain continues
+	// from the next block.
+	lastProcessed, err := k.GetLastProcessedBlock(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export last processed block: %w", err)
+	}
+	if lastProcessed > 0 {
+		genesis.BtcInitialHeight = lastProcessed + 1
+	}
+	tip, err := k.BtcTipHeader.Get(ctx)
+	switch {
+	case err == nil:
+		periodStart, err := k.BtcPeriodStartTime.Get(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to export btc period start time: %w", err)
+		}
+		genesis.BtcAnchorHeader = tip
+		genesis.BtcAnchorPeriodStartTime = uint32(periodStart)
+	case !errors.Is(err, collections.ErrNotFound):
+		return nil, fmt.Errorf("failed to export btc tip header: %w", err)
 	}
 
 	return genesis, nil

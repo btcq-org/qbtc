@@ -5,6 +5,9 @@ import (
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/plonk"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -48,6 +51,10 @@ func (gs GenesisState) Validate() error {
 		}
 	}
 
+	if err := gs.validateBtcAnchor(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -72,4 +79,36 @@ func ValidateVerifyingKey(vkBytes []byte) error {
 
 	// Reject keys from the unsafe test SRS or with the wrong number of public inputs
 	return zk.ValidateClaimVerifyingKey(vk)
+}
+
+// validateBtcAnchor checks the anchor header against Bitcoin mainnet's
+// proof-of-work limit. A chain that processes Bitcoin blocks
+// (btc_initial_height > 0) needs an anchor, or the first block could link to
+// anything.
+func (gs GenesisState) validateBtcAnchor() error {
+	if len(gs.BtcAnchorHeader) == 0 {
+		if gs.BtcInitialHeight > 0 {
+			return fmt.Errorf("btc_anchor_header is required when btc_initial_height is set")
+		}
+		return nil
+	}
+	if gs.BtcInitialHeight == 0 {
+		return fmt.Errorf("btc_initial_height is required with btc_anchor_header")
+	}
+	var header wire.BlockHeader
+	if len(gs.BtcAnchorHeader) != BtcHeaderSize {
+		return fmt.Errorf("btc_anchor_header is %d bytes, want %d", len(gs.BtcAnchorHeader), BtcHeaderSize)
+	}
+	if err := header.Deserialize(bytes.NewReader(gs.BtcAnchorHeader)); err != nil {
+		return fmt.Errorf("invalid btc_anchor_header: %w", err)
+	}
+	hash := header.BlockHash()
+	target := blockchain.CompactToBig(header.Bits)
+	if target.Sign() <= 0 || target.Cmp(chaincfg.MainNetParams.PowLimit) > 0 || blockchain.HashToBig(&hash).Cmp(target) > 0 {
+		return fmt.Errorf("btc_anchor_header %s does not meet its proof-of-work target", hash)
+	}
+	if gs.BtcAnchorPeriodStartTime == 0 || int64(gs.BtcAnchorPeriodStartTime) > header.Timestamp.Unix() {
+		return fmt.Errorf("btc_anchor_period_start_time must be set and not after the anchor's timestamp")
+	}
+	return nil
 }

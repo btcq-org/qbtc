@@ -34,6 +34,14 @@ var (
 
 	// LastProcessedBlockKey stores the last processed block height
 	LastProcessedBlockKey = collections.NewPrefix("last_processed_block")
+
+	// BtcTipHeaderKey stores the 80-byte header of the last processed Bitcoin
+	// block (or of the genesis anchor); the next block must link to it.
+	BtcTipHeaderKey = collections.NewPrefix("btc_tip_header")
+
+	// BtcPeriodStartTimeKey stores the timestamp of the first block of the
+	// tip's difficulty period.
+	BtcPeriodStartTimeKey = collections.NewPrefix("btc_period_start_time")
 )
 
 const (

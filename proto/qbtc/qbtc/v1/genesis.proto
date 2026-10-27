@@ -30,7 +30,17 @@ message GenesisState {
     (gogoproto.jsontag) = "zk_verifying_key",
     (gogoproto.customname) = "ZkVerifyingKey"
   ];
+  // The first Bitcoin block height the chain processes. The anchor below is
+  // the block at btc_initial_height - 1.
   uint64 btc_initial_height = 6;
+  // The 80-byte header of the Bitcoin block at btc_initial_height - 1. The
+  // first processed block must link to it. Without an anchor no Bitcoin block
+  // is accepted.
+  bytes btc_anchor_header = 7;
+  // The timestamp of the first block of the anchor's difficulty period (the
+  // block at a height that is a multiple of 2016). Needed to check the
+  // difficulty retarget at the next period boundary.
+  uint32 btc_anchor_period_start_time = 8;
 }
 
 message GenesisPeerAddress {

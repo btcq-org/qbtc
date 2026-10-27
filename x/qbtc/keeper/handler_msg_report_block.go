@@ -3,7 +3,6 @@ package keeper
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/bits"
@@ -14,14 +13,19 @@ import (
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
-	"github.com/btcsuite/btcd/btcjson"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
-func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.MsgBtcBlock) error {
+// ValidateMsgBtcBlockAttestation checks that validators with more than 2/3 of
+// the bonded power signed signBytes, the uncompressed encoding of the block's
+// BtcBlockCommit.
+func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.MsgBtcBlock, signBytes []byte) error {
 	validPower := math.ZeroInt()
 	processedValidator := make(map[string]bool, len(msg.Attestations))
 	validators, err := s.k.stakingKeeper.GetBondedValidatorsByPower(ctx)
@@ -55,7 +59,7 @@ func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.M
 			ctx.Logger().Error("failed to get consensus public key for validator", "address", attestation.Address, "error", err)
 			continue
 		}
-		if publicKey.VerifySignature(msg.BlockContent, attestation.Signature) {
+		if publicKey.VerifySignature(signBytes, attestation.Signature) {
 			validPower = validPower.Add(math.NewInt(val.ConsensusPower(s.k.stakingKeeper.PowerReduction(ctx))))
 		}
 		processedValidator[attestation.Address] = true
@@ -88,8 +92,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	if err != nil {
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
 	}
-	// check if the block height is the next block height
-	if msg.Height != lastProcessedBlock+1 && lastProcessedBlock != 0 {
+	if msg.Height != lastProcessedBlock+1 {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("block height %d is not the next block height %d", msg.Height, lastProcessedBlock+1)
 	}
 
@@ -97,81 +100,76 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
 
-	if err := s.ValidateMsgBtcBlockAttestation(sdkCtx, msg); err != nil {
+	signBytes, commit, err := types.DecodeBtcBlockContent(msg.BlockContent)
+	if err != nil {
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
+	}
+	if err := s.ValidateMsgBtcBlockAttestation(sdkCtx, msg, signBytes); err != nil {
 		return nil, err
 	}
-	// unzip block content
-	rawBlockContent, err := types.GzipUnzip(msg.BlockContent)
+	header, txs, err := types.ParseBtcBlockCommit(commit)
 	if err != nil {
-		return nil, sdkerror.ErrInvalidRequest.Wrap("failed to unzip block content")
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
 	}
-	var block btcjson.GetBlockVerboseTxResult
-	if err := json.Unmarshal(rawBlockContent, &block); err != nil {
-		return nil, sdkerror.ErrInvalidRequest.Wrap("failed to unmarshal block content")
+	params := s.k.btcParams
+	tip, err := s.k.getBtcTip(ctx)
+	if err != nil {
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("cannot accept block %d: %v", msg.Height, err)
 	}
-	// The attestations sign BlockContent only. Bind the unsigned Height and Hash
-	// to the height and hash inside the signed content, so attested content can
-	// only be applied at its own height.
-	if block.Height < 0 || uint64(block.Height) != msg.Height || block.Hash != msg.Hash {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("block content (height %d, hash %s) does not match the message (height %d, hash %s)",
-			block.Height, block.Hash, msg.Height, msg.Hash)
+	// The header must hash to msg.Hash, extend the stored tip with valid proof
+	// of work, and commit (merkle root) to exactly these transactions.
+	txids, err := verifyBtcBlock(params, tip, msg.Height, msg.Hash, header, txs)
+	if err != nil {
+		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block %d: %v", msg.Height, err)
 	}
+
 	cacheContext, writeCache := sdkCtx.CacheContext()
-	claimTxIds := make([]string, 0)
+	claimTxs := make([]int, 0)
 	totalFee := uint64(0)
-	var coinBaseTx *btcjson.TxRawResult
-	// process the reported block
-	for _, tx := range block.Tx {
+	// process the reported block; txs[0] is the coinbase, processed last because
+	// it needs the block's total fee
+	for i := 1; i < len(txs); i++ {
+		tx, txid := txs[i], txids[i].String()
 		// check if it is a claim transaction , need to check it before the transaction is processed
 		// because utxo that has been spent will be removed from the store, so we can't check it after processing the transaction
-		if s.isClaimTx(cacheContext, tx) {
-			claimTxIds = append(claimTxIds, tx.Txid)
+		if s.isClaimTx(cacheContext, params, tx) {
+			claimTxs = append(claimTxs, i)
 		}
-
-		if len(tx.Vin) > 0 && tx.Vin[0].IsCoinBase() {
-			// coinbase transaction , process it later, need to calculate the transaction fee first
-			coinBaseTx = &tx
-			continue
-		}
-		fee, err := s.processTransaction(cacheContext, tx, msg.Height)
+		fee, err := s.processTransaction(cacheContext, params, tx, txid, msg.Height)
 		if err != nil {
-			cacheContext.Logger().Error("failed to process transaction", "txid", tx.Txid, "error", err)
-			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", tx.Txid, err)
+			cacheContext.Logger().Error("failed to process transaction", "txid", txid, "error", err)
+			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", txid, err)
 		}
 		totalFee += fee
 	}
-	// update coinbase transaction
-	if coinBaseTx != nil {
-		if err := s.processCoinbaseVOuts(cacheContext, coinBaseTx.Vout, coinBaseTx.Txid, totalFee, msg.Height); err != nil {
-			cacheContext.Logger().Error("failed to process coinbase transaction", "txid", coinBaseTx.Txid, "error", err)
-			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinBaseTx.Txid, err)
-		}
+	coinbaseTxid := txids[0].String()
+	if err := s.processCoinbaseVOuts(cacheContext, params, txs[0].TxOut, coinbaseTxid, totalFee, msg.Height); err != nil {
+		cacheContext.Logger().Error("failed to process coinbase transaction", "txid", coinbaseTxid, "error", err)
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinbaseTxid, err)
 	}
-	if len(claimTxIds) > 0 {
-		for _, tx := range block.Tx {
-			if !slices.Contains(claimTxIds, tx.Txid) {
-				continue
-			}
-			if err := s.processClaimTx(cacheContext, tx); err != nil {
-				// if we failed to process claim tx, just log the error and continue
-				cacheContext.Logger().Error("failed to process claim transaction", "txid", tx.Txid, "error", err)
-				continue
-			}
+	for _, i := range claimTxs {
+		if err := s.processClaimTx(cacheContext, txs[i], txids[i].String()); err != nil {
+			// if we failed to process claim tx, just log the error and continue
+			cacheContext.Logger().Error("failed to process claim transaction", "txid", txids[i].String(), "error", err)
+			continue
 		}
 	}
 
-	// store last block processed height
+	// store last block processed height and the new tip
 	err = s.k.LastProcessedBlock.Set(cacheContext, msg.Height)
 	if err != nil {
 		cacheContext.Logger().Error("failed to set last processed block height", "height", msg.Height, "error", err)
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
+	}
+	if err := s.k.setBtcTip(cacheContext, params, msg.Height, header); err != nil {
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set btc tip: %v", err)
 	}
 	sdkCtx.Logger().Info("processed btc block", "height", msg.Height, "hash", msg.Hash)
 
 	// Record metrics
 	telemetry.IncrCounter(1, types.ModuleName, "blocks_processed")
 	telemetry.SetGauge(float32(msg.Height), types.ModuleName, "last_processed_block_height")
-	telemetry.SetGauge(float32(len(block.Tx)), types.ModuleName, "block_tx_count")
+	telemetry.SetGauge(float32(len(txs)), types.ModuleName, "block_tx_count")
 	telemetry.SetGauge(float32(totalFee), types.ModuleName, "block_total_fee")
 
 	// write the cache context to the main context if we reach here without error
@@ -179,21 +177,49 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	return &types.MsgEmpty{}, nil
 }
 
-func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, blockHeight uint64) (uint64, error) {
+// outputAmount returns the value of a transaction output in satoshis.
+func outputAmount(out *wire.TxOut) (uint64, error) {
+	if out.Value < 0 {
+		return 0, fmt.Errorf("negative output value %d", out.Value)
+	}
+	return uint64(out.Value), nil
+}
+
+// scriptPubKey describes an output script the way Bitcoin Core's getblock
+// does: the script hex, its class name, and an address only for the classes
+// Core gives one (not bare public keys or multisig, which have no address).
+func scriptPubKey(params *chaincfg.Params, pkScript []byte) *types.ScriptPubKeyResult {
+	class, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, params)
+	result := &types.ScriptPubKeyResult{
+		Hex:  hex.EncodeToString(pkScript),
+		Type: class.String(),
+	}
+	if err != nil {
+		result.Type = txscript.NonStandardTy.String()
+		return result
+	}
+	switch class {
+	case txscript.PubKeyHashTy, txscript.ScriptHashTy, txscript.WitnessV0PubKeyHashTy,
+		txscript.WitnessV0ScriptHashTy, txscript.WitnessV1TaprootTy:
+		if len(addrs) == 1 {
+			result.Address = addrs[0].EncodeAddress()
+		}
+	}
+	return result
+}
+
+func (s *msgServer) processTransaction(ctx sdk.Context, params *chaincfg.Params, tx *wire.MsgTx, txid string, blockHeight uint64) (uint64, error) {
 	defer telemetry.MeasureSince(time.Now(), "process_transaction")
 	fee := uint64(0)
-	totalClaimable, totalInput, err := s.processVIn(ctx, tx.Vin)
+	totalClaimable, totalInput, err := s.processVIn(ctx, tx.TxIn)
 	if err != nil {
 		return fee, err
 	}
 	totalOutput := uint64(0)
-	for _, out := range tx.Vout {
-		if out.Value == 0 {
-			continue
-		}
-		amount, err := types.BTCToSatoshis(out.Value)
+	for _, out := range tx.TxOut {
+		amount, err := outputAmount(out)
 		if err != nil {
-			return fee, fmt.Errorf("fail to convert output value to satoshis: %w", err)
+			return fee, err
 		}
 		totalOutput += amount
 	}
@@ -206,7 +232,7 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, 
 			totalClaimable = 0
 		}
 	}
-	if err := s.processVOuts(ctx, tx.Vout, tx.Txid, totalClaimable, totalOutput, blockHeight); err != nil {
+	if err := s.processVOuts(ctx, params, tx.TxOut, txid, totalClaimable, totalOutput, blockHeight); err != nil {
 		return fee, err
 	}
 
@@ -214,20 +240,19 @@ func (s *msgServer) processTransaction(ctx sdk.Context, tx btcjson.TxRawResult, 
 }
 
 const claimPrefix = "claim:"
-const nullDataType = "nulldata"
 
-func (s *msgServer) isClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) bool {
+func (s *msgServer) isClaimTx(ctx sdk.Context, params *chaincfg.Params, tx *wire.MsgTx) bool {
 	defer telemetry.MeasureSince(time.Now(), "is_claim_tx")
 	// ignore if vOut length is not 2
-	if len(tx.Vout) != 2 {
+	if len(tx.TxOut) != 2 {
 		return false
 	}
-	memo := s.getClaimMemo(ctx, tx.Vout)
+	memo := getClaimMemo(tx.TxOut)
 	// no claim memo found
 	if memo == "" {
 		return false
 	}
-	isSentToItself, err := s.hasUtxoSendToItself(ctx, tx)
+	isSentToItself, err := s.hasUtxoSendToItself(ctx, params, tx)
 	if err != nil {
 		return false
 	}
@@ -244,13 +269,13 @@ func (s *msgServer) isClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) bool {
 	return true
 }
 
-func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) error {
+func (s *msgServer) processClaimTx(ctx sdk.Context, tx *wire.MsgTx, txid string) error {
 	defer telemetry.MeasureSince(time.Now(), "process_claim_tx")
 	// ignore if vOut length is not 2
-	if len(tx.Vout) != 2 {
+	if len(tx.TxOut) != 2 {
 		return nil
 	}
-	memo := s.getClaimMemo(ctx, tx.Vout)
+	memo := getClaimMemo(tx.TxOut)
 	// no claim memo found
 	if memo == "" {
 		return nil
@@ -264,15 +289,15 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) erro
 
 	// create a cache context to process the claim tx atomically
 	cacheCtx, writeCache := ctx.CacheContext()
-	for _, out := range tx.Vout {
+	for n, out := range tx.TxOut {
 		if out.Value == 0 {
 			continue
 		}
 		// Use the unified ClaimUTXO function
-		if err := s.k.ClaimUTXO(cacheCtx, tx.Txid, out.N, memoAddr); err != nil {
+		if err := s.k.ClaimUTXO(cacheCtx, txid, uint32(n), memoAddr); err != nil {
 			// ClaimUTXO returns nil if already claimed (EntitledAmount == 0)
 			// Only fail on actual errors
-			ctx.Logger().Error("failed to claim UTXO", "txid", tx.Txid, "vout", out.N, "error", err)
+			ctx.Logger().Error("failed to claim UTXO", "txid", txid, "vout", n, "error", err)
 			return fmt.Errorf("fail to claim UTXO: %w", err)
 		}
 	}
@@ -280,17 +305,12 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx btcjson.TxRawResult) erro
 	return nil
 }
 
-func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, tx btcjson.TxRawResult) (bool, error) {
+func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, params *chaincfg.Params, tx *wire.MsgTx) (bool, error) {
 	defer telemetry.MeasureSince(time.Now(), "has_utxo_send_to_itself")
 	var sourceAddress []string
-	for _, in := range tx.Vin {
-		// if one of the inputs is coinbase , which means newly mined coins, we consider it is not sent to itself
-		if in.IsCoinBase() {
-			return false, nil
-		}
-
+	for _, in := range tx.TxIn {
 		// UTXO must already exist since it is used as input
-		utxoKey := getUTXOKey(in.Txid, in.Vout)
+		utxoKey := getUTXOKey(in.PreviousOutPoint.Hash.String(), in.PreviousOutPoint.Index)
 		utxo, err := s.k.Utxoes.Get(ctx, utxoKey)
 		if err != nil {
 			return false, err
@@ -303,11 +323,11 @@ func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, tx btcjson.TxRawResult)
 	}
 
 	var destAddress []string
-	for _, out := range tx.Vout {
+	for _, out := range tx.TxOut {
 		if out.Value == 0 {
 			continue
 		}
-		destAddress = append(destAddress, out.ScriptPubKey.Address)
+		destAddress = append(destAddress, scriptPubKey(params, out.PkScript).Address)
 	}
 
 	for _, dest := range destAddress {
@@ -319,27 +339,23 @@ func (s *msgServer) hasUtxoSendToItself(ctx sdk.Context, tx btcjson.TxRawResult)
 	return true, nil
 }
 
-// hasClaimMemo checks if any of the vOuts contains a claim memo
-func (s *msgServer) getClaimMemo(ctx sdk.Context, vOuts []btcjson.Vout) string {
-	for _, item := range vOuts {
-		switch item.ScriptPubKey.Type {
-		case nullDataType:
-			fields := strings.Fields(item.ScriptPubKey.Asm)
-			if len(fields) < 2 || fields[0] != "OP_RETURN" {
-				continue
-			}
-			memo, err := hex.DecodeString(fields[1])
-			if err != nil {
-				ctx.Logger().Debug("failed to decode memo", "error", err)
-				continue
-			}
-			memoStr := strings.ToLower(string(memo))
-			if !strings.HasPrefix(memoStr, claimPrefix) {
-				continue
-			}
-			after, _ := strings.CutPrefix(memoStr, claimPrefix)
-			return after
+// getClaimMemo returns the qbtc address of a "claim:<address>" memo carried as
+// the first data push of an OP_RETURN output, or "" if there is none.
+func getClaimMemo(outs []*wire.TxOut) string {
+	for _, out := range outs {
+		if txscript.GetScriptClass(out.PkScript) != txscript.NullDataTy {
+			continue
 		}
+		tokenizer := txscript.MakeScriptTokenizer(0, out.PkScript)
+		if !tokenizer.Next() || tokenizer.Opcode() != txscript.OP_RETURN || !tokenizer.Next() {
+			continue
+		}
+		memoStr := strings.ToLower(string(tokenizer.Data()))
+		if !strings.HasPrefix(memoStr, claimPrefix) {
+			continue
+		}
+		after, _ := strings.CutPrefix(memoStr, claimPrefix)
+		return after
 	}
 	return ""
 }
@@ -352,15 +368,12 @@ func getUTXOKey(txID string, vOut uint32) string {
 // processVIn remove the UTXOs from the key value store since it has been spent , can't be claim anymore
 // return the total amount that can be claimed and the total input amount.
 // An input that is not in the store contributes nothing to either total.
-func (s *msgServer) processVIn(ctx sdk.Context, ins []btcjson.Vin) (uint64, uint64, error) {
+func (s *msgServer) processVIn(ctx sdk.Context, ins []*wire.TxIn) (uint64, uint64, error) {
 	defer telemetry.MeasureSince(time.Now(), "process_vin")
 	totalClaimableAmount := uint64(0)
 	totalInputAmount := uint64(0)
 	for _, in := range ins {
-		if in.IsCoinBase() {
-			continue
-		}
-		key := getUTXOKey(in.Txid, in.Vout)
+		key := getUTXOKey(in.PreviousOutPoint.Hash.String(), in.PreviousOutPoint.Index)
 		existingUtxo, err := s.k.Utxoes.Get(ctx, key)
 		if err != nil {
 			// UTXO not found, it must have been spent already
@@ -394,19 +407,20 @@ func proportionalEntitlement(totalClaimable, amount, totalOutput uint64) uint64 
 }
 
 func (s *msgServer) processVOuts(ctx sdk.Context,
-	outs []btcjson.Vout,
+	params *chaincfg.Params,
+	outs []*wire.TxOut,
 	txID string,
 	totalClaimableAmount uint64,
 	totalOutputAmount uint64,
 	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_vout")
-	for _, out := range outs {
+	for n, out := range outs {
 		if out.Value == 0 {
 			continue
 		}
-		amount, err := types.BTCToSatoshis(out.Value)
+		amount, err := outputAmount(out)
 		if err != nil {
-			return fmt.Errorf("fail to convert output value to satoshis: %w", err)
+			return err
 		}
 		// each output can claim an amount proportional to its value, so the outputs together
 		// never get more than the inputs had. When every input is fully entitled, the claimable
@@ -414,15 +428,11 @@ func (s *msgServer) processVOuts(ctx sdk.Context,
 		entitleAmount := proportionalEntitlement(totalClaimableAmount, amount, totalOutputAmount)
 		utxo := types.UTXO{
 			Txid:           txID,
-			Vout:           out.N,
+			Vout:           uint32(n),
 			Amount:         amount,
 			EntitledAmount: entitleAmount,
-			ScriptPubKey: &types.ScriptPubKeyResult{
-				Hex:     out.ScriptPubKey.Hex,
-				Type:    out.ScriptPubKey.Type,
-				Address: out.ScriptPubKey.Address,
-			},
-			BlockHeight: blockHeight,
+			ScriptPubKey:   scriptPubKey(params, out.PkScript),
+			BlockHeight:    blockHeight,
 		}
 		if err := s.setNewUTXO(ctx, utxo); err != nil {
 			return err
@@ -451,19 +461,20 @@ func (s *msgServer) setNewUTXO(ctx sdk.Context, utxo types.UTXO) error {
 }
 
 func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
-	outs []btcjson.Vout,
+	params *chaincfg.Params,
+	outs []*wire.TxOut,
 	txID string,
 	totalFee uint64,
 	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_coinbase_vout")
-	for _, out := range outs {
+	for n, out := range outs {
 		if out.Value == 0 {
 			continue
 		}
 
-		amount, err := types.BTCToSatoshis(out.Value)
+		amount, err := outputAmount(out)
 		if err != nil {
-			return fmt.Errorf("fail to convert output value to satoshis: %w", err)
+			return err
 		}
 		entitleAmount := amount
 		if entitleAmount > totalFee {
@@ -471,15 +482,11 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 		}
 		utxo := types.UTXO{
 			Txid:           txID,
-			Vout:           out.N,
+			Vout:           uint32(n),
 			Amount:         amount,
 			EntitledAmount: entitleAmount,
-			ScriptPubKey: &types.ScriptPubKeyResult{
-				Hex:     out.ScriptPubKey.Hex,
-				Type:    out.ScriptPubKey.Type,
-				Address: out.ScriptPubKey.Address,
-			},
-			BlockHeight: blockHeight,
+			ScriptPubKey:   scriptPubKey(params, out.PkScript),
+			BlockHeight:    blockHeight,
 		}
 		if err := s.setNewUTXO(ctx, utxo); err != nil {
 			return err

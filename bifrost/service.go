@@ -1,9 +1,7 @@
 package bifrost
 
 import (
-	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -318,16 +316,19 @@ func (s *Service) processBitcoinBlocks(ctx context.Context) {
 					}
 				}
 			}
-			blockHash, err := s.btcClient.GetBlockHash(blockHeight + 1)
+			// wait until the block has ConfirmationDepth confirmations: the
+			// block at blockHeight+depth-1 exists
+			confirmedBy := blockHeight + s.cfg.GetConfirmationDepth() - 1
+			blockHash, err := s.btcClient.GetBlockHash(confirmedBy)
 			if err != nil {
 				if s.btcClient.ShouldBackoff(err) {
 					time.Sleep(time.Second)
 				} else {
-					s.logger.Error().Err(err).Msgf("failed to get block at height %d", blockHeight+1)
+					s.logger.Error().Err(err).Msgf("failed to get block at height %d", confirmedBy)
 				}
 				continue
 			}
-			s.logger.Info().Str("block_hash", blockHash).Int64("block_height", blockHeight+1).Msg("retrieved latest block hash")
+			s.logger.Info().Str("block_hash", blockHash).Int64("block_height", confirmedBy).Msg("retrieved confirming block hash")
 
 			if err := s.getBtcBlock(blockHeight); err != nil {
 				// when there is an error , let's retry it
@@ -355,23 +356,22 @@ func (s *Service) getBtcBlock(height int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to get block hash at height %d: %w", height, err)
 	}
-	block, err := s.btcClient.GetBlockVerboseTxs(blockHash)
+	block, err := s.btcClient.GetBlock(blockHash)
 	if err != nil {
-		return fmt.Errorf("failed to get block verbose txs at height %d: %w", height, err)
-	}
-	if block == nil {
-		return nil
+		return fmt.Errorf("failed to get block at height %d: %w", height, err)
 	}
 
-	content, err := json.Marshal(block)
+	commit, err := types.NewBtcBlockCommit(block)
 	if err != nil {
-		return fmt.Errorf("failed to marshal block content at height %d: %w", height, err)
+		return fmt.Errorf("failed to build block commit at height %d: %w", height, err)
 	}
-	compressedContent, err := types.GzipDeterministic(content, gzip.BestCompression)
+	// sign the uncompressed commit, so attestations combine even if two
+	// validators' compressed bytes differ
+	signBytes, compressedContent, err := types.EncodeBtcBlockCommit(commit)
 	if err != nil {
-		return fmt.Errorf("failed to compress block content at height %d: %w", height, err)
+		return fmt.Errorf("failed to encode block commit at height %d: %w", height, err)
 	}
-	sig, err := s.validatorPrivateKey.Sign(compressedContent)
+	sig, err := s.validatorPrivateKey.Sign(signBytes)
 	if err != nil {
 		return fmt.Errorf("failed to sign block content at height %d: %w", height, err)
 	}
@@ -380,8 +380,8 @@ func (s *Service) getBtcBlock(height int64) error {
 	// eg: qbtcvalcons1...
 	valAddr := sdk.ConsAddress(s.validatorPrivateKey.PubKey().Address())
 	blockGossip := types.BlockGossip{
-		Hash:         block.Hash,
-		Height:       uint64(block.Height),
+		Hash:         blockHash,
+		Height:       uint64(height),
 		BlockContent: compressedContent,
 		Attestation: &types.Attestation{
 			Address:   valAddr.String(),

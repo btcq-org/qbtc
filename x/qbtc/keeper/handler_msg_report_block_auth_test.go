@@ -1,190 +1,247 @@
 package keeper_test
 
 import (
-	"compress/gzip"
-	"encoding/json"
-	"fmt"
 	"testing"
 
-	"github.com/btcsuite/btcd/btcjson"
-	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
-const (
-	authTestHeight   = 800000
-	authTestInput    = "1111111111111111111111111111111111111111111111111111111111111111"
-	authTestCoinbase = "cbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcb"
-	authTestSpend    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-)
+const authTestInput = "1111111111111111111111111111111111111111111111111111111111111111"
 
-func authTestBlockHash(height uint64) string {
-	return fmt.Sprintf("%064x", height)
-}
-
-func authTestVout(n uint32, sats int64) btcjson.Vout {
-	return btcjson.Vout{
-		Value: btcutil.Amount(sats).ToBTC(),
-		N:     n,
-		ScriptPubKey: btcjson.ScriptPubKeyResult{
-			Type:    "pubkeyhash",
-			Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC",
-		},
-	}
-}
-
-// authTestBlock is a block at authTestHeight with a coinbase and one
-// transaction that spends authTestInput (preloaded by the test).
-func authTestBlock() btcjson.GetBlockVerboseTxResult {
-	return btcjson.GetBlockVerboseTxResult{
-		Hash:   authTestBlockHash(authTestHeight),
-		Height: authTestHeight,
-		Tx: []btcjson.TxRawResult{
-			{
-				Txid: authTestCoinbase,
-				Vin:  []btcjson.Vin{{Coinbase: "03abcdef"}},
-				Vout: []btcjson.Vout{authTestVout(0, 312_500_000)},
-			},
-			{
-				Txid: authTestSpend,
-				Vin:  []btcjson.Vin{{Txid: authTestInput, Vout: 0}},
-				Vout: []btcjson.Vout{authTestVout(0, 90_000)},
-			},
-		},
-	}
-}
-
-// attestedBlockMsg returns a MsgBtcBlock for block, attested by the fixture's
-// only validator and signed by the injection signer, with the given unsigned
-// height and hash.
-func attestedBlockMsg(t *testing.T, f *fixture, block btcjson.GetBlockVerboseTxResult, height uint64, hash string) *types.MsgBtcBlock {
-	t.Helper()
-	content, err := json.Marshal(block)
-	require.NoError(t, err)
-	compressed, err := types.GzipDeterministic(content, gzip.BestCompression)
-	require.NoError(t, err)
-	address, err := f.GetConsensusAddress()
-	require.NoError(t, err)
-	signature, err := f.privateKey.Sign(compressed)
-	require.NoError(t, err)
-	return &types.MsgBtcBlock{
-		Height:       height,
-		Hash:         hash,
-		BlockContent: compressed,
-		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
-		Signer:       types.EBifrostSignerAddress,
-	}
-}
-
-func setupAuthTest(t *testing.T) *fixture {
+// setupAuthTest anchors a regtest chain at 800000 and preloads authTestInput.
+func setupAuthTest(t *testing.T) (*fixture, *regtestChain) {
 	t.Helper()
 	f := initFixture(t)
 	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	input := types.UTXO{
-		Txid:           authTestInput,
-		Vout:           0,
-		Amount:         100_000,
-		EntitledAmount: 100_000,
-		ScriptPubKey:   &types.ScriptPubKeyResult{Type: "pubkeyhash", Address: "1J6QsrCXRTZusGEeyg44BcoqgM4SZXTXhC"},
-	}
-	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, input.GetKey(), input))
-	return f
+	c := newRegtestChain(t, f, 800000)
+	setTestUtxo(t, f, c.params, authTestInput, 0, 100_000, 100_000)
+	return f, c
 }
 
-func authTestEntitlement(t *testing.T, f *fixture, txid string) uint64 {
+// authTestBlock is the next block with a coinbase and one transaction that
+// spends authTestInput.
+func authTestBlock(t *testing.T, c *regtestChain) (*wire.MsgBlock, *wire.MsgTx, *wire.MsgTx) {
 	t.Helper()
-	utxo, err := f.keeper.Utxoes.Get(f.ctx, fmt.Sprintf("%s-0", txid))
-	require.NoError(t, err)
-	return utxo.EntitledAmount
-}
-
-func authTestLastProcessed(t *testing.T, f *fixture) uint64 {
-	t.Helper()
-	h, err := f.keeper.GetLastProcessedBlock(f.ctx)
-	require.NoError(t, err)
-	return h
+	coinbase := c.coinbase(312_500_000)
+	spend := spendTx([]wire.OutPoint{outpoint(t, authTestInput, 0)}, p2pkhOut(t, 90_000))
+	return c.nextBlock(coinbase, spend), coinbase, spend
 }
 
 // The signer constant must be the hash-derived address, not one anyone holds a key for.
 func TestEBifrostSignerAddressIsHashDerived(t *testing.T) {
+	initFixture(t) // sets the qbtc address prefix
 	require.Equal(t, sdk.AccAddress(crypto.AddressHash([]byte("ebifrost_signer"))).String(), types.EBifrostSignerAddress)
 }
 
 func TestSetMsgReportBlock_RejectsOtherSigner(t *testing.T) {
-	f := setupAuthTest(t)
-	msg := attestedBlockMsg(t, f, authTestBlock(), authTestHeight, authTestBlockHash(authTestHeight))
+	f, c := setupAuthTest(t)
+	block, _, _ := authTestBlock(t, c)
+	msg := attestedBlockMsg(t, f, c.height+1, block)
 	signer, err := f.GetRandomQbtcAddress()
 	require.NoError(t, err)
 	msg.Signer = signer
 
-	_, err = keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, msg)
-	require.ErrorContains(t, err, "injection path")
-	require.Zero(t, authTestLastProcessed(t, f))
+	require.ErrorContains(t, submitBlockMsg(f, msg), "injection path")
+	require.Equal(t, uint64(800000), getLastProcessed(t, f))
 }
 
-// Attested content must not apply at any height other than its own.
-func TestSetMsgReportBlock_RejectsContentAtAnotherHeight(t *testing.T) {
-	f := setupAuthTest(t)
-	server := keeper.NewMsgServerImpl(f.keeper)
-	_, err := server.SetMsgReportBlock(f.ctx, attestedBlockMsg(t, f, authTestBlock(), authTestHeight, authTestBlockHash(authTestHeight)))
-	require.NoError(t, err)
-	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, authTestCoinbase, 0, nil))
+// An accepted block cannot be applied again at the next height: it does not
+// link to the new tip.
+func TestSetMsgReportBlock_RejectsBlockAtAnotherHeight(t *testing.T) {
+	f, c := setupAuthTest(t)
+	block, coinbase, spend := authTestBlock(t, c)
+	c.mustSubmit(block)
+	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil))
 
-	for name, hash := range map[string]string{
-		"original hash": authTestBlockHash(authTestHeight),
-		"next hash":     authTestBlockHash(authTestHeight + 1),
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := server.SetMsgReportBlock(f.ctx, attestedBlockMsg(t, f, authTestBlock(), authTestHeight+1, hash))
-			require.ErrorContains(t, err, "does not match")
-			require.Equal(t, uint64(authTestHeight), authTestLastProcessed(t, f))
-			require.Zero(t, authTestEntitlement(t, f, authTestCoinbase), "claimed coinbase must stay claimed")
-			require.Equal(t, uint64(90_000), authTestEntitlement(t, f, authTestSpend), "unspent output must keep its entitlement")
-		})
-	}
+	err := submitBlockMsg(f, attestedBlockMsg(t, f, c.height+1, block))
+	require.ErrorContains(t, err, "not on the last processed block")
+	require.Equal(t, uint64(800001), getLastProcessed(t, f))
+	require.Zero(t, getTestEntitlement(t, f, coinbase.TxHash().String(), 0), "claimed coinbase must stay claimed")
+	require.Equal(t, uint64(90_000), getTestEntitlement(t, f, spend.TxHash().String(), 0), "unspent output must keep its entitlement")
 }
 
 func TestSetMsgReportBlock_RejectsHashMismatch(t *testing.T) {
-	f := setupAuthTest(t)
-	msg := attestedBlockMsg(t, f, authTestBlock(), authTestHeight, authTestBlockHash(authTestHeight+7))
-	_, err := keeper.NewMsgServerImpl(f.keeper).SetMsgReportBlock(f.ctx, msg)
-	require.ErrorContains(t, err, "does not match")
-	require.Zero(t, authTestLastProcessed(t, f))
+	f, c := setupAuthTest(t)
+	block, _, _ := authTestBlock(t, c)
+	msg := attestedBlockMsg(t, f, c.height+1, block)
+	msg.Hash = c.tip.BlockHash().String()
+
+	require.ErrorContains(t, submitBlockMsg(f, msg), "does not match block hash")
+	require.Equal(t, uint64(800000), getLastProcessed(t, f))
 }
 
 func TestSetMsgReportBlock_RejectsHeightThatIsNotNext(t *testing.T) {
-	f := setupAuthTest(t)
-	server := keeper.NewMsgServerImpl(f.keeper)
-	_, err := server.SetMsgReportBlock(f.ctx, attestedBlockMsg(t, f, authTestBlock(), authTestHeight, authTestBlockHash(authTestHeight)))
-	require.NoError(t, err)
-
-	block := authTestBlock()
-	block.Height = authTestHeight + 2
-	block.Hash = authTestBlockHash(authTestHeight + 2)
-	_, err = server.SetMsgReportBlock(f.ctx, attestedBlockMsg(t, f, block, authTestHeight+2, block.Hash))
-	require.ErrorContains(t, err, "not the next block height")
-	require.Equal(t, uint64(authTestHeight), authTestLastProcessed(t, f))
+	f, c := setupAuthTest(t)
+	block, _, _ := authTestBlock(t, c)
+	require.ErrorContains(t, submitBlockMsg(f, attestedBlockMsg(t, f, c.height+2, block)), "not the next block height")
+	require.Equal(t, uint64(800000), getLastProcessed(t, f))
 }
 
 // Processing the same outputs twice must fail instead of overwriting UTXOs.
 func TestSetMsgReportBlock_DoesNotOverwriteUTXOs(t *testing.T) {
-	f := setupAuthTest(t)
-	server := keeper.NewMsgServerImpl(f.keeper)
-	msg := attestedBlockMsg(t, f, authTestBlock(), authTestHeight, authTestBlockHash(authTestHeight))
-	_, err := server.SetMsgReportBlock(f.ctx, msg)
-	require.NoError(t, err)
-	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, authTestCoinbase, 0, nil))
+	f, c := setupAuthTest(t)
+	anchor := c.tip
+	block, coinbase, spend := authTestBlock(t, c)
+	c.mustSubmit(block)
+	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil))
 
-	// Rewind the height so the same block passes the height check again.
-	require.NoError(t, f.keeper.LastProcessedBlock.Set(f.ctx, authTestHeight-1))
-	_, err = server.SetMsgReportBlock(f.ctx, msg)
+	// Rewind the tip so the same block passes the height and link checks again.
+	setBtcAnchor(t, f, 800000, &anchor)
+	err := submitBlockMsg(f, attestedBlockMsg(t, f, 800001, block))
 	require.ErrorContains(t, err, "already exists")
-	require.Zero(t, authTestEntitlement(t, f, authTestCoinbase))
-	require.Equal(t, uint64(90_000), authTestEntitlement(t, f, authTestSpend))
+	require.Zero(t, getTestEntitlement(t, f, coinbase.TxHash().String(), 0))
+	require.Equal(t, uint64(90_000), getTestEntitlement(t, f, spend.TxHash().String(), 0))
+}
+
+// Each rule the chain checks on a reported block, through the block handler.
+func TestSetMsgReportBlock_VerifiesBlock(t *testing.T) {
+	cases := []struct {
+		name    string
+		modify  func(t *testing.T, c *regtestChain) *types.MsgBtcBlock
+		wantErr string
+	}{
+		{
+			name: "not linked to the tip",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				block := c.nextBlock(c.coinbase())
+				block.Header.PrevBlock = chainhash.Hash{1}
+				mineHeader(t, &block.Header, c.params)
+				return attestedBlockMsg(t, c.f, c.height+1, block)
+			},
+			wantErr: "not on the last processed block",
+		},
+		{
+			name: "proof of work not met",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				block := c.nextBlock(c.coinbase())
+				for block.Header.Nonce = 0; ; block.Header.Nonce++ {
+					hash := block.Header.BlockHash()
+					if hash[31] >= 0x80 { // above the regtest target 0x7fff...
+						break
+					}
+				}
+				return attestedBlockMsg(t, c.f, c.height+1, block)
+			},
+			wantErr: "does not meet its proof-of-work target",
+		},
+		{
+			name: "wrong difficulty bits",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				block := c.nextBlock(c.coinbase())
+				block.Header.Bits = 0x1d00ffff
+				return attestedBlockMsg(t, c.f, c.height+1, block)
+			},
+			wantErr: "difficulty bits",
+		},
+		{
+			name: "transactions not in the merkle root",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				block := c.nextBlock(c.coinbase())
+				require.NoError(t, block.AddTransaction(spendTx([]wire.OutPoint{outpoint(t, authTestInput, 0)}, p2pkhOut(t, 90_000))))
+				return attestedBlockMsg(t, c.f, c.height+1, block)
+			},
+			wantErr: "merkle root",
+		},
+		{
+			name: "no coinbase",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				return attestedBlockMsg(t, c.f, c.height+1, c.nextBlock(spendTx([]wire.OutPoint{outpoint(t, authTestInput, 0)}, p2pkhOut(t, 90_000))))
+			},
+			wantErr: "does not start with a coinbase",
+		},
+		{
+			name: "second coinbase",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				second := c.coinbase(1)
+				second.TxIn[0].SignatureScript = append(second.TxIn[0].SignatureScript, 0x01)
+				return attestedBlockMsg(t, c.f, c.height+1, c.nextBlock(c.coinbase(), second))
+			},
+			wantErr: "second coinbase",
+		},
+		{
+			name: "repeated transaction",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				spend := spendTx([]wire.OutPoint{outpoint(t, authTestInput, 0)}, p2pkhOut(t, 90_000))
+				return attestedBlockMsg(t, c.f, c.height+1, c.nextBlock(c.coinbase(), spend, spend))
+			},
+			wantErr: "repeats transaction",
+		},
+		{
+			name: "transaction not in canonical encoding",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				block := c.nextBlock(c.coinbase())
+				commit, err := types.NewBtcBlockCommit(block)
+				require.NoError(t, err)
+				commit.Txs[0] = append(commit.Txs[0], 0x00)
+				signBytes, content, err := types.EncodeBtcBlockCommit(commit)
+				require.NoError(t, err)
+				msg := attestedBlockMsg(t, c.f, c.height+1, block)
+				msg.BlockContent = content
+				msg.Attestations[0].Signature, err = c.f.privateKey.Sign(signBytes)
+				require.NoError(t, err)
+				return msg
+			},
+			wantErr: "canonical",
+		},
+		{
+			name: "attestation over other bytes",
+			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				msg := attestedBlockMsg(t, c.f, c.height+1, c.nextBlock(c.coinbase()))
+				var err error
+				msg.Attestations[0].Signature, err = c.f.privateKey.Sign(msg.BlockContent)
+				require.NoError(t, err)
+				return msg
+			},
+			wantErr: "insufficient attestation power",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(st *testing.T) {
+			f, c := setupAuthTest(st)
+			require.ErrorContains(st, submitBlockMsg(f, tc.modify(st, c)), tc.wantErr)
+			require.Equal(st, uint64(800000), getLastProcessed(st, f))
+		})
+	}
+}
+
+func TestSetMsgReportBlock_RequiresAnchor(t *testing.T) {
+	f := initFixture(t)
+	block, height := loadMainnetBlock(t, "../../../testdata/block/300003.json")
+	require.NoError(t, f.keeper.LastProcessedBlock.Set(f.ctx, height-1))
+	require.ErrorContains(t, submitBlockMsg(f, attestedBlockMsg(t, f, height, block)), "no Bitcoin anchor")
+}
+
+// On mainnet (BIP34) the coinbase must encode the block's height, which binds
+// the height to the header chain.
+func TestSetMsgReportBlock_CoinbaseHeight(t *testing.T) {
+	f := initFixture(t)
+	block, height := loadMainnetBlock(t, "../../../testdata/block/300003.json")
+	// claim the block is one lower than it is
+	setBtcAnchor(t, f, height-2, mainnetHeader(t, mainnetHeader300002))
+	err := submitBlockMsg(f, attestedBlockMsg(t, f, height-1, block))
+	require.ErrorContains(t, err, "coinbase encodes height 300003, not 300002")
+}
+
+// At a difficulty period boundary the block's timestamp becomes the period start.
+func TestSetMsgReportBlock_PeriodStartAtBoundary(t *testing.T) {
+	f := initFixture(t)
+	c := newRegtestChain(t, f, 2*2016-1)
+	block := c.nextBlock(c.coinbase())
+	c.mustSubmit(block)
+	start, err := f.keeper.BtcPeriodStartTime.Get(f.ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(block.Header.Timestamp.Unix()), start)
+
+	next := c.nextBlock(c.coinbase())
+	c.mustSubmit(next)
+	start, err = f.keeper.BtcPeriodStartTime.Get(f.ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(block.Header.Timestamp.Unix()), start, "unchanged inside a period")
 }

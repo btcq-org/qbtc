@@ -1,15 +1,13 @@
 package qbtc
 
 import (
-	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/btcsuite/btcd/btcjson"
-	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/cometbft/cometbft/privval"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	clitestutil "github.com/cosmos/cosmos-sdk/testutil/cli"
@@ -30,38 +28,28 @@ func (s *E2ETestSuite) TestMsgBtcBlockViaAuthzExecRejected() {
 	before, err := q.LastProcessedBlock(context.Background(), &types.QueryLastProcessedBlockRequest{})
 	s.Require().NoError(err)
 
-	const (
-		height   = 900000
-		coinbase = "cbcb000000000000000000000000000000000000000000000000000000000001"
-	)
-	content, err := json.Marshal(btcjson.GetBlockVerboseTxResult{
-		Hash:   fmt.Sprintf("%064x", height),
-		Height: height,
-		Tx: []btcjson.TxRawResult{{
-			Txid: coinbase,
-			Vin:  []btcjson.Vin{{Coinbase: "03a0bb0d"}},
-			Vout: []btcjson.Vout{{
-				Value:        btcutil.Amount(312_500_000).ToBTC(),
-				N:            0,
-				ScriptPubKey: btcjson.ScriptPubKeyResult{Type: "pubkeyhash", Address: s.btcAddress},
-			}},
-		}},
-	})
+	const height = 900000
+	coinbase := wire.NewMsgTx(2)
+	coinbase.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{}, wire.MaxPrevOutIndex), []byte{0x03, 0xa0, 0xbb, 0x0d}, nil))
+	coinbase.AddTxOut(wire.NewTxOut(312_500_000, []byte{0x51}))
+	block := wire.NewMsgBlock(&wire.BlockHeader{Version: 4, Bits: 0x207fffff})
+	s.Require().NoError(block.AddTransaction(coinbase))
+	commit, err := types.NewBtcBlockCommit(block)
 	s.Require().NoError(err)
-	compressed, err := types.GzipDeterministic(content, gzip.BestCompression)
+	signBytes, content, err := types.EncodeBtcBlockCommit(commit)
 	s.Require().NoError(err)
 
 	// Attest with the only validator's consensus key, so the attestation check
 	// alone would accept the block.
 	cmtCfg := val.GetCtx().Config
 	pv := privval.LoadFilePV(cmtCfg.PrivValidatorKeyFile(), cmtCfg.PrivValidatorStateFile())
-	sig, err := pv.Key.PrivKey.Sign(compressed)
+	sig, err := pv.Key.PrivKey.Sign(signBytes)
 	s.Require().NoError(err)
 
 	msg := &types.MsgBtcBlock{
 		Height:       height,
-		Hash:         fmt.Sprintf("%064x", height),
-		BlockContent: compressed,
+		Hash:         block.BlockHash().String(),
+		BlockContent: content,
 		Attestations: []*types.Attestation{{
 			Address:   sdk.ConsAddress(pv.Key.PubKey.Address()).String(),
 			Signature: sig,
@@ -100,6 +88,6 @@ func (s *E2ETestSuite) TestMsgBtcBlockViaAuthzExecRejected() {
 	after, err := q.LastProcessedBlock(context.Background(), &types.QueryLastProcessedBlockRequest{})
 	s.Require().NoError(err)
 	s.Require().Equal(before.Height, after.Height)
-	_, err = q.UTXO(context.Background(), &types.QueryUTXORequest{Txid: coinbase, Vout: 0})
+	_, err = q.UTXO(context.Background(), &types.QueryUTXORequest{Txid: coinbase.TxHash().String(), Vout: 0})
 	s.Require().Error(err, "the block's coinbase output must not exist")
 }

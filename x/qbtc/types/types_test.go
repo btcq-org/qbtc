@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
 	"testing"
 )
 
@@ -32,69 +33,17 @@ func TestGzipDeterministic_SameOutputAndRoundTrip(t *testing.T) {
 			}
 
 			// Round-trip decompress
-			out, err := GzipUnzip(a)
+			r, err := gzip.NewReader(bytes.NewReader(a))
 			if err != nil {
-				t.Fatalf("GzipUnzip failed: %v", err)
+				t.Fatalf("gzip reader failed: %v", err)
+			}
+			out, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("gzip read failed: %v", err)
 			}
 			if !bytes.Equal(out, data) {
 				t.Fatalf("round-trip data mismatch: got %q want %q", out, data)
 			}
 		})
 	}
-}
-
-func TestGzipUnzip_ExceedsMaxDecompressedSize(t *testing.T) {
-	// Create data larger than MaxDecompressedBlockSize
-	oversized := make([]byte, MaxDecompressedBlockSize+1)
-	for i := range oversized {
-		oversized[i] = 'A'
-	}
-
-	compressed, err := GzipDeterministic(oversized, gzip.BestSpeed)
-	if err != nil {
-		t.Fatalf("failed to compress oversized data: %v", err)
-	}
-
-	_, err = GzipUnzip(compressed)
-	if err == nil {
-		t.Fatal("expected error when decompressed data exceeds MaxDecompressedBlockSize, got nil")
-	}
-
-	// Data exactly at the limit should succeed
-	exact := make([]byte, MaxDecompressedBlockSize)
-	for i := range exact {
-		exact[i] = 'B'
-	}
-
-	compressedExact, err := GzipDeterministic(exact, gzip.BestSpeed)
-	if err != nil {
-		t.Fatalf("failed to compress exact-size data: %v", err)
-	}
-
-	out, err := GzipUnzip(compressedExact)
-	if err != nil {
-		t.Fatalf("expected no error for data at limit, got: %v", err)
-	}
-	if len(out) != MaxDecompressedBlockSize {
-		t.Fatalf("expected output length %d, got %d", MaxDecompressedBlockSize, len(out))
-	}
-}
-
-func TestGzipUnzip_EmptyAndInvalid(t *testing.T) {
-	t.Run("empty_input", func(t *testing.T) {
-		out, err := GzipUnzip(nil)
-		if err != nil {
-			t.Fatalf("expected no error for empty input, got: %v", err)
-		}
-		if len(out) != 0 {
-			t.Fatalf("expected empty output for empty input, got length %d", len(out))
-		}
-	})
-
-	t.Run("invalid_input", func(t *testing.T) {
-		_, err := GzipUnzip([]byte("not a gzip stream"))
-		if err == nil {
-			t.Fatalf("expected error for invalid gzip data, got nil")
-		}
-	})
 }
