@@ -18,7 +18,7 @@ import (
 )
 
 // newAppOptions returns AppOptions with the home directory set and ebifrost
-// disabled since it is not needed for integration tests.
+// disabled since there is no Bitcoin node to read in integration tests.
 func newAppOptions(home string) simtestutil.AppOptionsMap {
 	return simtestutil.AppOptionsMap{
 		flags.FlagHome:    home,
@@ -36,8 +36,8 @@ func NewTestNetworkFixture(tmpDir string) network.TestFixture {
 	tmpApp := app.New(
 		log.NewNopLogger(),
 		dbm.NewMemDB(),
-		nil,   // traceStore
-		true,  // loadLatest
+		nil,  // traceStore
+		true, // loadLatest
 		newAppOptions(tmpDir),
 	)
 
@@ -46,8 +46,8 @@ func NewTestNetworkFixture(tmpDir string) network.TestFixture {
 			return app.New(
 				val.GetCtx().Logger,
 				dbm.NewMemDB(),
-				nil,   // traceStore
-				true,  // loadLatest
+				nil,  // traceStore
+				true, // loadLatest
 				newAppOptions(val.GetCtx().Config.RootDir),
 				baseapp.SetPruning(pruningtypes.NewPruningOptionsFromString(val.GetAppConfig().Pruning)),
 				baseapp.SetMinGasPrices(val.GetAppConfig().MinGasPrices),

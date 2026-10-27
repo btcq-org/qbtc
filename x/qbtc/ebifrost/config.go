@@ -11,38 +11,92 @@ import (
 )
 
 const (
-	flagEnabled      = "ebifrost.enable"
-	flagAddress      = "ebifrost.address"
-	flagCacheItemTTL = "ebifrost.cache_item_ttl"
+	flagEnabled           = "ebifrost.enable"
+	flagBitcoinHost       = "ebifrost.bitcoin_host"
+	flagBitcoinPort       = "ebifrost.bitcoin_port"
+	flagBitcoinRPCUser    = "ebifrost.bitcoin_rpc_user"
+	flagBitcoinRPCPass    = "ebifrost.bitcoin_rpc_password"
+	flagConfirmationDepth = "ebifrost.confirmation_depth"
+	flagPollInterval      = "ebifrost.poll_interval"
+	flagMaxCachedBlocks   = "ebifrost.max_cached_blocks"
+	flagRPCTimeout        = "ebifrost.rpc_timeout"
 )
 
+// EBifrostConfig configures the in-node Bitcoin reader.
 type EBifrostConfig struct {
-	Enable       bool          `json:"enable"`
-	Address      string        `json:"address"`
-	CacheItemTTL time.Duration `json:"cache_item_ttl"`
+	Enable             bool          `mapstructure:"enable" json:"enable"`
+	BitcoinHost        string        `mapstructure:"bitcoin_host" json:"bitcoin_host"`
+	BitcoinPort        int64         `mapstructure:"bitcoin_port" json:"bitcoin_port"`
+	BitcoinRPCUser     string        `mapstructure:"bitcoin_rpc_user" json:"bitcoin_rpc_user"`
+	BitcoinRPCPassword string        `mapstructure:"bitcoin_rpc_password" json:"bitcoin_rpc_password"`
+	ConfirmationDepth  uint64        `mapstructure:"confirmation_depth" json:"confirmation_depth"`
+	PollInterval       time.Duration `mapstructure:"poll_interval" json:"poll_interval"`
+	MaxCachedBlocks    int           `mapstructure:"max_cached_blocks" json:"max_cached_blocks"`
+	RPCTimeout         time.Duration `mapstructure:"rpc_timeout" json:"rpc_timeout"`
 }
 
 func DefaultEBifrostConfig() EBifrostConfig {
 	return EBifrostConfig{
-		Enable:       true,
-		Address:      "localhost:50051",
-		CacheItemTTL: 30 * time.Minute,
+		Enable:            false,
+		BitcoinHost:       "localhost",
+		BitcoinPort:       8332,
+		ConfirmationDepth: 6,
+		PollInterval:      10 * time.Second,
+		MaxCachedBlocks:   16,
+		RPCTimeout:        30 * time.Second,
 	}
+}
+
+// Validate checks the settings the reader needs when it is enabled.
+func (c EBifrostConfig) Validate() error {
+	if !c.Enable {
+		return nil
+	}
+	if c.BitcoinHost == "" {
+		return fmt.Errorf("ebifrost.bitcoin_host is required")
+	}
+	if c.ConfirmationDepth == 0 {
+		return fmt.Errorf("ebifrost.confirmation_depth must be at least 1")
+	}
+	if c.PollInterval <= 0 {
+		return fmt.Errorf("ebifrost.poll_interval must be positive")
+	}
+	if c.MaxCachedBlocks < 1 {
+		return fmt.Errorf("ebifrost.max_cached_blocks must be at least 1")
+	}
+	return nil
 }
 
 // ConfigTemplate toml snippet for app.toml
 func ConfigTemplate(c EBifrostConfig) string {
 	return fmt.Sprintf(`
 [ebifrost]
-# Whether the local enshrined bifrost GRPC listener is enabled
-enabled = %t
+# Whether this node reads Bitcoin blocks and attests them in its vote extensions.
+# Validators must enable it and point it at a Bitcoin Core node they trust.
+enable = %t
 
-# Listen address of the enshrined bifrost GRPC listener
-address = "%s"
+# Bitcoin Core RPC host and port
+bitcoin_host = %q
+bitcoin_port = %d
 
-# Cache item TTL
-cache_item_ttl = "%s"
-`, c.Enable, c.Address, c.CacheItemTTL.String())
+# Bitcoin Core RPC credentials
+bitcoin_rpc_user = %q
+bitcoin_rpc_password = %q
+
+# Number of confirmations (the block itself counts as one) a Bitcoin block needs
+# before this node attests it
+confirmation_depth = %d
+
+# How often to poll the Bitcoin node
+poll_interval = "%s"
+
+# Maximum number of Bitcoin blocks to keep ahead of the chain
+max_cached_blocks = %d
+
+# Timeout of each Bitcoin RPC request
+rpc_timeout = "%s"
+`, c.Enable, c.BitcoinHost, c.BitcoinPort, c.BitcoinRPCUser, c.BitcoinRPCPassword,
+		c.ConfirmationDepth, c.PollInterval.String(), c.MaxCachedBlocks, c.RPCTimeout.String())
 }
 
 func DefaultConfigTemplate() string {
@@ -54,42 +108,66 @@ func DefaultConfigTemplate() string {
 // AddModuleInitFlags implements servertypes.ModuleInitFlags interface.
 func AddModuleInitFlags(startCmd *cobra.Command) {
 	defaults := DefaultEBifrostConfig()
-	startCmd.Flags().Bool(flagEnabled, defaults.Enable, "Enable the local enshrined bifrost GRPC listener")
-	startCmd.Flags().String(flagAddress, defaults.Address, "Listen address of the enshrined bifrost GRPC listener")
-	startCmd.Flags().Duration(flagCacheItemTTL, defaults.CacheItemTTL, "Cache item TTL for the enshrined bifrost inject cache")
+	startCmd.Flags().Bool(flagEnabled, defaults.Enable, "Read Bitcoin blocks and attest them in vote extensions")
+	startCmd.Flags().String(flagBitcoinHost, defaults.BitcoinHost, "Bitcoin Core RPC host")
+	startCmd.Flags().Int64(flagBitcoinPort, defaults.BitcoinPort, "Bitcoin Core RPC port")
+	startCmd.Flags().String(flagBitcoinRPCUser, defaults.BitcoinRPCUser, "Bitcoin Core RPC user")
+	startCmd.Flags().String(flagBitcoinRPCPass, defaults.BitcoinRPCPassword, "Bitcoin Core RPC password")
+	startCmd.Flags().Uint64(flagConfirmationDepth, defaults.ConfirmationDepth, "Confirmations a Bitcoin block needs before it is attested")
+	startCmd.Flags().Duration(flagPollInterval, defaults.PollInterval, "How often to poll the Bitcoin node")
+	startCmd.Flags().Int(flagMaxCachedBlocks, defaults.MaxCachedBlocks, "Maximum number of Bitcoin blocks to keep ahead of the chain")
+	startCmd.Flags().Duration(flagRPCTimeout, defaults.RPCTimeout, "Timeout of each Bitcoin RPC request")
 }
 
 // ReadEBifrostConfig reads the ebifrost specific configuration
 func ReadEBifrostConfig(opts servertypes.AppOptions) (EBifrostConfig, error) {
 	cfg := DefaultEBifrostConfig()
+	var err error
 
 	if v := opts.Get(flagEnabled); v != nil {
-		var err error
 		if cfg.Enable, err = cast.ToBoolE(v); err != nil {
-			return cfg, err
+			return cfg, fmt.Errorf("%s: %w", flagEnabled, err)
 		}
 	}
-
-	if v := opts.Get(flagAddress); v != nil {
-		var ok bool
-		if cfg.Address, ok = v.(string); !ok {
-			return cfg, fmt.Errorf("expected string for %s, got %T", flagAddress, v)
+	if v := opts.Get(flagBitcoinHost); v != nil {
+		if cfg.BitcoinHost, err = cast.ToStringE(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagBitcoinHost, err)
 		}
 	}
-
-	if v := opts.Get(flagCacheItemTTL); v != nil {
-		switch t := v.(type) {
-		case time.Duration:
-			cfg.CacheItemTTL = t
-		case string:
-			parsed, err := time.ParseDuration(t)
-			if err != nil {
-				return cfg, err
-			}
-			cfg.CacheItemTTL = parsed
-		default:
-			return cfg, fmt.Errorf("expected duration or string for %s, got %T", flagCacheItemTTL, v)
+	if v := opts.Get(flagBitcoinPort); v != nil {
+		if cfg.BitcoinPort, err = cast.ToInt64E(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagBitcoinPort, err)
 		}
 	}
-	return cfg, nil
+	if v := opts.Get(flagBitcoinRPCUser); v != nil {
+		if cfg.BitcoinRPCUser, err = cast.ToStringE(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagBitcoinRPCUser, err)
+		}
+	}
+	if v := opts.Get(flagBitcoinRPCPass); v != nil {
+		if cfg.BitcoinRPCPassword, err = cast.ToStringE(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagBitcoinRPCPass, err)
+		}
+	}
+	if v := opts.Get(flagConfirmationDepth); v != nil {
+		if cfg.ConfirmationDepth, err = cast.ToUint64E(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagConfirmationDepth, err)
+		}
+	}
+	if v := opts.Get(flagPollInterval); v != nil {
+		if cfg.PollInterval, err = cast.ToDurationE(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagPollInterval, err)
+		}
+	}
+	if v := opts.Get(flagMaxCachedBlocks); v != nil {
+		if cfg.MaxCachedBlocks, err = cast.ToIntE(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagMaxCachedBlocks, err)
+		}
+	}
+	if v := opts.Get(flagRPCTimeout); v != nil {
+		if cfg.RPCTimeout, err = cast.ToDurationE(v); err != nil {
+			return cfg, fmt.Errorf("%s: %w", flagRPCTimeout, err)
+		}
+	}
+	return cfg, cfg.Validate()
 }

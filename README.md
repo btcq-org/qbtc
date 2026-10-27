@@ -74,11 +74,10 @@ curl -sSL https://raw.githubusercontent.com/btcq-org/qbtc/main/scripts/install.s
 
 The script will guide you through:
 
-1. **Installing binaries** - Downloads `qbtcd` and `bifrost` to `/usr/local/bin`
+1. **Installing binaries** - Downloads `qbtcd` to `/usr/local/bin`
 2. **Cosmovisor setup** - Optional for managed upgrades
 3. **Node initialization** - Creates config directory and downloads genesis file
-4. **Bifrost configuration** - Creates config template for the enshrined service.
-5. **Systemd services** - Sets up services for automatic startup and management
+4. **Systemd service** - Sets up a service for automatic startup and management
 
 ### Manual Installation
 
@@ -96,20 +95,26 @@ QBTC_VERSION=1.0.7 bash -c "$(curl -sSL https://raw.githubusercontent.com/btcq-o
 
 After installation, configure your node:
 
-1. Edit bifrost config with your Bitcoin RPC credentials:
-   ```bash
-   vim ~/.bifrost/config.json
+1. Point qbtcd at your own Bitcoin node in the `[ebifrost]` section of `~/.qbtc/config/app.toml`:
+   ```toml
+   [ebifrost]
+   enable = true
+   bitcoin_host = "127.0.0.1"
+   bitcoin_port = 8332
+   bitcoin_rpc_user = "bitcoinrpc"
+   bitcoin_rpc_password = "securepassword"
+   confirmation_depth = 6
    ```
+   Each validator's qbtcd reads Bitcoin through this in-process reader and attests blocks in ABCI vote extensions. The next proposer injects blocks attested by more than 2/3 of the voting power, together with the signed votes as evidence.
 
-2. Start the services:
+2. Start the service:
    ```bash
    sudo systemctl start qbtcd
-   sudo systemctl start bifrost
    ```
 
 3. Check status:
    ```bash
-   sudo systemctl status qbtcd bifrost
+   sudo systemctl status qbtcd
    sudo journalctl -u qbtcd -f
    ```
 
@@ -122,12 +127,10 @@ After installation, configure your node:
 ```
 qbtc/
 ├── app/                    # Cosmos SDK application
-├── bifrost/               # P2P network service
 ├── bitcoin/               # Bitcoin indexer
 ├── cmd/
 │   ├── qbtcd/            # Main chain daemon
 │   ├── zkprover/         # ZK proof generation CLI
-│   ├── bifrost/          # Bifrost service
 │   └── tss-emulator/     # TSS signer emulator for testing
 ├── common/                # Shared types and utilities
 ├── constants/             # Chain constants

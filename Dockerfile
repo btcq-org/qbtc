@@ -21,7 +21,6 @@ FROM alpine:3.23
 WORKDIR /qbtc_data
 ENV HOME=/qbtc_data
 COPY --from=builder /src/app/build/qbtcd /usr/bin/qbtcd
-COPY --from=builder /src/app/build/bifrost /usr/bin/bifrost
 RUN apk add -U --no-cache ca-certificates
 
 CMD ["qbtcd", "start", "--home", "/qbtc_data/.qbtc"]

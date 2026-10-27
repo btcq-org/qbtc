@@ -5,7 +5,6 @@ import "amino/amino.proto";
 import "cosmos/base/query/v1beta1/pagination.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
-import "qbtc/qbtc/v1/query_peer_address.proto";
 import "qbtc/qbtc/v1/query_params.proto";
 import "qbtc/qbtc/v1/query_last_processed.proto";
 import "qbtc/qbtc/v1/query_utxo.proto";
@@ -13,16 +12,6 @@ option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // Query defines the gRPC querier service.
 service Query {
-  // NodePeerAddress returns the peer address of the node.
-  rpc NodePeerAddress(QueryNodePeerAddressRequest)
-      returns (QueryNodePeerAddressResponse) {
-    option (google.api.http).get = "/qbtc/v1/node_peer_address/{address}";
-  }
-  // AllNodePeerAddresses returns all the peer addresses of the nodes.
-  rpc AllNodePeerAddresses(QueryAllNodePeerAddressesRequest)
-      returns (QueryAllNodePeerAddressesResponse) {
-    option (google.api.http).get = "/qbtc/v1/node_peer_addresses";
-  }
   rpc LastProcessedBlock(QueryLastProcessedBlockRequest)
       returns (QueryLastProcessedBlockResponse) {
     option (google.api.http).get = "/qbtc/v1/last_processed_block";

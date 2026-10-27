@@ -6,6 +6,7 @@ import (
 	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
+	"cosmossdk.io/collections"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
@@ -218,6 +219,8 @@ func New(
 	)
 	app.SetPrepareProposal(eBifrostProposalHandler.PrepareProposal)
 	app.SetProcessProposal(eBifrostProposalHandler.ProcessProposal)
+	app.SetExtendVoteHandler(eBifrostProposalHandler.ExtendVote)
+	app.SetVerifyVoteExtensionHandler(eBifrostProposalHandler.VerifyVoteExtension)
 
 	/****  Module Options ****/
 
@@ -302,12 +305,32 @@ func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig
 // RegisterNodeService registers the node services for the application.
 func (app *App) RegisterNodeService(ctx client.Context, config config.Config) {
 	app.App.RegisterNodeService(ctx, config)
-	if err := app.EnshrinedBifrost.Start(); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
-		panic(fmt.Errorf("failed to start bifrost service: %w", err))
+	if err := app.EnshrinedBifrost.Start(app.lastProcessedBtcBlock); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
+		panic(fmt.Errorf("failed to start the bitcoin reader: %w", err))
 	}
 }
 
-// Close stops enshrined bifrost and closes the application.
+// lastProcessedBtcBlock returns the last Bitcoin height processed in the latest
+// committed state, for the Bitcoin reader.
+func (app *App) lastProcessedBtcBlock() (uint64, error) {
+	if app.LastBlockHeight() == 0 {
+		// no committed state yet
+		return 0, ebifrost.ErrNoBtcAnchor
+	}
+	ctx, err := app.CreateQueryContext(0, false)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := app.QbtcKeeper.BtcTipHeader.Get(ctx); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return 0, ebifrost.ErrNoBtcAnchor
+		}
+		return 0, err
+	}
+	return app.QbtcKeeper.GetLastProcessedBlock(ctx)
+}
+
+// Close stops the Bitcoin reader and closes the application.
 func (app *App) Close() error {
 	app.EnshrinedBifrost.Stop()
 	return app.App.Close()

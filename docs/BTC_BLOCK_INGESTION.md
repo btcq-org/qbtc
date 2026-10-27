@@ -4,17 +4,21 @@ How qbtc learns about Bitcoin blocks, what the chain checks, and what it trusts 
 
 ## Flow
 
-1. Each validator's bifrost waits until a Bitcoin block has `confirmation_depth` confirmations (default 6), fetches it from its own Bitcoin node with `getblock <hash> 0`, and builds a `BtcBlockCommit`: the 80-byte header and every transaction in block order, each in Bitcoin's serialization **without witness data**.
-2. It signs the commit's proto encoding with its consensus key and gossips the signature with the gzip-compressed commit.
-3. Bifrost groups attestations by block hash, height and the hash of the uncompressed commit. Once validators with more than 2/3 of the bonded power have signed the same commit, it hands the block to the validator node.
-4. The block proposer injects the block as a `MsgBtcBlock`, which only the injection path can submit (`types.EBifrostSignerAddress`).
+1. Each validator's qbtcd runs a Bitcoin reader (`x/qbtc/ebifrost`, enabled by `[ebifrost] enable = true` in `app.toml`). It reads the last processed Bitcoin height from committed state and fetches the following blocks from its own Bitcoin node with `getblock <hash> 0`, once they have `confirmation_depth` confirmations (default 6, the block itself counts as one). It checks each block locally (block hash, merkle root), builds a `BtcBlockCommit` (the 80-byte header and every transaction in block order, each in Bitcoin's serialization **without witness data**) and caches up to `max_cached_blocks`. Cached heights that are processed, or whose hash changed on the node, are dropped. Only the reader calls the Bitcoin node; consensus code reads the cache.
+2. In `ExtendVote`, a validator lists its cached blocks, consecutive from the next unprocessed height and at most 8 (`MaxBtcBlockVotes`), as `(height, hash, sha256(uncompressed commit))`. `VerifyVoteExtension` checks the format only (at most 2048 bytes, at most 8 votes, no repeated height, a 32-byte commit hash, a 64-character lowercase hex hash) and never depends on the local Bitcoin node.
+3. In `PrepareProposal`, the proposer tallies the previous height's extended commit. For consecutive heights from the next unprocessed one, it includes a block when validators with more than 2/3 of the commit's power voted for one `(hash, commit hash)` and the proposer holds a matching commit. It stops at the first height that fails, or when the next block would exceed half of `MaxTxBytes`.
+4. The proposer injects one `MsgBtcBlock` carrying all the included blocks and the marshaled `ExtendedCommitInfo` once. Only the injection path can submit it (`types.EBifrostSignerAddress`). With no qualifying block, nothing is injected.
+
+Vote extensions are active for a block when `vote_extensions_enable_height` (consensus parameter `abci`) is not 0 and the block's height is greater than it, because a proposal uses the previous height's extensions. Before that, no `MsgBtcBlock` is accepted.
 
 ## What the chain checks
 
-The block handler (`x/qbtc/keeper/handler_msg_report_block.go`, `btc_block.go`) accepts a block only if:
+`ProcessProposal` rejects a proposal if a `MsgBtcBlock` is outside an injected transaction, if it holds more than one `MsgBtcBlock`, if vote extensions are not active, or if the vote evidence below is invalid. The handler (`x/qbtc/keeper/handler_msg_report_block.go`, `btc_block.go`) repeats these checks in `FinalizeBlock`. The message is atomic: one failing block fails all of it.
 
-- The signer is the injection signer, and the height is the last processed height + 1.
-- Validators with more than 2/3 of the bonded power signed the uncompressed commit.
+- The signer is the injection signer, and vote extensions are active.
+- The extended commit is valid for this block's last commit (`baseapp.ValidateVoteExtensions`): same round, validators and powers, every extension signature valid, and signed votes carry more than 2/3 of the power.
+- For each block, validators with more than 2/3 of the commit's power voted for exactly its hash and the sha256 of its uncompressed commit. A validator counts once per height, and only commit votes with a decodable extension count.
+- Heights run consecutively from the last processed height + 1.
 - Every transaction is in canonical serialization without witness data. The chain recomputes each txid (the double SHA-256 of those bytes), so transaction contents are not taken on trust.
 - The first transaction, and only the first, is a coinbase. No txid repeats (CVE-2012-2459), and the merkle root of the txids equals the header's.
 - The header hashes to the reported block hash and links to the stored tip (`prev_block`).
@@ -38,10 +42,10 @@ Without an anchor, no Bitcoin block is accepted. The chain applies Bitcoin mainn
 ## Trust model
 
 - The chain proves that a block is part of a chain of headers with real proof of work at the right difficulty, starting from the genesis anchor, and that the transactions it applies are exactly that block's.
-- The validators still choose which branch to follow. More than 2/3 of the power could attest to a valid block that later leaves the best chain (for example a block they mined privately with real work), but they cannot invent transactions or outputs.
+- The validators still choose which branch to follow. More than 2/3 of the power could vote for to a valid block that later leaves the best chain (for example a block they mined privately with real work), but they cannot invent transactions or outputs.
 - There is no reorg handling. A processed block is final. If Bitcoin reorgs deeper than `confirmation_depth`, the next block does not link to the stored tip and ingestion stops until the chain is rolled back by an upgrade. Six confirmations make this very unlikely.
 - A single Bitcoin block larger than half of qbtc's block space cannot be injected, which stops ingestion at that block (#164).
 
 ## Size
 
-For block 923828 (1,391 transactions), the commit is 369 KB uncompressed and 268 KB gzipped, against 4.3 MB (1.2 MB gzipped) for the `getblock` JSON that validators signed before.
+For block 923828 (1,391 transactions), the commit is 369 KB uncompressed and 268 KB gzipped, against 4.3 MB (1.2 MB gzipped) for the `getblock` JSON used before.

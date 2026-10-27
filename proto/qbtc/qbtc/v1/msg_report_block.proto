@@ -11,11 +11,6 @@ option (gogoproto.goproto_getters_all) = false;
 option (gogoproto.goproto_stringer_all) = true;
 option (gogoproto.stringer_all) = false;
 
-message Attestation {
-  string address = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
-  bytes signature = 2;
-}
-
 // BtcBlockCommit is the Bitcoin block content that validators attest to.
 // The chain recomputes every txid from txs, checks the merkle root against
 // the header, and checks the header's proof of work, difficulty and link to
@@ -28,20 +23,31 @@ message BtcBlockCommit {
   repeated bytes txs = 2;
 }
 
+// BtcBlock is one Bitcoin block carried in MsgBtcBlock.
+message BtcBlock {
+  // The height of the Bitcoin block
+  uint64 height = 1;
+
+  // The hash of the Bitcoin block, in the usual (byte-reversed) hex
+  string hash = 2;
+
+  // The gzip-compressed proto encoding of the block's BtcBlockCommit.
+  // Validators attest to the SHA-256 of the uncompressed encoding.
+  bytes block_content = 3;
+}
+
+// MsgBtcBlock carries consecutive Bitcoin blocks, from the next unprocessed
+// height, that validators with more than 2/3 of the voting power attested in
+// the vote extensions of the previous block.
 message MsgBtcBlock {
   option (cosmos.msg.v1.signer) = "signer";
   option (amino.name) = "btcq/MsgBtcBlock";
 
-  // The height of the reported Bitcoin block
-  uint64 height = 1;
+  repeated BtcBlock blocks = 1;
 
-  // The hash of the reported Bitcoin block, in the usual (byte-reversed) hex
-  string hash = 2;
+  // The abci.ExtendedCommitInfo of the previous block, proto-encoded. It holds
+  // the signed vote extensions that prove the attestations.
+  bytes extended_commit_info = 2;
 
-  // The gzip-compressed proto encoding of the block's BtcBlockCommit.
-  // Attestations sign the uncompressed encoding.
-  bytes block_content = 3;
-
-  repeated Attestation attestations = 4;
-  string signer = 5 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
+  string signer = 3 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
 }

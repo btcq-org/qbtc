@@ -14,13 +14,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/btcq-org/qbtc/bifrost/keystore"
-	"github.com/btcq-org/qbtc/bifrost/p2p"
 	"github.com/btcq-org/qbtc/bitcoin"
 	cmtconfig "github.com/cometbft/cometbft/config"
 	types "github.com/cometbft/cometbft/types"
 	tmtime "github.com/cometbft/cometbft/types/time"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -44,8 +41,6 @@ import (
 
 	runtime "github.com/cosmos/cosmos-sdk/runtime"
 
-	bifrostconfig "github.com/btcq-org/qbtc/bifrost/config"
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
@@ -57,14 +52,27 @@ var (
 	flagValidatorsStakeAmount = "validators-stake-amount"
 	flagStartingIPAddress     = "starting-ip-address"
 
-	// bifrost specific arguments
+	flagBtcInitialHeight           = "btc-initial-height"
+	flagVoteExtensionsEnableHeight = "vote-extensions-enable-height"
+	flagDockerImage                = "docker-image"
+	flagDockerNetwork              = "docker-network"
+
+	// deprecated alias of flagBtcInitialHeight, kept so old command lines work
 	flagBifrostStartBlockHeight = "bifrost-start-block-height"
 
-	// bitcoin specific arguments
-	flagBitcoinRPCHost     = "bitcoin-rpc-host"
-	flagBitcoinRPCPort     = "bitcoin-rpc-port"
-	flagBitcoinRPCUser     = "bitcoin-rpc-user"
-	flagBitcoinRPCPassword = "bitcoin-rpc-password"
+	// bitcoin specific arguments. The first four describe the Bitcoin node the
+	// generator itself reads the genesis anchor from; the node-* ones describe
+	// what every validator's [ebifrost] section points at (defaults: the same).
+	flagBitcoinRPCHost         = "bitcoin-rpc-host"
+	flagBitcoinRPCPort         = "bitcoin-rpc-port"
+	flagBitcoinRPCUser         = "bitcoin-rpc-user"
+	flagBitcoinRPCPassword     = "bitcoin-rpc-password"
+	flagNodeBitcoinRPCHost     = "node-bitcoin-rpc-host"
+	flagNodeBitcoinRPCPort     = "node-bitcoin-rpc-port"
+	flagNodeBitcoinRPCPortStep = "node-bitcoin-rpc-port-step"
+	flagConfirmationDepth      = "confirmation-depth"
+	flagPollInterval           = "poll-interval"
+	flagMaxCachedBlocks        = "max-cached-blocks"
 )
 
 const nodeDirPerm = 0o755
@@ -81,14 +89,28 @@ type initArgs struct {
 	validatorsStakesAmount map[int]sdk.Coin
 	ports                  map[int]string
 
-	// bifrost specific arguments
-	bifrostStartBlockHeight int64
+	// btcInitialHeight is the first Bitcoin height the chain processes; the
+	// genesis anchor is the block before it.
+	btcInitialHeight int64
+	// voteExtensionsEnableHeight is consensus.params.abci.vote_extensions_enable_height.
+	voteExtensionsEnableHeight int64
+	dockerImage                string
+	dockerNetwork              string
 
-	// bitcoin specific arguments
+	// bitcoin node the generator reads the anchor from
 	bitcoinRPCHost     string
 	bitcoinRPCPort     int64
 	bitcoinRPCUser     string
 	bitcoinRPCPassword string
+
+	// bitcoin node written into each validator's [ebifrost] section; validator
+	// i uses nodeBitcoinRPCPort + i*nodeBitcoinRPCPortStep.
+	nodeBitcoinRPCHost     string
+	nodeBitcoinRPCPort     int64
+	nodeBitcoinRPCPortStep int64
+	confirmationDepth      int64
+	pollInterval           string
+	maxCachedBlocks        int64
 }
 
 // NewTestnetMultiNodeCmd returns a cmd to initialize all files for tendermint testnet and application
@@ -156,15 +178,41 @@ Example:
 				}
 			}
 
-			// bifrost
-			args.bifrostStartBlockHeight, _ = cmd.Flags().GetInt64(flagBifrostStartBlockHeight)
-			if args.bifrostStartBlockHeight == 0 {
-				return fmt.Errorf("bifrost start block height is required")
+			args.btcInitialHeight, _ = cmd.Flags().GetInt64(flagBtcInitialHeight)
+			if args.btcInitialHeight == 0 {
+				args.btcInitialHeight, _ = cmd.Flags().GetInt64(flagBifrostStartBlockHeight)
 			}
+			if args.btcInitialHeight <= 0 {
+				return fmt.Errorf("--%s is required", flagBtcInitialHeight)
+			}
+			args.voteExtensionsEnableHeight, _ = cmd.Flags().GetInt64(flagVoteExtensionsEnableHeight)
+			args.dockerImage, _ = cmd.Flags().GetString(flagDockerImage)
+			args.dockerNetwork, _ = cmd.Flags().GetString(flagDockerNetwork)
 			args.bitcoinRPCHost, _ = cmd.Flags().GetString(flagBitcoinRPCHost)
 			args.bitcoinRPCPort, _ = cmd.Flags().GetInt64(flagBitcoinRPCPort)
 			args.bitcoinRPCUser, _ = cmd.Flags().GetString(flagBitcoinRPCUser)
 			args.bitcoinRPCPassword, _ = cmd.Flags().GetString(flagBitcoinRPCPassword)
+			args.nodeBitcoinRPCHost, _ = cmd.Flags().GetString(flagNodeBitcoinRPCHost)
+			if args.nodeBitcoinRPCHost == "" {
+				args.nodeBitcoinRPCHost = args.bitcoinRPCHost
+			}
+			args.nodeBitcoinRPCPort, _ = cmd.Flags().GetInt64(flagNodeBitcoinRPCPort)
+			if args.nodeBitcoinRPCPort == 0 {
+				args.nodeBitcoinRPCPort = args.bitcoinRPCPort
+			}
+			args.nodeBitcoinRPCPortStep, _ = cmd.Flags().GetInt64(flagNodeBitcoinRPCPortStep)
+			args.confirmationDepth, _ = cmd.Flags().GetInt64(flagConfirmationDepth)
+			if args.confirmationDepth < 1 {
+				return fmt.Errorf("--%s must be at least 1", flagConfirmationDepth)
+			}
+			args.pollInterval, _ = cmd.Flags().GetString(flagPollInterval)
+			if _, err := time.ParseDuration(args.pollInterval); err != nil {
+				return fmt.Errorf("invalid --%s: %w", flagPollInterval, err)
+			}
+			args.maxCachedBlocks, _ = cmd.Flags().GetInt64(flagMaxCachedBlocks)
+			if args.maxCachedBlocks < 1 {
+				return fmt.Errorf("--%s must be at least 1", flagMaxCachedBlocks)
+			}
 
 			return initTestnetFiles(clientCtx, cmd, config, mbm, genBalIterator, args)
 		},
@@ -177,14 +225,24 @@ Example:
 	cmd.Flags().String(flagStartingIPAddress, "localhost", "Starting IP address (192.168.0.1 results in persistent peers list ID0@192.168.0.1:46656, ID1@192.168.0.2:46656, ...)")
 	cmd.Flags().String(flags.FlagKeyringBackend, "test", "Select keyring's backend (os|file|test)")
 
-	// bifrost specific arguments
-	cmd.Flags().Int64(flagBifrostStartBlockHeight, 0, "Start block height for bifrost")
+	cmd.Flags().Int64(flagBtcInitialHeight, 0, "First Bitcoin height the chain processes (genesis btc_initial_height); the anchor is the block before it")
+	cmd.Flags().Int64(flagBifrostStartBlockHeight, 0, "Deprecated alias of --"+flagBtcInitialHeight)
+	_ = cmd.Flags().MarkHidden(flagBifrostStartBlockHeight)
+	cmd.Flags().Int64(flagVoteExtensionsEnableHeight, 2, "consensus.params.abci.vote_extensions_enable_height written to genesis")
+	cmd.Flags().String(flagDockerImage, "btcq-org/qbtc:localnet", "Docker image used for every node in the generated docker-compose.yml")
+	cmd.Flags().String(flagDockerNetwork, "", "If set, the generated docker-compose.yml joins this pre-existing external Docker network instead of creating its own")
 
 	// bitcoin specific arguments
-	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host")
-	cmd.Flags().Int64(flagBitcoinRPCPort, 8332, "Bitcoin RPC port")
+	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host the generator reads the genesis anchor from (also the validators' default)")
+	cmd.Flags().Int64(flagBitcoinRPCPort, 8332, "Bitcoin RPC port the generator reads the genesis anchor from (also the validators' default)")
 	cmd.Flags().String(flagBitcoinRPCUser, "bitcoinrpc", "Bitcoin RPC user")
-	cmd.Flags().String(flagBitcoinRPCPassword, "", "Bitcoin RPC password (consider using BITCOIN_RPC_PASSWORD env var)")
+	cmd.Flags().String(flagBitcoinRPCPassword, "", "Bitcoin RPC password")
+	cmd.Flags().String(flagNodeBitcoinRPCHost, "", "Bitcoin RPC host written to each validator's [ebifrost] section (default: --"+flagBitcoinRPCHost+")")
+	cmd.Flags().Int64(flagNodeBitcoinRPCPort, 0, "Bitcoin RPC port of validator 0 (default: --"+flagBitcoinRPCPort+")")
+	cmd.Flags().Int64(flagNodeBitcoinRPCPortStep, 0, "Validator i uses Bitcoin RPC port --"+flagNodeBitcoinRPCPort+" + i*step")
+	cmd.Flags().Int64(flagConfirmationDepth, 6, "[ebifrost] confirmation_depth written to each validator's app.toml")
+	cmd.Flags().String(flagPollInterval, "10s", "[ebifrost] poll_interval written to each validator's app.toml")
+	cmd.Flags().Int64(flagMaxCachedBlocks, 16, "[ebifrost] max_cached_blocks written to each validator's app.toml")
 	return cmd
 }
 
@@ -205,11 +263,6 @@ func addTestnetFlagsToCmd(cmd *cobra.Command) {
 	})
 }
 
-type PeerInfo struct {
-	Validator   string
-	PeerAddress string
-}
-
 // initTestnetFiles initializes testnet files for a testnet to be run in a separate process
 func initTestnetFiles(
 	clientCtx client.Context,
@@ -225,12 +278,7 @@ func initTestnetFiles(
 	nodeIDs := make([]string, args.numValidators)
 	valPubKeys := make([]cryptotypes.PubKey, args.numValidators)
 
-	_, cfg := initAppConfig()
-	appConfig, ok := cfg.(CustomAppConfig)
-	if !ok {
-		return fmt.Errorf("failed to cast cfg to CustomAppConfig")
-	}
-
+	appConfig := *srvconfig.DefaultConfig()
 	appConfig.MinGasPrices = args.minGasPrices
 	if args.minGasPrices == "" {
 		appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
@@ -240,7 +288,6 @@ func initTestnetFiles(
 	appConfig.Telemetry.EnableHostnameLabel = false
 	appConfig.Telemetry.Enabled = false
 	appConfig.Telemetry.PrometheusRetentionTime = 0
-	appConfig.EBifrost.Address = ":50051"
 
 	var (
 		genAccounts     []authtypes.GenesisAccount
@@ -248,7 +295,6 @@ func initTestnetFiles(
 		genFiles        []string
 		persistentPeers string
 		gentxsFiles     []string
-		p2pPeers        []PeerInfo
 	)
 
 	inBuf := bufio.NewReader(cmd.InOrStdin())
@@ -256,13 +302,12 @@ func initTestnetFiles(
 	nodes := make([]ValidatorNode, args.numValidators)
 	for i := range nodes {
 		nodes[i] = ValidatorNode{
-			Name:              fmt.Sprintf("node_%d", i),
-			RPCPort:           args.ports[i],
-			Volume:            fmt.Sprintf("validator%d", i),
-			BifrostPort:       strconv.Itoa(30006 - 3*i),
-			BifrostHealthPort: strconv.Itoa(30007 - 3*i),
-			APIPort:           strconv.Itoa(1317 - i),
-			GRPCPort:          strconv.Itoa(9090 - 2*i),
+			Name:     fmt.Sprintf("node_%d", i),
+			RPCPort:  args.ports[i],
+			P2PPort:  strconv.Itoa(26656 - 3*i),
+			Volume:   fmt.Sprintf("validator%d", i),
+			APIPort:  strconv.Itoa(1317 - i),
+			GRPCPort: strconv.Itoa(9090 - 2*i),
 		}
 	}
 
@@ -279,31 +324,6 @@ func initTestnetFiles(
 		if err := os.MkdirAll(filepath.Join(nodeDir, "config"), nodeDirPerm); err != nil {
 			_ = os.RemoveAll(args.outputDir)
 			return err
-		}
-
-		bifrostHome := filepath.Join(nodeDir, "bifrost")
-		// Create bifrost home directory
-		err = ensureDir(bifrostHome)
-		if err != nil {
-			_ = os.RemoveAll(args.outputDir)
-			return err
-		}
-
-		kstore, err := keystore.NewFileKeyStore(bifrostHome)
-		if err != nil {
-			return err
-		}
-		p2pKey, err := keystore.GetOrCreateKey(kstore, "bifrost-p2p-key")
-		if err != nil {
-			return fmt.Errorf("failed to get or create p2p key, err: %w", err)
-		}
-		p2pPrivKey, err := crypto.UnmarshalPrivateKey(p2pKey.Body)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal p2p key, err: %w", err)
-		}
-		id, err := p2p.ID(p2pPrivKey)
-		if err != nil {
-			return fmt.Errorf("failed to get peer id, err: %w", err)
 		}
 
 		nodeIDs[i], valPubKeys[i], err = genutil.InitializeNodeValidatorFiles(nodeConfig)
@@ -338,12 +358,6 @@ func initTestnetFiles(
 			_ = os.RemoveAll(args.outputDir)
 			return err
 		}
-
-		peerInfo := PeerInfo{
-			Validator:   sdk.ValAddress(addr).String(),
-			PeerAddress: id.String(),
-		}
-		p2pPeers = append(p2pPeers, peerInfo)
 
 		info := map[string]string{"secret": secret}
 
@@ -415,26 +429,11 @@ func initTestnetFiles(
 
 		appConfig.GRPC.Address = "0.0.0.0:" + strconv.Itoa(9090-2*i)
 		appConfig.API.Address = "tcp://0.0.0.0:" + strconv.Itoa(1317-i)
-		appConfig.EBifrost.Address = ":50051"
 
-		// Regenerate the template with the updated config values
-		updatedTemplate := srvconfig.DefaultConfigTemplate + ebifrost.ConfigTemplate(appConfig.EBifrost)
-		srvconfig.SetConfigTemplate(updatedTemplate)
-		srvconfig.WriteConfigFile(filepath.Join(nodeDir, "config", "app.toml"), appConfig)
-
-		bitcoinDataHome := filepath.Join(nodeDir, "bitcoin_data")
-		// Create bitcoin data home directory
-		err = ensureDir(bitcoinDataHome)
-		if err != nil {
-			_ = os.RemoveAll(args.outputDir)
-			return err
-		}
-		if err := initBifrostFiles(args,
-			bifrostHome,
-			fmt.Sprintf("node_%d:50051", i),
-			fmt.Sprintf("node_%d:%d", i, 9090-2*i),
-			fmt.Sprintf("http://node_%d:26657", i),
-			"/qbtc_data/.qbtc/bitcoin_data"); err != nil {
+		srvconfig.SetConfigTemplate(srvconfig.DefaultConfigTemplate)
+		appTomlPath := filepath.Join(nodeDir, "config", "app.toml")
+		srvconfig.WriteConfigFile(appTomlPath, &appConfig)
+		if err := appendEBifrostConfig(appTomlPath, args, i); err != nil {
 			return err
 		}
 	}
@@ -443,7 +442,7 @@ func initTestnetFiles(
 	if err != nil {
 		return err
 	}
-	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, p2pPeers, anchor); err != nil {
+	if err := initGenFiles(clientCtx, mbm, args.chainID, genAccounts, genBalances, genFiles, args.numValidators, anchor); err != nil {
 		return err
 	}
 	// copy gentx file
@@ -473,7 +472,7 @@ func initTestnetFiles(
 		return err
 	}
 
-	def, err := docker(nodes, "localnet")
+	def, err := docker(nodes, args.dockerImage, args.dockerNetwork)
 	if err != nil {
 		return err
 	}
@@ -509,34 +508,44 @@ func writeFile(file, dir string, contents []byte) error {
 	return nil
 }
 
-func initBifrostFiles(args initArgs, outputDir, ebifrostAddress, nodeGRPCAddress, cometBFTRPCAddress, dataDir string) error {
-	bifrostConfig := bifrostconfig.DefaultConfig()
-	bifrostConfig.StartBlockHeight = args.bifrostStartBlockHeight
-	bifrostConfig.BitcoinConfig.Host = args.bitcoinRPCHost
-	bifrostConfig.BitcoinConfig.Port = args.bitcoinRPCPort
-	bifrostConfig.BitcoinConfig.RPCUser = args.bitcoinRPCUser
-	bifrostConfig.BitcoinConfig.Password = args.bitcoinRPCPassword
-	bifrostConfig.BitcoinConfig.LocalDBPath = filepath.Join(dataDir, "db")
+// appendEBifrostConfig appends the in-process Bitcoin reader's [ebifrost]
+// section to a validator's app.toml. Validator i reads Bitcoin from
+// nodeBitcoinRPCPort + i*nodeBitcoinRPCPortStep.
+func appendEBifrostConfig(appTomlPath string, args initArgs, i int) error {
+	port := args.nodeBitcoinRPCPort + int64(i)*args.nodeBitcoinRPCPortStep
+	section := fmt.Sprintf(`
+###############################################################################
+###                    Enshrined Bifrost (Bitcoin reader)                   ###
+###############################################################################
 
-	bifrostConfig.RootPath = "/qbtc_data/.qbtc/bifrost"
-	bifrostConfig.KeyName = "bifrost-p2p-key"
-	bifrostConfig.ListenAddr = "0.0.0.0:30006"
-	bifrostConfig.ExternalIP = ""
+[ebifrost]
+# Whether this validator reads Bitcoin and attests blocks in its vote extensions
+enable = true
 
-	bifrostConfig.QBTCHome = "/qbtc_data/.qbtc"
-	bifrostConfig.EbifrostAddress = ebifrostAddress
-	bifrostConfig.QBTCGRPCAddress = nodeGRPCAddress
-	bifrostConfig.CometBFTRPCAddress = cometBFTRPCAddress
+# Bitcoin node (JSON-RPC) this validator reads
+bitcoin_host = %q
+bitcoin_port = %d
+bitcoin_rpc_user = %q
+bitcoin_rpc_password = %q
 
-	bifrostConfigJSON, err := json.Marshal(bifrostConfig)
+# Confirmations (the block itself counts as one) before a block is attested
+confirmation_depth = %d
+poll_interval = %q
+max_cached_blocks = %d
+rpc_timeout = "30s"
+`, args.nodeBitcoinRPCHost, port, args.bitcoinRPCUser, args.bitcoinRPCPassword, args.confirmationDepth, args.pollInterval, args.maxCachedBlocks)
+
+	f, err := os.OpenFile(appTomlPath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
-	return writeFile(filepath.Join(outputDir, "config.json"), outputDir, bifrostConfigJSON)
+	defer f.Close()
+	_, err = f.WriteString(section)
+	return err
 }
 
 // btcAnchor is the Bitcoin block the chain starts after: the block at the
-// bifrost start height - 1, and the timestamp of its difficulty period's first
+// btc initial height - 1, and the timestamp of its difficulty period's first
 // block.
 type btcAnchor struct {
 	initialHeight   uint64
@@ -544,7 +553,7 @@ type btcAnchor struct {
 	periodStartTime uint32
 }
 
-// fetchBtcAnchor reads the anchor from the Bitcoin node bifrost will use.
+// fetchBtcAnchor reads the anchor from the Bitcoin node.
 func fetchBtcAnchor(args initArgs) (*btcAnchor, error) {
 	client, err := bitcoin.NewBtcClient(bitcoin.Config{
 		Host:     args.bitcoinRPCHost,
@@ -557,7 +566,7 @@ func fetchBtcAnchor(args initArgs) (*btcAnchor, error) {
 	}
 	defer client.Close()
 
-	anchorHeight := args.bifrostStartBlockHeight - 1
+	anchorHeight := args.btcInitialHeight - 1
 	header, err := client.GetBlockHeaderAt(anchorHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get anchor header at height %d: %w", anchorHeight, err)
@@ -571,7 +580,7 @@ func fetchBtcAnchor(args initArgs) (*btcAnchor, error) {
 		return nil, err
 	}
 	return &btcAnchor{
-		initialHeight:   uint64(args.bifrostStartBlockHeight),
+		initialHeight:   uint64(args.btcInitialHeight),
 		header:          buf.Bytes(),
 		periodStartTime: uint32(periodStart.Timestamp.Unix()),
 	}, nil
@@ -580,7 +589,7 @@ func fetchBtcAnchor(args initArgs) (*btcAnchor, error) {
 func initGenFiles(
 	clientCtx client.Context, mbm module.BasicManager, chainID string,
 	genAccounts []authtypes.GenesisAccount, genBalances []banktypes.Balance,
-	genFiles []string, numValidators int, p2pPeers []PeerInfo, anchor *btcAnchor,
+	genFiles []string, numValidators int, anchor *btcAnchor,
 ) error {
 	appGenState := mbm.DefaultGenesis(clientCtx.Codec)
 
@@ -609,14 +618,6 @@ func initGenFiles(
 	var btcqGenesis qbtctypes.GenesisState
 	clientCtx.Codec.MustUnmarshalJSON(appGenState[qbtctypes.ModuleName], &btcqGenesis)
 
-	btcqGenesis.PeerAddresses = make([]qbtctypes.GenesisPeerAddress, len(p2pPeers))
-	for i, peer := range p2pPeers {
-		peerAddress := fmt.Sprintf("%s@%s:%s", peer.PeerAddress, fmt.Sprintf("node_%d_bifrost", i), "30006")
-		btcqGenesis.PeerAddresses[i] = qbtctypes.GenesisPeerAddress{
-			Validator:   peer.Validator,
-			PeerAddress: peerAddress,
-		}
-	}
 	btcqGenesis.BtcInitialHeight = anchor.initialHeight
 	btcqGenesis.BtcAnchorHeader = anchor.header
 	btcqGenesis.BtcAnchorPeriodStartTime = anchor.periodStartTime
@@ -697,6 +698,19 @@ func collectGenFiles(
 		if err := genutil.ExportGenesisFileWithTime(genFile, chainID, nil, appState, genTime); err != nil {
 			return err
 		}
+
+		// enable ABCI vote extensions from the configured height
+		appGen, err := genutiltypes.AppGenesisFromFile(genFile)
+		if err != nil {
+			return err
+		}
+		if appGen.Consensus == nil || appGen.Consensus.Params == nil {
+			return fmt.Errorf("genesis %s has no consensus params", genFile)
+		}
+		appGen.Consensus.Params.ABCI.VoteExtensionsEnableHeight = args.voteExtensionsEnableHeight
+		if err := appGen.SaveAs(genFile); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -774,41 +788,36 @@ func generateRandomString(length int) string {
 }
 
 type ValidatorNode struct {
-	Name              string
-	Volume            string
-	RPCPort           string
-	APIPort           string
-	GRPCPort          string
-	BifrostPort       string
-	BifrostHealthPort string
+	Name     string
+	Volume   string
+	RPCPort  string
+	P2PPort  string
+	APIPort  string
+	GRPCPort string
 }
 
+// Every node listens on its own ports (RPC 26657-3i, P2P 26656-3i, gRPC
+// 9090-2i, API 1317-i), so the host port mapping is identical on both sides.
 const dockerComposeDefinition = `
 services:{{range $validator := .Validators }}
 	{{ $validator.Name }}:
-		image: btcq-org/qbtc:{{ $.Tag }}
-		restart: always
+		image: {{ $.Image }}
+		restart: unless-stopped
 		ports:
-			- "{{ $validator.RPCPort }}:26657"
-			- "{{ $validator.APIPort }}:1317"
-			- "{{ $validator.GRPCPort }}:9090"
+			- "{{ $validator.RPCPort }}:{{ $validator.RPCPort }}"
+			- "{{ $validator.APIPort }}:{{ $validator.APIPort }}"
+			- "{{ $validator.GRPCPort }}:{{ $validator.GRPCPort }}"
 		volumes:
 			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
-	{{ $validator.Name }}_bifrost:
-		image: btcq-org/qbtc:{{ $.Tag }}
-		restart: always
-		command: [ "bifrost", "--config", "/qbtc_data/.qbtc/bifrost/config.json"]
-		ports:
-			- "{{ $validator.BifrostPort }}:30006"
-			- "{{ $validator.BifrostHealthPort }}:30007"
-		volumes:
-			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
-		depends_on:
-			- {{ $validator.Name }}
+{{end}}{{ if $.Network }}
+networks:
+	default:
+		name: {{ $.Network }}
+		external: true
 {{end}}
 `
 
-func docker(validators []ValidatorNode, tag string) (string, error) {
+func docker(validators []ValidatorNode, image, network string) (string, error) {
 	def := strings.ReplaceAll(dockerComposeDefinition, "\t", "  ")
 	t, err := template.New("definition").Parse(def)
 	if err != nil {
@@ -816,8 +825,9 @@ func docker(validators []ValidatorNode, tag string) (string, error) {
 	}
 	d := struct {
 		Validators []ValidatorNode
-		Tag        string
-	}{Validators: validators, Tag: tag}
+		Image      string
+		Network    string
+	}{Validators: validators, Image: image, Network: network}
 
 	buf := bytes.NewBufferString("")
 	err = t.Execute(buf, d)

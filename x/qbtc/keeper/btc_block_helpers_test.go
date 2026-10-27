@@ -17,9 +17,12 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	abci "github.com/cometbft/cometbft/abci/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
+	qbtctestutil "github.com/btcq-org/qbtc/x/qbtc/testutil"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
@@ -112,25 +115,75 @@ func setBtcAnchor(t *testing.T, f *fixture, height uint64, header *wire.BlockHea
 	require.NoError(t, f.keeper.LastProcessedBlock.Set(f.ctx, height))
 }
 
-// attestedBlockMsg returns the MsgBtcBlock for block at height, attested by
-// the fixture's only validator and signed by the injection signer.
-func attestedBlockMsg(t *testing.T, f *fixture, height uint64, block *wire.MsgBlock) *types.MsgBtcBlock {
+// Test chain parameters for the extended commit the handler validates.
+const (
+	voteChainID      = "qbtc-test"
+	voteHeight       = 100 // the height of the block that carries the message
+	voteEnableHeight = 1   // vote extensions are enabled from this height
+	votePower        = 100 // the voting power of the fixture's validator
+)
+
+// blockVotes returns the vote extension of a validator that attests blocks.
+func blockVotes(t *testing.T, blocks []*types.BtcBlock) []byte {
+	t.Helper()
+	var ext types.BtcBlockVoteExtension
+	for _, block := range blocks {
+		signBytes, _, err := types.DecodeBtcBlockContent(block.BlockContent)
+		require.NoError(t, err)
+		commitHash := types.BtcCommitHash(signBytes)
+		ext.Votes = append(ext.Votes, &types.BtcBlockVote{Height: block.Height, Hash: block.Hash, CommitHash: commitHash[:]})
+	}
+	bz, err := ext.Marshal()
+	require.NoError(t, err)
+	return bz
+}
+
+// setLastCommit makes f.ctx the context of the block at voteHeight, whose last
+// commit is ec.
+func (f *fixture) setLastCommit(ec abci.ExtendedCommitInfo) {
+	f.ctx = qbtctestutil.ContextWithLastCommit(sdk.UnwrapSDKContext(f.ctx), voteChainID, voteHeight, voteEnableHeight, ec)
+}
+
+// attest gives msg the extended commit in which the fixture's only validator
+// attests msg's blocks, and sets f.ctx to the context that carries it.
+func attest(t *testing.T, f *fixture, msg *types.MsgBtcBlock) *types.MsgBtcBlock {
+	t.Helper()
+	ec := qbtctestutil.NewExtendedCommit(voteChainID, voteHeight, 0, []qbtctestutil.TestVote{
+		{Key: f.privateKey, Power: votePower, Extension: blockVotes(t, msg.Blocks)},
+	})
+	bz, err := ec.Marshal()
+	require.NoError(t, err)
+	msg.ExtendedCommitInfo = bz
+	f.setLastCommit(ec)
+	return msg
+}
+
+// blockOf returns the BtcBlock for block at height.
+func blockOf(t *testing.T, height uint64, block *wire.MsgBlock) *types.BtcBlock {
 	t.Helper()
 	commit, err := types.NewBtcBlockCommit(block)
 	require.NoError(t, err)
-	signBytes, content, err := types.EncodeBtcBlockCommit(commit)
+	_, content, err := types.EncodeBtcBlockCommit(commit)
 	require.NoError(t, err)
-	address, err := f.GetConsensusAddress()
-	require.NoError(t, err)
-	signature, err := f.privateKey.Sign(signBytes)
-	require.NoError(t, err)
-	return &types.MsgBtcBlock{
-		Height:       height,
-		Hash:         block.BlockHash().String(),
-		BlockContent: content,
-		Attestations: []*types.Attestation{{Address: address, Signature: signature}},
-		Signer:       types.EBifrostSignerAddress,
+	return &types.BtcBlock{Height: height, Hash: block.BlockHash().String(), BlockContent: content}
+}
+
+// attestedBlocksMsg returns the MsgBtcBlock for the consecutive blocks from
+// height, attested by the fixture's only validator and signed by the injection
+// signer. It sets f.ctx to the context that carries the extended commit.
+func attestedBlocksMsg(t *testing.T, f *fixture, height uint64, blocks ...*wire.MsgBlock) *types.MsgBtcBlock {
+	t.Helper()
+	msg := &types.MsgBtcBlock{Signer: types.EBifrostSignerAddress}
+	for i, block := range blocks {
+		msg.Blocks = append(msg.Blocks, blockOf(t, height+uint64(i), block))
 	}
+	return attest(t, f, msg)
+}
+
+// attestedBlockMsg is attestedBlocksMsg for one block.
+func attestedBlockMsg(t *testing.T, f *fixture, height uint64, block *wire.MsgBlock) *types.MsgBtcBlock {
+	t.Helper()
+	return attestedBlocksMsg(t, f, height, block)
 }
 
 func submitBlockMsg(f *fixture, msg *types.MsgBtcBlock) error {

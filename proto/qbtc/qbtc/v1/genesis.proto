@@ -16,11 +16,6 @@ message mimir {
 // GenesisState defines the btcq module's genesis state.
 message GenesisState {
   repeated mimir mimirs = 1 [ (gogoproto.nullable) = false ];
-  repeated GenesisPeerAddress peer_addresses = 2 [
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "peer_addresses",
-    (gogoproto.customname) = "PeerAddresses"
-  ];
   repeated UTXO utxos = 3;
   repeated Param params = 4;
   // The PLONK verifying key for ZK proof verification.
@@ -41,9 +36,4 @@ message GenesisState {
   // block at a height that is a multiple of 2016). Needed to check the
   // difficulty retarget at the next period boundary.
   uint32 btc_anchor_period_start_time = 8;
-}
-
-message GenesisPeerAddress {
-  string validator = 1;
-  string peer_address = 2 [ (gogoproto.customname) = "PeerAddress" ];
 }

@@ -71,7 +71,8 @@ func TestSetMsgReportBlock_RejectsHashMismatch(t *testing.T) {
 	f, c := setupAuthTest(t)
 	block, _, _ := authTestBlock(t, c)
 	msg := attestedBlockMsg(t, f, c.height+1, block)
-	msg.Hash = c.tip.BlockHash().String()
+	msg.Blocks[0].Hash = c.tip.BlockHash().String()
+	attest(t, f, msg)
 
 	require.ErrorContains(t, submitBlockMsg(f, msg), "does not match block hash")
 	require.Equal(t, uint64(800000), getLastProcessed(t, f))
@@ -180,26 +181,23 @@ func TestSetMsgReportBlock_VerifiesBlock(t *testing.T) {
 				commit, err := types.NewBtcBlockCommit(block)
 				require.NoError(t, err)
 				commit.Txs[0] = append(commit.Txs[0], 0x00)
-				signBytes, content, err := types.EncodeBtcBlockCommit(commit)
+				_, content, err := types.EncodeBtcBlockCommit(commit)
 				require.NoError(t, err)
 				msg := attestedBlockMsg(t, c.f, c.height+1, block)
-				msg.BlockContent = content
-				msg.Attestations[0].Signature, err = c.f.privateKey.Sign(signBytes)
-				require.NoError(t, err)
-				return msg
+				msg.Blocks[0].BlockContent = content
+				return attest(t, c.f, msg)
 			},
 			wantErr: "canonical",
 		},
 		{
-			name: "attestation over other bytes",
+			name: "attestation of other content",
 			modify: func(t *testing.T, c *regtestChain) *types.MsgBtcBlock {
+				// the votes attest one block, the message carries another
 				msg := attestedBlockMsg(t, c.f, c.height+1, c.nextBlock(c.coinbase()))
-				var err error
-				msg.Attestations[0].Signature, err = c.f.privateKey.Sign(msg.BlockContent)
-				require.NoError(t, err)
+				msg.Blocks[0] = blockOf(t, c.height+1, c.nextBlock(c.coinbase(1)))
 				return msg
 			},
-			wantErr: "insufficient attestation power",
+			wantErr: "insufficient vote extension power",
 		},
 	}
 	for _, tc := range cases {
