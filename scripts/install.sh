@@ -365,6 +365,26 @@ setup_statesync() {
     print_success "Statesync configured"
 }
 
+configure_consensus_timeouts() {
+    print_header "Configuring consensus timeouts"
+
+    local config_file="$QBTCD_HOME/config/config.toml"
+    if [[ ! -f "$config_file" ]]; then
+        print_error "config.toml not found at $config_file"
+        return 1
+    fi
+
+    print_info "Setting consensus timeout parameters..."
+    sed -i.bak -E \
+        "s|^(timeout_propose[[:space:]]+=[[:space:]]+).*$|\1\"8s\"|
+         s|^(timeout_propose_delta[[:space:]]+=[[:space:]]+).*$|\1\"1s\"|
+         s|^(timeout_prevote[[:space:]]+=[[:space:]]+).*$|\1\"1.5s\"|
+         s|^(timeout_precommit[[:space:]]+=[[:space:]]+).*$|\1\"1.5s\"|" "$config_file"
+    rm -f "${config_file}.bak"
+
+    print_success "Consensus timeouts configured"
+}
+
 init_qbtcd() {
     print_header "Initializing qbtcd"
 
@@ -385,6 +405,9 @@ init_qbtcd() {
     fi
 
     qbtcd config set client chain-id qbtc --home "$QBTCD_HOME"
+
+    configure_consensus_timeouts
+
     print_info "Downloading genesis.json..."
     if ! curl -fsSL "$GENESIS_URL" -o "$QBTCD_HOME/config/genesis.json"; then
         print_error "Failed to download genesis.json"
