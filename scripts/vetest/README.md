@@ -8,6 +8,7 @@ logs, chain state and the real mainnet hashes.
 | File | Purpose |
 |---|---|
 | `run.sh` | orchestration and assertions (`--keep`, `--only`, ...) |
+| `claim.sh` | claims one UTXO with a ZK proof on a network left running with `--keep` (see "Claiming your own UTXOs") |
 | `preflight.sh` | checks tools, Docker, ports, disk, RAM and reachability (`run.sh --check`) |
 | `btc_proxy.py` | stdlib-only bitcoind-style RPC server over mempool.space / Blockstream (or a real bitcoind), with per-validator fault modes |
 | `vetest_lib.py` | log analysis, genesis patching and claim message helpers |
@@ -108,6 +109,82 @@ On the first run `zkprover setup` downloads the Hermez 2^21 powers-of-tau file
 validation requires. The proof is generated on the host (about half a minute
 on a many-core machine) and the claim is broadcast from validator 0's key (the
 ante handler waives the fee) with the fresh address as `receiver`.
+
+## Claiming your own UTXOs
+
+`claim.sh` claims one UTXO on a network left running by `run.sh --keep`, with the
+same machinery as S9 (TSS emulator, cached `zkprover` and PLONK setup,
+`tx qbtc claim-with-proof`). `run.sh` writes the network settings to
+`out/network.env` once the chain is up; `claim.sh` reads them. The ZK material
+is built by `run.sh` only when S9 is selected or `--genesis-utxo` is given.
+
+**Warning: use a fresh key that holds a small amount.** The key is handled by a
+test-grade tool on a shared server. `claim.sh` never prints it, and reads it
+from `--key-file` (preferred; `--wif` is visible in `ps`, `--wif -` reads stdin).
+It reaches the local TSS emulator only through its `TSS_PRIVATE_KEY` environment
+variable, and any temporary copy is 0600 and deleted on exit. The proof also
+reveals nothing about the key, but the chain is a test chain: do not use a key
+that protects real funds.
+
+```bash
+umask 077; echo 'KwDi...your-WIF' > ~/claim.key       # compressed WIF or 64 hex chars
+scripts/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
+#   optional: --dest <qbtc address> | --dest-key <keyring name>   (default: a new key claim-dest-<txid8>-<vout>)
+#             --from <keyring name>                              (default validator0, pays the fee-free tx)
+#             --tss-port <port>                                  (default: first free port above 18480)
+```
+
+It derives the Hash160 from the key, checks with `qbtcd q qbtc utxo` that the
+UTXO exists, is locked to that key and has a non-zero entitled amount, proves,
+submits, waits for the result and prints the destination balance before and
+after plus the UTXO's entitled amount. A UTXO is only in chain state if it is in
+genesis or in a Bitcoin block the chain ingested (height >= `btc_initial_height`
+and confirmed `CONFIRMATION_DEPTH` = 6 blocks deep); otherwise `claim.sh` fails
+and says so. P2PKH and P2WPKH (compressed key) are supported.
+
+### (a) A fresh UTXO, while the chain follows mainnet
+
+By default the proxy caps the Bitcoin tip so scenarios control ingestion. To keep
+following mainnet, start with `--follow-mainnet` (implies `--keep`), which clears
+the cap (`POST /release {"clear":true}`) after the scenarios:
+
+```bash
+scripts/vetest/run.sh --follow-mainnet
+# or, on a network already kept: curl -X POST -d '{"clear":true}' http://127.0.0.1:18450/release
+```
+
+The chain ingests blocks at the pace of mainnet (about 10 minutes each, backlog
+first). Send a small amount on **mainnet** to the P2WPKH or P2PKH address of your
+fresh key (`claim.sh --show-address --key-file ~/claim.key` prints its P2WPKH and P2PKH addresses), note the txid and
+output index, and about an hour later (the block plus 6 confirmations plus
+ingestion) claim it:
+
+```bash
+scripts/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
+```
+
+Until then `claim.sh` reports that the UTXO is not in chain state; check progress
+with `docker exec vetest-node_0-1 qbtcd q qbtc last-processed-block --node tcp://localhost:26657`.
+The entitled amount of an ingested output is computed by the chain (it can be
+lower than the output amount).
+
+### (b) An older UTXO via `--genesis-utxo`
+
+Blocks older than `btc_initial_height` are never ingested, so put the UTXO in
+genesis. The flag is repeatable and adds to the S9 test UTXO; the amount is the
+output value in satoshis and becomes the entitled amount:
+
+```bash
+scripts/vetest/run.sh --keep \
+  --genesis-utxo <txid>:<vout>:<amount_sats>:<bc1q... or 1... address> \
+  --genesis-utxo <txid2>:<vout2>:<amount_sats>:<address2>
+scripts/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
+```
+
+Arguments are validated before anything starts (64-hex txid, numeric vout,
+positive amount, valid mainnet P2PKH `1...` or P2WPKH `bc1q...` address). Add
+`--follow-mainnet` instead of `--keep` to combine both paths. A claim is final:
+the UTXO's entitled amount becomes 0, and `--clean` or a re-run wipes the chain.
 
 ## Expected runtime
 

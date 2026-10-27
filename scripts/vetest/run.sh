@@ -7,6 +7,8 @@
 #   scripts/vetest/run.sh --only S3,S9     # selected scenarios
 #   scripts/vetest/run.sh --keep           # leave the network running
 #   scripts/vetest/run.sh --clean          # only remove containers/network/output
+#   scripts/vetest/run.sh --follow-mainnet # implies --keep; then keeps ingesting new mainnet blocks
+#   scripts/vetest/run.sh --keep --genesis-utxo TXID:VOUT:SATS:ADDR   # then claim it with claim.sh
 #
 # Target: a Linux server (bash, GNU coreutils, docker compose v2, python3, Go 1.26.x).
 # Run scripts/vetest/preflight.sh (or `run.sh --check`) first.
@@ -50,16 +52,23 @@ LOGS="$OUT/logs"
 RESULTS_TSV="$OUT/results.tsv"
 
 KEEP=0
+FOLLOW=0
+GENESIS_UTXOS=()
 ONLY=""
 NO_BUILD=0
 CLEAN_ONLY=0
 
 usage() {
-  sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   cat <<'EOF'
 
 Options:
   --keep             leave the network, proxy and output in place
+  --follow-mainnet   implies --keep; after the scenarios lift the proxy release cap so the
+                     chain keeps ingesting new mainnet blocks (for claim.sh with fresh UTXOs)
+  --genesis-utxo TXID:VOUT:AMOUNT_SATS:ADDRESS
+                     add a UTXO (P2PKH or P2WPKH mainnet address) to genesis next to the S9
+                     test UTXO; repeatable; claim it later with claim.sh. Prepares the ZK material.
   --only S1,S3,...   run only these scenarios (S1..S9); S1 and S2 need a fresh network
   --check            run preflight.sh (tools, docker, reachability, disk) and exit
   --vendor           build the images from a host-vendored context (`go mod vendor`);
@@ -75,6 +84,8 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=1 ;;
+    --follow-mainnet) KEEP=1; FOLLOW=1 ;;
+    --genesis-utxo) GENESIS_UTXOS+=("${2:?--genesis-utxo needs TXID:VOUT:AMOUNT_SATS:ADDRESS}"); shift ;;
     --only) ONLY="${2:?--only needs a list}"; shift ;;
     --no-build) NO_BUILD=1 ;;
     --vendor) VENDOR=1 ;;
@@ -87,6 +98,10 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+if [ "${#GENESIS_UTXOS[@]}" -gt 0 ]; then       # validate before anything is started
+  python3 "$LIB" genesis-utxos --out /dev/null "${GENESIS_UTXOS[@]}" >/dev/null || exit 2
+fi
 
 # --------------------------------------------------------------- utilities
 mkdir -p "$OUT"
@@ -203,7 +218,7 @@ cleanup_previous() {
   docker rm -f "$PROXY_CONTAINER" >/dev/null 2>&1 || true
   stop_host_procs
   rm -rf "$NET" 2>/dev/null || docker run --rm -v "$OUT:/o" alpine:3.23 rm -rf /o/net
-  rm -rf "$CTX" "$LOGS" "$RESULTS_TSV" "$OUT/results.json" "$OUT"/*.detail "$OUT"/S*.log "$OUT/claim" "$OUT/avail"
+  rm -rf "$CTX" "$LOGS" "$RESULTS_TSV" "$OUT/results.json" "$OUT"/*.detail "$OUT"/S*.log "$OUT/claim" "$OUT/avail" "$OUT/network.env"
 }
 
 if [ "$CLEAN_ONLY" = 1 ]; then
@@ -216,7 +231,8 @@ fi
 
 # ------------------------------------------------------------- prerequisites
 need docker; need go; need python3; need git; need curl; need sed; need tar
-if selected S9; then need openssl; fi
+if selected S9 || [ "${#GENESIS_UTXOS[@]}" -gt 0 ]; then WANT_ZK=1; else WANT_ZK=0; fi
+if [ "$WANT_ZK" = 1 ]; then need openssl; fi
 docker info >/dev/null 2>&1 || die "the Docker daemon is not running"
 : > "$OUT/run.log"
 cleanup_previous
@@ -224,7 +240,6 @@ mkdir -p "$LOGS" "$CACHE/btc" "$CACHE/bin" "$CACHE/zk"
 : > "$RESULTS_TSV"
 trap 'rc=$?; if [ "$KEEP" = 1 ]; then log "--keep: network left running (project $PROJECT, output $OUT)"; else teardown; fi; exit $rc' EXIT
 
-if selected S9; then WANT_ZK=1; else WANT_ZK=0; fi
 if selected S8; then WANT_MAL=1; else WANT_MAL=0; fi
 
 # ------------------------------------------------------------------ step 1: proxy
@@ -312,7 +327,8 @@ prep_zk() {
   mkdir -p "$OUT/claim"
   openssl rand -hex 32 > "$OUT/claim/btc_key.hex"
   chmod 600 "$OUT/claim/btc_key.hex"
-  "$CACHE/bin/tss-emulator" --private-key "$(cat "$OUT/claim/btc_key.hex")" --port "127.0.0.1:$TSS_PORT" > "$OUT/tss.log" 2>&1 &
+  # the key goes in through the environment (TSS_PRIVATE_KEY), not argv, so it is not visible in ps
+  TSS_PRIVATE_KEY="$(cat "$OUT/claim/btc_key.hex")" "$CACHE/bin/tss-emulator" --port "127.0.0.1:$TSS_PORT" > "$OUT/tss.log" 2>&1 &
   echo $! > "$OUT/tss.pid"
   local end=$((SECONDS + 20))
   until curl -sf "http://127.0.0.1:$TSS_PORT/info" > "$OUT/claim/info.json" 2>/dev/null; do
@@ -329,6 +345,12 @@ prep_zk() {
   "block_height": "0"}]
 EOF
   log "claim fixture: $CLAIM_BTC_ADDR (hash160 $CLAIM_HASH160), utxo $CLAIM_TXID:0 entitled $CLAIM_AMOUNT"
+  if [ "${#GENESIS_UTXOS[@]}" -gt 0 ]; then
+    python3 "$LIB" genesis-utxos --base "$OUT/claim/utxos.json" --out "$OUT/claim/utxos.merged.json" "${GENESIS_UTXOS[@]}" >/dev/null 2>&1 \
+      || die "could not build the genesis UTXO list"
+    mv "$OUT/claim/utxos.merged.json" "$OUT/claim/utxos.json"
+    log "genesis gets ${#GENESIS_UTXOS[@]} extra UTXO(s) to claim with claim.sh"
+  fi
 }
 if [ "$WANT_ZK" = 1 ]; then prep_zk; fi
 
@@ -382,6 +404,13 @@ for i in 0 1 2 3; do
   done
 done
 log "chain is up (height $(chain_height 0))"
+
+# settings for claim.sh (sourced by it); written once the network is up
+{
+  for v in PROJECT NETWORK CHAIN_ID SCRIPT_DIR OUT CACHE NET TSS_PORT BTC_CONTROL_PORT INIT DEPTH FOLLOW; do
+    printf '%s=%q\n' "VETEST_$v" "${!v}"
+  done
+} > "$OUT/network.env"
 
 # ---------------------------------------------------------------- scenarios
 INDEXED_LAST=$((INIT - 1 + BACKLOG))
@@ -691,6 +720,10 @@ run_scenario S9 s9_claim
 
 # ----------------------------------------------------------------- report
 CUR_SCENARIO=setup
+if [ "$FOLLOW" = 1 ]; then
+  proxy_post /release '{"clear":true}'
+  log "--follow-mainnet: release cap cleared; the chain now follows new mainnet blocks (confirmation depth $DEPTH)"
+fi
 snap_logs final >/dev/null
 docker logs "$PROXY_CONTAINER" > "$LOGS/btc_proxy.log" 2>&1 || true
 curl -sf "$CONTROL/stats" > "$LOGS/btc_proxy_stats.json" 2>/dev/null || true

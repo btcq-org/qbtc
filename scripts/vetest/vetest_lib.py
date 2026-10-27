@@ -2,8 +2,11 @@
 """Helpers for scripts/vetest/run.sh (Python 3.8+, stdlib only).
 
     vetest_lib.py bech32-p2wpkh HASH160_HEX
+    vetest_lib.py base58-p2pkh HASH160_HEX
     vetest_lib.py genesis-patch --net DIR [--enable-height N] [--utxo-file F] [--vk-file F]
     vetest_lib.py claim-msg --proof F --claimer A --receiver A --txid T --vout N --out F
+    vetest_lib.py genesis-utxos --out F [--base F] SPEC...   (SPEC = txid:vout:amount_sats:address)
+    vetest_lib.py key-hex FILE                               (WIF or 64 hex chars -> 32-byte hex)
     vetest_lib.py tallies  --logs DIR [filters/predicates, see --help]
     vetest_lib.py processed --logs DIR [--after H --upto H --truth URL --min-count N]
     vetest_lib.py rejects  --logs DIR --nodes 1,2,3 --min N
@@ -59,6 +62,71 @@ def bech32_encode(hrp, witver, program):
     return hrp + "1" + "".join(charset[d] for d in data + checksum)
 
 
+B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def b58check_decode(s):
+    """Returns the payload (version byte included) of a base58check string; raises ValueError."""
+    n = 0
+    for c in s:
+        i = B58.find(c)
+        if i < 0:
+            raise ValueError("invalid base58 character %r" % c)
+        n = n * 58 + i
+    raw = n.to_bytes((n.bit_length() + 7) // 8, "big")
+    raw = b"\0" * (len(s) - len(s.lstrip("1"))) + raw
+    if len(raw) < 5:
+        raise ValueError("too short")
+    import hashlib
+    body, chk = raw[:-4], raw[-4:]
+    if hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4] != chk:
+        raise ValueError("bad base58 checksum")
+    return body
+
+
+def bech32_decode(addr):
+    """Returns (hrp, witver, program) of a bech32 (v0) address; raises ValueError."""
+    charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    if addr != addr.lower() and addr != addr.upper():
+        raise ValueError("mixed case")
+    addr = addr.lower()
+    pos = addr.rfind("1")
+    if pos < 1 or pos + 7 > len(addr):
+        raise ValueError("malformed bech32")
+    hrp, rest = addr[:pos], addr[pos + 1:]
+    if any(c not in charset for c in rest):
+        raise ValueError("invalid bech32 character")
+    data = [charset.index(c) for c in rest]
+    if _polymod([ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp] + data) != 1:
+        raise ValueError("bad bech32 checksum")
+    data = data[:-6]
+    if not data or data[0] != 0:
+        raise ValueError("only witness version 0 is supported")
+    acc, bits, out = 0, 0, bytearray()
+    for v in data[1:]:
+        acc = (acc << 5) | v
+        bits += 5
+        if bits >= 8:
+            bits -= 8
+            out.append((acc >> bits) & 0xFF)
+    if bits >= 5 or (acc & ((1 << bits) - 1)):
+        raise ValueError("bad bech32 padding")
+    return hrp, data[0], bytes(out)
+
+
+def decode_mainnet_address(addr):
+    """Returns (kind, hash160 hex) for a mainnet P2PKH ('1...') or P2WPKH ('bc1q...') address."""
+    if addr.lower().startswith("bc1"):
+        hrp, _, prog = bech32_decode(addr)
+        if hrp != "bc" or len(prog) != 20:
+            raise ValueError("not a mainnet P2WPKH address (witness program must be 20 bytes)")
+        return "p2wpkh", prog.hex()
+    body = b58check_decode(addr)
+    if len(body) != 21 or body[0] != 0x00:
+        raise ValueError("not a mainnet P2PKH address (must start with 1)")
+    return "p2pkh", body[1:].hex()
+
+
 # ------------------------------------------------------------------- small
 
 
@@ -108,6 +176,18 @@ def fail(msg):
 # ---------------------------------------------------------------- commands
 
 
+def cmd_p2pkh(a):
+    import hashlib
+    body = b"\x00" + bytes.fromhex(a.hash160)
+    raw = body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4]
+    n = int.from_bytes(raw, "big")
+    out = ""
+    while n:
+        n, r = divmod(n, 58)
+        out = B58[r] + out
+    print("1" * (len(raw) - len(raw.lstrip(b"\0"))) + out)
+
+
 def cmd_bech32(a):
     print(bech32_encode("bc", 0, bytes.fromhex(a.hash160)))
 
@@ -147,6 +227,63 @@ def cmd_claim_msg(a):
     }
     with open(a.out, "w") as f:
         json.dump(msg, f, indent=2)
+
+
+def cmd_genesis_utxos(a):
+    utxos = []
+    if a.base:
+        with open(a.base) as f:
+            utxos = json.load(f)
+    seen = set((u["txid"], int(u["vout"])) for u in utxos)
+    for spec in a.specs:
+        parts = spec.split(":", 3)
+        if len(parts) != 4:
+            sys.exit("bad --genesis-utxo %r: expected <txid>:<vout>:<amount_sats>:<address>" % spec)
+        txid, vout, amount, addr = parts
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", txid):
+            sys.exit("bad --genesis-utxo %r: txid must be 64 hex characters" % spec)
+        if not vout.isdigit() or int(vout) > 0xFFFFFFFF:
+            sys.exit("bad --genesis-utxo %r: vout must be a non-negative integer" % spec)
+        if not amount.isdigit() or int(amount) <= 0:
+            sys.exit("bad --genesis-utxo %r: amount_sats must be a positive integer" % spec)
+        try:
+            kind, h = decode_mainnet_address(addr)
+        except ValueError as e:
+            sys.exit("bad --genesis-utxo %r: address %s: %s" % (spec, addr, e))
+        key = (txid.lower(), int(vout))
+        if key in seen:
+            sys.exit("duplicate UTXO %s:%d" % key)
+        seen.add(key)
+        if kind == "p2wpkh":
+            spk = {"hex": "0014" + h, "type": "witness_v0_keyhash", "address": addr}
+        else:
+            spk = {"hex": "76a914" + h + "88ac", "type": "pubkeyhash", "address": addr}
+        utxos.append({"txid": txid.lower(), "vout": int(vout), "amount": amount, "entitled_amount": amount,
+                      "script_pub_key": spk, "block_height": "0"})
+        print("genesis utxo %s:%s %s sats %s (%s)" % (txid.lower(), vout, amount, addr, kind), file=sys.stderr)
+    with open(a.out, "w") as f:
+        json.dump(utxos, f, indent=2)
+
+
+def cmd_key_hex(a):
+    # never echoes the key; errors mention only what is wrong with the format
+    with open(a.file) as f:
+        s = f.read().strip()
+    if re.fullmatch(r"[0-9a-fA-F]{64}", s):
+        print(s.lower())
+        return
+    try:
+        body = b58check_decode(s)
+    except ValueError as e:
+        sys.exit("the key is neither 64 hex characters nor a valid WIF (%s)" % e)
+    if body[0] != 0x80:
+        sys.exit("the WIF is not a Bitcoin mainnet private key (version byte != 0x80)")
+    if len(body) == 34 and body[33] == 0x01:
+        print(body[1:33].hex())
+    elif len(body) == 33:
+        sys.exit("uncompressed WIF keys are not supported (the proof uses the compressed public key); import it as compressed")
+    else:
+        sys.exit("unexpected WIF length")
 
 
 def collect_tallies(logs):
@@ -352,6 +489,10 @@ def main():
     p.add_argument("hash160")
     p.set_defaults(fn=cmd_bech32)
 
+    p = sub.add_parser("base58-p2pkh")
+    p.add_argument("hash160")
+    p.set_defaults(fn=cmd_p2pkh)
+
     p = sub.add_parser("genesis-patch")
     p.add_argument("--net", required=True)
     p.add_argument("--enable-height", type=int)
@@ -367,6 +508,16 @@ def main():
     p.add_argument("--vout", type=int, default=0)
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_claim_msg)
+
+    p = sub.add_parser("genesis-utxos")
+    p.add_argument("--out", required=True)
+    p.add_argument("--base", help="JSON list of UTXOs to start from")
+    p.add_argument("specs", nargs="+", metavar="SPEC")
+    p.set_defaults(fn=cmd_genesis_utxos)
+
+    p = sub.add_parser("key-hex")
+    p.add_argument("file")
+    p.set_defaults(fn=cmd_key_hex)
 
     p = sub.add_parser("tallies")
     p.add_argument("--logs", required=True)
