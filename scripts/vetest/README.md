@@ -50,7 +50,9 @@ Re-runs are idempotent: leftovers of an earlier run are removed first. Results
 are printed as a table and written to `out/results.json`; per-scenario logs are
 `out/S*.log`, node log snapshots are under `out/logs/<tag>/node_<i>.log` and
 the proxy log and stats are `out/logs/btc_proxy*`. Exit status is 1 if any
-scenario failed.
+scenario failed. A failed scenario does not leave its faults behind: the proxy
+modes are reset, stopped validators are started and validator 0 goes back to the
+honest image. Each scenario starts once every released block is ingested.
 
 Environment knobs (defaults in the script): `BACKLOG` (150), `BATCH` blocks
 released per scenario phase (14), `ENABLE_HEIGHT` (10), `CONFIRMATION_DEPTH`
@@ -75,7 +77,7 @@ UPSTREAM=rpc:http://user:pass@host:8332 scripts/vetest/run.sh
 
 The host must be reachable from the proxy container. Blocks are cached on disk
 in `.cache/btc` (gitignored), so every block is downloaded once, also across
-runs. `run.sh` prefetches about 400 blocks (roughly 650 MB) before starting the
+runs. `run.sh` prefetches about 550 blocks (roughly 900 MB) before starting the
 chain; the first run is bounded by upstream speed.
 
 The chain starts at a mainnet height chosen so that `BACKLOG` confirmed blocks

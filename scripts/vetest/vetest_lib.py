@@ -371,6 +371,11 @@ def cmd_tallies(a):
         print("longest run of consecutive satisfying heights: %d" % best)
         if best < a.min_run:
             fail("longest run is %d, need %d" % (best, a.min_run))
+    if a.max_candidates is not None:
+        bad = [h for h in heights if len(tallies[h]["cands"]) > a.max_candidates]
+        if bad:
+            fail("more than %d candidate(s) at heights %s: %s" % (a.max_candidates, bad[:10], summary(bad[0])))
+        print("ok: at most %d candidate(s) at all %d heights" % (a.max_candidates, len(heights)))
     print("PASS")
 
 
@@ -531,6 +536,7 @@ def main():
     p.add_argument("--strict", action="store_true", help="every selected height must satisfy the predicate")
     p.add_argument("--min-count", type=int, help="at least N heights satisfy the predicate")
     p.add_argument("--min-run", type=int, help="N consecutive heights satisfy the predicate")
+    p.add_argument("--max-candidates", type=int, help="no selected height has more than N candidates")
     p.set_defaults(fn=cmd_tallies)
 
     p = sub.add_parser("processed")
