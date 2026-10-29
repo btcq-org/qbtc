@@ -46,7 +46,7 @@ import (
 	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	"github.com/btcq-org/qbtc/docs"
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	qbtcmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
@@ -81,7 +81,7 @@ type App struct {
 	txConfig          client.TxConfig
 	interfaceRegistry codectypes.InterfaceRegistry
 
-	EnshrinedBifrost *ebifrost.EnshrinedBifrost
+	BtcReader *btcreader.Reader
 
 	// keepers
 	// only keepers required by the app are exposed
@@ -165,9 +165,9 @@ func New(
 		)
 	)
 
-	ebifrostConfig, err := ebifrost.ReadEBifrostConfig(appOpts)
+	readerConfig, err := btcreader.ReadConfig(appOpts)
 	if err != nil {
-		panic(fmt.Sprintf("error while reading ebifrost config: %s", err))
+		panic(fmt.Sprintf("error while reading the Bitcoin reader config: %s", err))
 	}
 
 	var appModules map[string]appmodule.AppModule
@@ -208,19 +208,19 @@ func New(
 		panic(err)
 	}
 
-	app.EnshrinedBifrost = ebifrost.NewEnshrinedBifrost(ebifrostConfig, app.AppCodec(), logger)
+	app.BtcReader = btcreader.NewReader(readerConfig, app.AppCodec(), logger)
 	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
-	eBifrostProposalHandler := qbtcabi.NewProposalHandler(
+	btcProposalHandler := qbtcabi.NewProposalHandler(
 		app.QbtcKeeper,
-		app.EnshrinedBifrost,
+		app.BtcReader,
 		app.TxConfig().TxDecoder(),
 		defaultProposalHandler.PrepareProposalHandler(),
 		defaultProposalHandler.ProcessProposalHandler(),
 	)
-	app.SetPrepareProposal(eBifrostProposalHandler.PrepareProposal)
-	app.SetProcessProposal(eBifrostProposalHandler.ProcessProposal)
-	app.SetExtendVoteHandler(eBifrostProposalHandler.ExtendVote)
-	app.SetVerifyVoteExtensionHandler(eBifrostProposalHandler.VerifyVoteExtension)
+	app.SetPrepareProposal(btcProposalHandler.PrepareProposal)
+	app.SetProcessProposal(btcProposalHandler.ProcessProposal)
+	app.SetExtendVoteHandler(btcProposalHandler.ExtendVote)
+	app.SetVerifyVoteExtensionHandler(btcProposalHandler.VerifyVoteExtension)
 
 	/****  Module Options ****/
 
@@ -320,7 +320,7 @@ func (app *App) RegisterNodeService(ctx client.Context, config config.Config) {
 // StartBitcoinReader starts the in-process Bitcoin reader if it is enabled.
 // Calling it again once the reader runs does nothing.
 func (app *App) StartBitcoinReader() error {
-	if err := app.EnshrinedBifrost.Start(app.lastProcessedBtcBlock); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
+	if err := app.BtcReader.Start(app.lastProcessedBtcBlock); err != nil && !errors.Is(err, btcreader.ErrAlreadyStarted) {
 		return fmt.Errorf("failed to start the bitcoin reader: %w", err)
 	}
 	return nil
@@ -331,7 +331,7 @@ func (app *App) StartBitcoinReader() error {
 func (app *App) lastProcessedBtcBlock() (uint64, error) {
 	if app.LastBlockHeight() == 0 {
 		// no committed state yet
-		return 0, ebifrost.ErrNoBtcAnchor
+		return 0, btcreader.ErrNoBtcAnchor
 	}
 	ctx, err := app.CreateQueryContext(0, false)
 	if err != nil {
@@ -339,7 +339,7 @@ func (app *App) lastProcessedBtcBlock() (uint64, error) {
 	}
 	if _, err := app.QbtcKeeper.BtcTipHeader.Get(ctx); err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
-			return 0, ebifrost.ErrNoBtcAnchor
+			return 0, btcreader.ErrNoBtcAnchor
 		}
 		return 0, err
 	}
@@ -348,7 +348,7 @@ func (app *App) lastProcessedBtcBlock() (uint64, error) {
 
 // Close stops the Bitcoin reader and closes the application.
 func (app *App) Close() error {
-	app.EnshrinedBifrost.Stop()
+	app.BtcReader.Stop()
 	return app.App.Close()
 }
 

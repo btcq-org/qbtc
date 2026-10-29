@@ -1,4 +1,4 @@
-package ebifrost
+package btcreader
 
 import (
 	"errors"

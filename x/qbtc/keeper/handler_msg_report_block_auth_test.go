@@ -35,9 +35,9 @@ func authTestBlock(t *testing.T, c *regtestChain) (*wire.MsgBlock, *wire.MsgTx, 
 }
 
 // The signer constant must be the hash-derived address, not one anyone holds a key for.
-func TestEBifrostSignerAddressIsHashDerived(t *testing.T) {
+func TestBtcBlockSignerAddressIsHashDerived(t *testing.T) {
 	initFixture(t) // sets the qbtc address prefix
-	require.Equal(t, sdk.AccAddress(crypto.AddressHash([]byte("ebifrost_signer"))).String(), types.EBifrostSignerAddress)
+	require.Equal(t, sdk.AccAddress(crypto.AddressHash([]byte("btc_block_signer"))).String(), types.BtcBlockSignerAddress)
 }
 
 func TestSetMsgReportBlock_RejectsOtherSigner(t *testing.T) {

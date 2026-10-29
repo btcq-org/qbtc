@@ -161,7 +161,7 @@ Background:
 | `app/` | Cosmos SDK app wiring; all module keepers connected here |
 | `x/qbtc/keeper/` | Core state: UTXOs, claims, ZK verifying key; handles `MsgClaimWithProof` |
 | `x/qbtc/zk/` | ZK proof system: five circuits, PLONK verifier, trusted setup |
-| `x/qbtc/ebifrost/` | In-process Bitcoin reader and vote-extension handling inside the validator node |
+| `x/qbtc/btcreader/` | In-process Bitcoin reader and vote-extension handling inside the validator node |
 | `bitcoin/` | Bitcoin RPC client for UTXO indexing |
 | `cmd/zkprover/` | CLI tool users run to generate proofs locally |
 | `cmd/proof-service/` | HTTP service wrapper around zkprover for remote proof generation |
@@ -174,7 +174,7 @@ The ZK verifying key is loaded at genesis init and stored immutably in chain sta
 
 ### Bitcoin Block Ingestion
 
-Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-process reader configured in the `[ebifrost]` section of `app.toml` (`enable`, `bitcoin_host`, `bitcoin_port`, `bitcoin_rpc_user`, `bitcoin_rpc_password`, `confirmation_depth` default 6). Validators attest blocks in ABCI vote extensions; the next proposer injects blocks attested by more than 2/3 of the voting power, together with the signed votes as evidence. There is no separate bifrost daemon and no P2P gossip.
+Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-process reader configured in the `[btc_reader]` section of `app.toml` (`enable`, `bitcoin_host`, `bitcoin_port`, `bitcoin_rpc_user`, `bitcoin_rpc_password`, `confirmation_depth` default 6). Validators attest blocks in ABCI vote extensions; the next proposer injects blocks attested by more than 2/3 of the voting power, together with the signed votes as evidence. There is no separate bifrost daemon and no P2P gossip.
 
 ### Claim Message Flow
 

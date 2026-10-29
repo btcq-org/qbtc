@@ -1,4 +1,4 @@
-package ebifrost
+package btcreader
 
 import (
 	"errors"
@@ -41,13 +41,13 @@ type CachedBlock struct {
 	CommitHash [types.BtcCommitHashSize]byte
 }
 
-// EnshrinedBifrost is the Bitcoin reader built into the validator node. A
+// Reader is the Bitcoin reader built into the validator node. A
 // goroutine reads the blocks the chain needs next from a Bitcoin node and
 // caches them; the ABCI handlers only read the cache and never call Bitcoin.
-type EnshrinedBifrost struct {
+type Reader struct {
 	logger log.Logger
 	cdc    codec.Codec
-	cfg    EBifrostConfig
+	cfg    Config
 	rpc    BitcoinRPC
 
 	// started state
@@ -61,20 +61,20 @@ type EnshrinedBifrost struct {
 	cache   []CachedBlock
 }
 
-// NewEnshrinedBifrost creates the reader. It connects to Bitcoin when started.
-func NewEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger) *EnshrinedBifrost {
-	return newEnshrinedBifrost(cfg, cdc, logger, nil)
+// NewReader creates the reader. It connects to Bitcoin when started.
+func NewReader(cfg Config, cdc codec.Codec, logger log.Logger) *Reader {
+	return newReader(cfg, cdc, logger, nil)
 }
 
-// NewEnshrinedBifrostWithRPC creates the reader on a given Bitcoin RPC client,
+// NewReaderWithRPC creates the reader on a given Bitcoin RPC client,
 // for tests that drive it with Poll.
-func NewEnshrinedBifrostWithRPC(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger, rpc BitcoinRPC) *EnshrinedBifrost {
-	return newEnshrinedBifrost(cfg, cdc, logger, rpc)
+func NewReaderWithRPC(cfg Config, cdc codec.Codec, logger log.Logger, rpc BitcoinRPC) *Reader {
+	return newReader(cfg, cdc, logger, rpc)
 }
 
-func newEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger, rpc BitcoinRPC) *EnshrinedBifrost {
-	return &EnshrinedBifrost{
-		logger: logger.With("module", "ebifrost"),
+func newReader(cfg Config, cdc codec.Codec, logger log.Logger, rpc BitcoinRPC) *Reader {
+	return &Reader{
+		logger: logger.With("module", "btcreader"),
 		cdc:    cdc,
 		cfg:    cfg,
 		rpc:    rpc,
@@ -84,69 +84,69 @@ func newEnshrinedBifrost(cfg EBifrostConfig, cdc codec.Codec, logger log.Logger,
 
 // Start starts the reader goroutine if the reader is enabled. lastProcessed
 // tells it which Bitcoin height the chain has processed.
-func (eb *EnshrinedBifrost) Start(lastProcessed LastProcessedFunc) error {
-	if eb == nil || !eb.cfg.Enable {
+func (rd *Reader) Start(lastProcessed LastProcessedFunc) error {
+	if rd == nil || !rd.cfg.Enable {
 		return nil
 	}
-	eb.startedMu.Lock()
-	defer eb.startedMu.Unlock()
-	if eb.started {
+	rd.startedMu.Lock()
+	defer rd.startedMu.Unlock()
+	if rd.started {
 		return ErrAlreadyStarted
 	}
-	if eb.rpc == nil {
+	if rd.rpc == nil {
 		client, err := bitcoin.NewBtcClient(bitcoin.Config{
-			Host:     eb.cfg.BitcoinHost,
-			Port:     eb.cfg.BitcoinPort,
-			RPCUser:  eb.cfg.BitcoinRPCUser,
-			Password: eb.cfg.BitcoinRPCPassword,
-			Timeout:  eb.cfg.RPCTimeout,
+			Host:     rd.cfg.BitcoinHost,
+			Port:     rd.cfg.BitcoinPort,
+			RPCUser:  rd.cfg.BitcoinRPCUser,
+			Password: rd.cfg.BitcoinRPCPassword,
+			Timeout:  rd.cfg.RPCTimeout,
 		}, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create bitcoin client: %w", err)
 		}
-		eb.rpc = client
+		rd.rpc = client
 	}
-	eb.started = true
-	eb.wg.Add(1)
-	go eb.run(lastProcessed)
+	rd.started = true
+	rd.wg.Add(1)
+	go rd.run(lastProcessed)
 	return nil
 }
 
 // Stop stops the reader and waits for its goroutine.
-func (eb *EnshrinedBifrost) Stop() {
-	if eb == nil {
+func (rd *Reader) Stop() {
+	if rd == nil {
 		return
 	}
-	eb.startedMu.Lock()
-	defer eb.startedMu.Unlock()
-	if !eb.started {
+	rd.startedMu.Lock()
+	defer rd.startedMu.Unlock()
+	if !rd.started {
 		return
 	}
-	eb.started = false
+	rd.started = false
 
-	close(eb.stopCh)
+	close(rd.stopCh)
 	// closing the client also interrupts a request in flight
-	if err := eb.rpc.Close(); err != nil {
-		eb.logger.Error("failed to close bitcoin client", "error", err)
+	if err := rd.rpc.Close(); err != nil {
+		rd.logger.Error("failed to close bitcoin client", "error", err)
 	}
-	eb.wg.Wait()
+	rd.wg.Wait()
 }
 
-func (eb *EnshrinedBifrost) MarshalTx(msg sdk.Msg) ([]byte, error) {
-	itx := NewInjectTx(eb.cdc, []sdk.Msg{msg})
+func (rd *Reader) MarshalTx(msg sdk.Msg) ([]byte, error) {
+	itx := NewInjectTx(rd.cdc, []sdk.Msg{msg})
 	return itx.Tx.Marshal()
 }
 
 // CachedBlocks returns up to max cached blocks at consecutive heights starting
 // at from. It stops at the first height that is not cached.
-func (eb *EnshrinedBifrost) CachedBlocks(from uint64, max int) []CachedBlock {
-	if eb == nil {
+func (rd *Reader) CachedBlocks(from uint64, max int) []CachedBlock {
+	if rd == nil {
 		return nil
 	}
-	eb.cacheMu.RLock()
-	defer eb.cacheMu.RUnlock()
+	rd.cacheMu.RLock()
+	defer rd.cacheMu.RUnlock()
 	var blocks []CachedBlock
-	for _, b := range eb.cache {
+	for _, b := range rd.cache {
 		if b.Height < from {
 			continue
 		}
@@ -159,13 +159,13 @@ func (eb *EnshrinedBifrost) CachedBlocks(from uint64, max int) []CachedBlock {
 }
 
 // CachedBlock returns the cached block at height.
-func (eb *EnshrinedBifrost) CachedBlock(height uint64) (CachedBlock, bool) {
-	if eb == nil {
+func (rd *Reader) CachedBlock(height uint64) (CachedBlock, bool) {
+	if rd == nil {
 		return CachedBlock{}, false
 	}
-	eb.cacheMu.RLock()
-	defer eb.cacheMu.RUnlock()
-	for _, b := range eb.cache {
+	rd.cacheMu.RLock()
+	defer rd.cacheMu.RUnlock()
+	for _, b := range rd.cache {
 		if b.Height == height {
 			return b, true
 		}
@@ -173,9 +173,9 @@ func (eb *EnshrinedBifrost) CachedBlock(height uint64) (CachedBlock, bool) {
 	return CachedBlock{}, false
 }
 
-func (eb *EnshrinedBifrost) run(lastProcessed LastProcessedFunc) {
-	defer eb.wg.Done()
-	ticker := time.NewTicker(eb.cfg.PollInterval)
+func (rd *Reader) run(lastProcessed LastProcessedFunc) {
+	defer rd.wg.Done()
+	ticker := time.NewTicker(rd.cfg.PollInterval)
 	defer ticker.Stop()
 	for {
 		last, err := lastProcessed()
@@ -183,14 +183,14 @@ func (eb *EnshrinedBifrost) run(lastProcessed LastProcessedFunc) {
 		case errors.Is(err, ErrNoBtcAnchor):
 			// nothing to read until the chain has a Bitcoin anchor
 		case err != nil:
-			eb.logger.Error("btc reader error", "error", err)
+			rd.logger.Error("btc reader error", "error", err)
 		default:
-			if err := eb.Poll(last); err != nil {
-				eb.logger.Error("btc reader error", "error", err)
+			if err := rd.Poll(last); err != nil {
+				rd.logger.Error("btc reader error", "error", err)
 			}
 		}
 		select {
-		case <-eb.stopCh:
+		case <-rd.stopCh:
 			return
 		case <-ticker.C:
 		}
@@ -202,61 +202,61 @@ func (eb *EnshrinedBifrost) run(lastProcessed LastProcessedFunc) {
 // processed and blocks the node no longer has on its best chain, then fetches
 // the next blocks that have enough confirmations. On an error the cache keeps
 // what it has and the next poll retries.
-func (eb *EnshrinedBifrost) Poll(last uint64) error {
-	eb.pruneProcessed(last)
-	if err := eb.dropReorged(); err != nil {
+func (rd *Reader) Poll(last uint64) error {
+	rd.pruneProcessed(last)
+	if err := rd.dropReorged(); err != nil {
 		return err
 	}
-	tip, err := eb.rpc.GetBlockCount()
+	tip, err := rd.rpc.GetBlockCount()
 	if err != nil {
 		return fmt.Errorf("get block count: %w", err)
 	}
-	for height := last + 1; height <= last+uint64(eb.cfg.MaxCachedBlocks); height++ {
-		if _, ok := eb.CachedBlock(height); ok {
+	for height := last + 1; height <= last+uint64(rd.cfg.MaxCachedBlocks); height++ {
+		if _, ok := rd.CachedBlock(height); ok {
 			continue
 		}
 		// the block itself counts as one confirmation
-		if tip < 0 || uint64(tip)+1 < height+eb.cfg.ConfirmationDepth {
+		if tip < 0 || uint64(tip)+1 < height+rd.cfg.ConfirmationDepth {
 			break
 		}
-		block, err := eb.fetchBlock(height)
+		block, err := rd.fetchBlock(height)
 		if err != nil {
 			return fmt.Errorf("fetch block %d: %w", height, err)
 		}
-		eb.cacheMu.Lock()
-		eb.cache = append(eb.cache, block)
-		eb.cacheMu.Unlock()
-		eb.logger.Info("btc block cached", "height", block.Height, "hash", block.Hash)
+		rd.cacheMu.Lock()
+		rd.cache = append(rd.cache, block)
+		rd.cacheMu.Unlock()
+		rd.logger.Info("btc block cached", "height", block.Height, "hash", block.Hash)
 	}
 	return nil
 }
 
 // pruneProcessed drops the cached blocks the chain has processed.
-func (eb *EnshrinedBifrost) pruneProcessed(last uint64) {
-	eb.cacheMu.Lock()
-	defer eb.cacheMu.Unlock()
-	eb.cache = slices.DeleteFunc(eb.cache, func(b CachedBlock) bool { return b.Height <= last })
+func (rd *Reader) pruneProcessed(last uint64) {
+	rd.cacheMu.Lock()
+	defer rd.cacheMu.Unlock()
+	rd.cache = slices.DeleteFunc(rd.cache, func(b CachedBlock) bool { return b.Height <= last })
 }
 
 // dropReorged compares the cached blocks with the node's best chain and drops
 // the first block whose hash changed and all blocks above it, which no longer
 // build on the cached chain.
-func (eb *EnshrinedBifrost) dropReorged() error {
-	eb.cacheMu.RLock()
-	cached := slices.Clone(eb.cache)
-	eb.cacheMu.RUnlock()
+func (rd *Reader) dropReorged() error {
+	rd.cacheMu.RLock()
+	cached := slices.Clone(rd.cache)
+	rd.cacheMu.RUnlock()
 	for _, b := range cached {
-		hash, err := eb.rpc.GetBlockHash(int64(b.Height))
+		hash, err := rd.rpc.GetBlockHash(int64(b.Height))
 		if err != nil {
 			return fmt.Errorf("get hash of block %d: %w", b.Height, err)
 		}
 		if hash == b.Hash {
 			continue
 		}
-		eb.logger.Info("btc reorg, dropping cached blocks", "from", b.Height, "cached_hash", b.Hash, "hash", hash)
-		eb.cacheMu.Lock()
-		eb.cache = slices.DeleteFunc(eb.cache, func(c CachedBlock) bool { return c.Height >= b.Height })
-		eb.cacheMu.Unlock()
+		rd.logger.Info("btc reorg, dropping cached blocks", "from", b.Height, "cached_hash", b.Hash, "hash", hash)
+		rd.cacheMu.Lock()
+		rd.cache = slices.DeleteFunc(rd.cache, func(c CachedBlock) bool { return c.Height >= b.Height })
+		rd.cacheMu.Unlock()
 		return nil
 	}
 	return nil
@@ -266,12 +266,12 @@ func (eb *EnshrinedBifrost) dropReorged() error {
 // well-formed: it hashes to the hash the node gave for the height, and the
 // merkle root of its transactions matches its header. The chain applies the
 // full set of Bitcoin checks again when it processes the block.
-func (eb *EnshrinedBifrost) fetchBlock(height uint64) (CachedBlock, error) {
-	hash, err := eb.rpc.GetBlockHash(int64(height))
+func (rd *Reader) fetchBlock(height uint64) (CachedBlock, error) {
+	hash, err := rd.rpc.GetBlockHash(int64(height))
 	if err != nil {
 		return CachedBlock{}, fmt.Errorf("get block hash: %w", err)
 	}
-	block, err := eb.rpc.GetBlock(hash)
+	block, err := rd.rpc.GetBlock(hash)
 	if err != nil {
 		return CachedBlock{}, fmt.Errorf("get block: %w", err)
 	}

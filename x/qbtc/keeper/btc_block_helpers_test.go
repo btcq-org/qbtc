@@ -173,7 +173,7 @@ func blockOf(t *testing.T, height uint64, block *wire.MsgBlock) *types.BtcBlock 
 // signer. It sets f.ctx to the context that carries the extended commit.
 func attestedBlocksMsg(t *testing.T, f *fixture, height uint64, blocks ...*wire.MsgBlock) *types.MsgBtcBlock {
 	t.Helper()
-	msg := &types.MsgBtcBlock{Signer: types.EBifrostSignerAddress}
+	msg := &types.MsgBtcBlock{Signer: types.BtcBlockSignerAddress}
 	for i, block := range blocks {
 		msg.Blocks = append(msg.Blocks, blockOf(t, height+uint64(i), block))
 	}

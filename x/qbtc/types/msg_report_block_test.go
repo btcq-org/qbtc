@@ -15,7 +15,7 @@ func validBtcBlockMsg() *types.MsgBtcBlock {
 	return &types.MsgBtcBlock{
 		Blocks:             []*types.BtcBlock{{Height: 1, Hash: strings.Repeat("a", 64), BlockContent: []byte{1}}},
 		ExtendedCommitInfo: []byte{1},
-		Signer:             types.EBifrostSignerAddress,
+		Signer:             types.BtcBlockSignerAddress,
 	}
 }
 

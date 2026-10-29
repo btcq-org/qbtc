@@ -3,7 +3,7 @@ package abci
 import (
 	"fmt"
 
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -13,7 +13,7 @@ import (
 
 type ProposalHandler struct {
 	keeper  *keeper.Keeper
-	bifrost *ebifrost.EnshrinedBifrost
+	reader  *btcreader.Reader
 	decoder sdk.TxDecoder
 
 	prepareProposalHandler sdk.PrepareProposalHandler
@@ -22,7 +22,7 @@ type ProposalHandler struct {
 
 func NewProposalHandler(
 	k *keeper.Keeper,
-	b *ebifrost.EnshrinedBifrost,
+	b *btcreader.Reader,
 	decoder sdk.TxDecoder,
 	nextPrepareProposalHandler sdk.PrepareProposalHandler,
 	nextProcessProposalHandler sdk.ProcessProposalHandler,
@@ -30,7 +30,7 @@ func NewProposalHandler(
 
 	return &ProposalHandler{
 		keeper:                 k,
-		bifrost:                b,
+		reader:                 b,
 		decoder:                decoder,
 		prepareProposalHandler: nextPrepareProposalHandler,
 		processProposalHandler: nextProcessProposalHandler,
@@ -38,7 +38,7 @@ func NewProposalHandler(
 }
 
 func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
-	// let's only fill half of the block with ebifrost inject txs, so that we leave room for normal txs
+	// let's only fill half of the block with injected MsgBtcBlock txs, so that we leave room for normal txs
 	maxTxBytes := req.MaxTxBytes / 2
 	injectTxs, txBzLen := h.votedInjectTxs(ctx, req, maxTxBytes)
 
@@ -56,7 +56,7 @@ func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrep
 		return nil, err
 	}
 
-	// Combine ebifrost inject txs with the ones selected by default handler, up to tx limit
+	// Combine the injected MsgBtcBlock txs with the ones selected by default handler, up to tx limit
 	combinedTxs := injectTxs
 
 	defaultTxsSize := int64(0)
@@ -115,7 +115,7 @@ func (h *ProposalHandler) votedInjectTxs(ctx sdk.Context, req *abci.RequestPrepa
 
 	msg := &types.MsgBtcBlock{
 		ExtendedCommitInfo: extendedCommit,
-		Signer:             types.EBifrostSignerAddress,
+		Signer:             types.BtcBlockSignerAddress,
 	}
 	var txBz []byte
 	var txBzLen int64
@@ -124,14 +124,14 @@ func (h *ProposalHandler) votedInjectTxs(ctx sdk.Context, req *abci.RequestPrepa
 		if !ok {
 			break
 		}
-		cached, ok := h.bifrost.CachedBlock(height)
+		cached, ok := h.reader.CachedBlock(height)
 		if !ok || cached.Hash != voted.Hash || cached.CommitHash != voted.CommitHash {
 			ctx.Logger().Info("btc block has a supermajority but is not in the local cache", "height", height, "hash", voted.Hash)
 			break
 		}
 		msg.Blocks = append(msg.Blocks, &types.BtcBlock{Height: height, Hash: cached.Hash, BlockContent: cached.Content})
 
-		bz, err := h.bifrost.MarshalTx(msg)
+		bz, err := h.reader.MarshalTx(msg)
 		if err != nil {
 			ctx.Logger().Error("failed to marshal the inject tx", "error", err)
 			return nil, 0
@@ -155,7 +155,7 @@ func (h *ProposalHandler) votedInjectTxs(ctx sdk.Context, req *abci.RequestPrepa
 	}
 
 	if mutated := mutateInjectedMsg(ctx, msg); mutated != msg {
-		bz, err := h.bifrost.MarshalTx(mutated)
+		bz, err := h.reader.MarshalTx(mutated)
 		if err != nil {
 			ctx.Logger().Error("failed to marshal the inject tx", "error", err)
 			return nil, 0
@@ -219,7 +219,7 @@ func (h *ProposalHandler) ProcessProposal(ctx sdk.Context, req *abci.RequestProc
 func (h *ProposalHandler) checkInjectedBlocks(ctx sdk.Context, txs []sdk.Tx) error {
 	var msg *types.MsgBtcBlock
 	for _, tx := range txs {
-		injected := ebifrost.IsInjectTx(tx)
+		injected := btcreader.IsInjectTx(tx)
 		for _, m := range tx.GetMsgs() {
 			block, ok := m.(*types.MsgBtcBlock)
 			if !ok {
@@ -241,7 +241,7 @@ func (h *ProposalHandler) checkInjectedBlocks(ctx sdk.Context, txs []sdk.Tx) err
 	if !keeper.VoteExtensionsEnabled(ctx) {
 		return fmt.Errorf("MsgBtcBlock needs vote extensions, which are not enabled at height %d", ctx.HeaderInfo().Height)
 	}
-	if msg.Signer != types.EBifrostSignerAddress {
+	if msg.Signer != types.BtcBlockSignerAddress {
 		return fmt.Errorf("MsgBtcBlock signer %s is not the injection signer", msg.Signer)
 	}
 	if err := msg.ValidateBasic(); err != nil {

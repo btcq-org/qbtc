@@ -58,12 +58,9 @@ var (
 	flagDockerNetwork              = "docker-network"
 	flagEnableAPI                  = "enable-api"
 
-	// deprecated alias of flagBtcInitialHeight, kept so old command lines work
-	flagBifrostStartBlockHeight = "bifrost-start-block-height"
-
 	// bitcoin specific arguments. The first four describe the Bitcoin node the
 	// generator itself reads the genesis anchor from; the node-* ones describe
-	// what every validator's [ebifrost] section points at (defaults: the same).
+	// what every validator's [btc_reader] section points at (defaults: the same).
 	flagBitcoinRPCHost         = "bitcoin-rpc-host"
 	flagBitcoinRPCPort         = "bitcoin-rpc-port"
 	flagBitcoinRPCUser         = "bitcoin-rpc-user"
@@ -107,7 +104,7 @@ type initArgs struct {
 	bitcoinRPCUser     string
 	bitcoinRPCPassword string
 
-	// bitcoin node written into each validator's [ebifrost] section; validator
+	// bitcoin node written into each validator's [btc_reader] section; validator
 	// i uses nodeBitcoinRPCPort + i*nodeBitcoinRPCPortStep.
 	nodeBitcoinRPCHost     string
 	nodeBitcoinRPCPort     int64
@@ -185,9 +182,6 @@ Example:
 			}
 
 			args.btcInitialHeight, _ = cmd.Flags().GetInt64(flagBtcInitialHeight)
-			if args.btcInitialHeight == 0 {
-				args.btcInitialHeight, _ = cmd.Flags().GetInt64(flagBifrostStartBlockHeight)
-			}
 			if args.btcInitialHeight <= 0 {
 				return fmt.Errorf("--%s is required", flagBtcInitialHeight)
 			}
@@ -238,8 +232,6 @@ Example:
 	cmd.Flags().String(flags.FlagKeyringBackend, "test", "Select keyring's backend (os|file|test)")
 
 	cmd.Flags().Int64(flagBtcInitialHeight, 0, "First Bitcoin height the chain processes (genesis btc_initial_height); the anchor is the block before it")
-	cmd.Flags().Int64(flagBifrostStartBlockHeight, 0, "Deprecated alias of --"+flagBtcInitialHeight)
-	_ = cmd.Flags().MarkHidden(flagBifrostStartBlockHeight)
 	cmd.Flags().Int64(flagVoteExtensionsEnableHeight, 2, "consensus.params.abci.vote_extensions_enable_height written to genesis")
 	cmd.Flags().String(flagDockerImage, "btcq-org/qbtc:localnet", "Docker image used for every node in the generated docker-compose.yml")
 	cmd.Flags().String(flagDockerNetwork, "", "If set, the generated docker-compose.yml joins this pre-existing external Docker network instead of creating its own")
@@ -250,12 +242,12 @@ Example:
 	cmd.Flags().Int64(flagBitcoinRPCPort, 8332, "Bitcoin RPC port the generator reads the genesis anchor from (also the validators' default)")
 	cmd.Flags().String(flagBitcoinRPCUser, "bitcoinrpc", "Bitcoin RPC user")
 	cmd.Flags().String(flagBitcoinRPCPassword, "", "Bitcoin RPC password")
-	cmd.Flags().String(flagNodeBitcoinRPCHost, "", "Bitcoin RPC host written to each validator's [ebifrost] section (default: --"+flagBitcoinRPCHost+")")
+	cmd.Flags().String(flagNodeBitcoinRPCHost, "", "Bitcoin RPC host written to each validator's [btc_reader] section (default: --"+flagBitcoinRPCHost+")")
 	cmd.Flags().Int64(flagNodeBitcoinRPCPort, 0, "Bitcoin RPC port of validator 0 (default: --"+flagBitcoinRPCPort+")")
 	cmd.Flags().Int64(flagNodeBitcoinRPCPortStep, 0, "Validator i uses Bitcoin RPC port --"+flagNodeBitcoinRPCPort+" + i*step")
-	cmd.Flags().Int64(flagConfirmationDepth, 6, "[ebifrost] confirmation_depth written to each validator's app.toml")
-	cmd.Flags().String(flagPollInterval, "10s", "[ebifrost] poll_interval written to each validator's app.toml")
-	cmd.Flags().Int64(flagMaxCachedBlocks, 16, "[ebifrost] max_cached_blocks written to each validator's app.toml")
+	cmd.Flags().Int64(flagConfirmationDepth, 6, "[btc_reader] confirmation_depth written to each validator's app.toml")
+	cmd.Flags().String(flagPollInterval, "10s", "[btc_reader] poll_interval written to each validator's app.toml")
+	cmd.Flags().Int64(flagMaxCachedBlocks, 16, "[btc_reader] max_cached_blocks written to each validator's app.toml")
 	return cmd
 }
 
@@ -446,7 +438,7 @@ func initTestnetFiles(
 		srvconfig.SetConfigTemplate(srvconfig.DefaultConfigTemplate)
 		appTomlPath := filepath.Join(nodeDir, "config", "app.toml")
 		srvconfig.WriteConfigFile(appTomlPath, &appConfig)
-		if err := appendEBifrostConfig(appTomlPath, args, i); err != nil {
+		if err := appendReaderConfig(appTomlPath, args, i); err != nil {
 			return err
 		}
 	}
@@ -521,17 +513,17 @@ func writeFile(file, dir string, contents []byte) error {
 	return nil
 }
 
-// appendEBifrostConfig appends the in-process Bitcoin reader's [ebifrost]
+// appendReaderConfig appends the in-process Bitcoin reader's [btc_reader]
 // section to a validator's app.toml. Validator i reads Bitcoin from
 // nodeBitcoinRPCPort + i*nodeBitcoinRPCPortStep.
-func appendEBifrostConfig(appTomlPath string, args initArgs, i int) error {
+func appendReaderConfig(appTomlPath string, args initArgs, i int) error {
 	port := args.nodeBitcoinRPCPort + int64(i)*args.nodeBitcoinRPCPortStep
 	section := fmt.Sprintf(`
 ###############################################################################
-###                    Enshrined Bifrost (Bitcoin reader)                   ###
+###                    Bitcoin reader                   ###
 ###############################################################################
 
-[ebifrost]
+[btc_reader]
 # Whether this validator reads Bitcoin and attests blocks in its vote extensions
 enable = true
 

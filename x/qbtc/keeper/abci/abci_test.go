@@ -31,7 +31,7 @@ import (
 	protov2 "google.golang.org/protobuf/proto"
 
 	"github.com/btcq-org/qbtc/common"
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	module "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtctestutil "github.com/btcq-org/qbtc/x/qbtc/testutil"
@@ -104,7 +104,7 @@ type abciFixture struct {
 	t       *testing.T
 	ctx     sdk.Context
 	keeper  *keeper.Keeper
-	bifrost *ebifrost.EnshrinedBifrost
+	reader  *btcreader.Reader
 	handler *ProposalHandler
 	decode  func([]byte) (sdk.Tx, error)
 	cdc     codec.Codec
@@ -155,15 +155,15 @@ func newFixture(t *testing.T, cachedBlocks int, powers ...int64) *abciFixture {
 
 	// the reader fetches the blocks after lastProcessed from a node whose tip is
 	// cachedBlocks above, with one confirmation needed
-	cfg := ebifrost.DefaultEBifrostConfig()
+	cfg := btcreader.DefaultConfig()
 	cfg.Enable = true
 	cfg.ConfirmationDepth = 1
 	cfg.MaxCachedBlocks = 32
-	eb := ebifrost.NewEnshrinedBifrostWithRPC(cfg, encCfg.Codec, log.NewNopLogger(), newFakeBitcoin(int64(lastProcessed+cachedBlocks)))
+	eb := btcreader.NewReaderWithRPC(cfg, encCfg.Codec, log.NewNopLogger(), newFakeBitcoin(int64(lastProcessed+cachedBlocks)))
 	require.NoError(t, eb.Poll(lastProcessed))
 
-	f := &abciFixture{t: t, ctx: ctx, keeper: k, bifrost: eb, cdc: encCfg.Codec, keys: keys, powers: powers}
-	f.decode = ebifrost.TxDecoder(encCfg.Codec, nil)
+	f := &abciFixture{t: t, ctx: ctx, keeper: k, reader: eb, cdc: encCfg.Codec, keys: keys, powers: powers}
+	f.decode = btcreader.TxDecoder(encCfg.Codec, nil)
 	f.handler = NewProposalHandler(k, eb, func(bz []byte) (sdk.Tx, error) {
 		if len(bz) == 1 && int(bz[0]) < len(f.txs) {
 			return f.txs[bz[0]], nil
@@ -183,7 +183,7 @@ func (f *abciFixture) voteFor(heights ...uint64) []byte {
 	f.t.Helper()
 	var ext types.BtcBlockVoteExtension
 	for _, h := range heights {
-		block, ok := f.bifrost.CachedBlock(h)
+		block, ok := f.reader.CachedBlock(h)
 		require.True(f.t, ok, "block %d is not cached", h)
 		ext.Votes = append(ext.Votes, &types.BtcBlockVote{Height: h, Hash: block.Hash, CommitHash: block.CommitHash[:]})
 	}
@@ -206,7 +206,7 @@ func (f *abciFixture) commit(exts ...[]byte) abci.ExtendedCommitInfo {
 }
 
 func (f *abciFixture) voteHash(height uint64) string {
-	block, ok := f.bifrost.CachedBlock(height)
+	block, ok := f.reader.CachedBlock(height)
 	require.True(f.t, ok)
 	return block.Hash
 }
@@ -256,10 +256,10 @@ func TestPrepareProposalInjectsVotedBlocks(t *testing.T) {
 		require.NotNil(t, msg)
 		require.Len(t, txs, 1, "one inject tx")
 		require.Equal(t, []uint64{101, 102, 103, 104}, heightsOf(msg))
-		require.Equal(t, types.EBifrostSignerAddress, msg.Signer)
+		require.Equal(t, types.BtcBlockSignerAddress, msg.Signer)
 		require.NotEmpty(t, msg.ExtendedCommitInfo)
 		for _, b := range msg.Blocks {
-			cached, _ := f.bifrost.CachedBlock(b.Height)
+			cached, _ := f.reader.CachedBlock(b.Height)
 			require.Equal(t, cached.Hash, b.Hash)
 			require.Equal(t, cached.Content, b.BlockContent)
 		}
@@ -430,7 +430,7 @@ func TestExtendVote(t *testing.T) {
 		require.Len(t, e.Votes, 3)
 		for i, v := range e.Votes {
 			require.Equal(t, uint64(101+i), v.Height)
-			cached, _ := f.bifrost.CachedBlock(v.Height)
+			cached, _ := f.reader.CachedBlock(v.Height)
 			require.Equal(t, cached.Hash, v.Hash)
 			require.Equal(t, cached.CommitHash[:], v.CommitHash)
 		}
@@ -549,7 +549,7 @@ func (f *abciFixture) injectedMsg(heights ...uint64) (*types.MsgBtcBlock, abci.E
 }
 
 func (f *abciFixture) injectTx(msg *types.MsgBtcBlock) sdk.Tx {
-	return ebifrost.NewInjectTx(f.cdc, []sdk.Msg{msg})
+	return btcreader.NewInjectTx(f.cdc, []sdk.Msg{msg})
 }
 
 func (f *abciFixture) process(ctx sdk.Context, txs ...sdk.Tx) abci.ResponseProcessProposal_ProposalStatus {
@@ -628,7 +628,7 @@ func TestProcessProposal(t *testing.T) {
 
 	t.Run("forged content", func(t *testing.T) {
 		msg := clone()
-		other, ok := f.bifrost.CachedBlock(104)
+		other, ok := f.reader.CachedBlock(104)
 		require.True(t, ok)
 		msg.Blocks[0].BlockContent = other.Content
 		require.Equal(t, reject, f.process(ctx, f.injectTx(msg)))

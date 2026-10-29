@@ -38,8 +38,8 @@ CONTROL="http://127.0.0.1:$BTC_CONTROL_PORT"
 TSS_PORT=${TSS_PORT:-18480}
 
 ENABLE_HEIGHT=${ENABLE_HEIGHT:-10}             # consensus vote_extensions_enable_height
-DEPTH=${CONFIRMATION_DEPTH:-6}                 # [ebifrost] confirmation_depth
-POLL_INTERVAL=${POLL_INTERVAL:-2s}             # [ebifrost] poll_interval
+DEPTH=${CONFIRMATION_DEPTH:-6}                 # [btc_reader] confirmation_depth
+POLL_INTERVAL=${POLL_INTERVAL:-2s}             # [btc_reader] poll_interval
 BACKLOG=${BACKLOG:-150}                        # confirmed blocks to ingest right after activation
 EXTRA_BLOCKS=${EXTRA_BLOCKS:-400}              # prefetched blocks the scenarios release in batches and drips
 BATCH=${BATCH:-14}                             # blocks released per scenario phase

@@ -17,12 +17,12 @@ import (
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 )
 
-// newAppOptions returns AppOptions with the home directory set and ebifrost
+// newAppOptions returns AppOptions with the home directory set and the Bitcoin reader
 // disabled since there is no Bitcoin node to read in integration tests.
 func newAppOptions(home string) simtestutil.AppOptionsMap {
 	return simtestutil.AppOptionsMap{
-		flags.FlagHome:    home,
-		"ebifrost.enable": false,
+		flags.FlagHome:      home,
+		"btc_reader.enable": false,
 	}
 }
 

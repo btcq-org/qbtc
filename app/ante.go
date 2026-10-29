@@ -5,7 +5,7 @@ import (
 
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/runtime"
@@ -24,7 +24,7 @@ type HandlerOptions struct {
 	// AuthKeeper is a superset of ante.AccountKeeper that also exposes
 	// NewAccountWithAddress, required by FreeClaimDecorator to pre-create
 	// first-time claimers' accounts.
-	AuthKeeper ebifrost.AccountKeeper
+	AuthKeeper btcreader.AccountKeeper
 }
 
 // NewAnteHandler returns an AnteHandler that checks and increments sequence
@@ -54,12 +54,12 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 	}
 
 	anteDecorators := []sdk.AnteDecorator{
-		// ebifrost injected tx decorator must be the first decorator to avoid handled messages to be submitted
-		ebifrost.NewInjectedTxDecorator(),
+		// the injected MsgBtcBlock decorator must be the first decorator to avoid handled messages to be submitted
+		btcreader.NewInjectedTxDecorator(),
 		// outermost AnteDecorator. SetUpContext must be called first
 		ante.NewSetUpContextDecorator(),
 		// free gas for MsgClaimWithProof txs — must be after SetUpContext
-		ebifrost.NewFreeClaimDecorator(options.AuthKeeper),
+		btcreader.NewFreeClaimDecorator(options.AuthKeeper),
 		ante.NewExtensionOptionsDecorator(options.ExtensionOptionChecker),
 		ante.NewValidateBasicDecorator(),
 		ante.NewTxTimeoutHeightDecorator(),

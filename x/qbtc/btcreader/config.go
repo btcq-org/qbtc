@@ -1,4 +1,4 @@
-package ebifrost
+package btcreader
 
 import (
 	"fmt"
@@ -11,19 +11,19 @@ import (
 )
 
 const (
-	flagEnabled           = "ebifrost.enable"
-	flagBitcoinHost       = "ebifrost.bitcoin_host"
-	flagBitcoinPort       = "ebifrost.bitcoin_port"
-	flagBitcoinRPCUser    = "ebifrost.bitcoin_rpc_user"
-	flagBitcoinRPCPass    = "ebifrost.bitcoin_rpc_password"
-	flagConfirmationDepth = "ebifrost.confirmation_depth"
-	flagPollInterval      = "ebifrost.poll_interval"
-	flagMaxCachedBlocks   = "ebifrost.max_cached_blocks"
-	flagRPCTimeout        = "ebifrost.rpc_timeout"
+	flagEnabled           = "btc_reader.enable"
+	flagBitcoinHost       = "btc_reader.bitcoin_host"
+	flagBitcoinPort       = "btc_reader.bitcoin_port"
+	flagBitcoinRPCUser    = "btc_reader.bitcoin_rpc_user"
+	flagBitcoinRPCPass    = "btc_reader.bitcoin_rpc_password"
+	flagConfirmationDepth = "btc_reader.confirmation_depth"
+	flagPollInterval      = "btc_reader.poll_interval"
+	flagMaxCachedBlocks   = "btc_reader.max_cached_blocks"
+	flagRPCTimeout        = "btc_reader.rpc_timeout"
 )
 
-// EBifrostConfig configures the in-node Bitcoin reader.
-type EBifrostConfig struct {
+// Config configures the in-node Bitcoin reader.
+type Config struct {
 	Enable             bool          `mapstructure:"enable" json:"enable"`
 	BitcoinHost        string        `mapstructure:"bitcoin_host" json:"bitcoin_host"`
 	BitcoinPort        int64         `mapstructure:"bitcoin_port" json:"bitcoin_port"`
@@ -35,8 +35,8 @@ type EBifrostConfig struct {
 	RPCTimeout         time.Duration `mapstructure:"rpc_timeout" json:"rpc_timeout"`
 }
 
-func DefaultEBifrostConfig() EBifrostConfig {
-	return EBifrostConfig{
+func DefaultConfig() Config {
+	return Config{
 		Enable:            false,
 		BitcoinHost:       "localhost",
 		BitcoinPort:       8332,
@@ -48,29 +48,29 @@ func DefaultEBifrostConfig() EBifrostConfig {
 }
 
 // Validate checks the settings the reader needs when it is enabled.
-func (c EBifrostConfig) Validate() error {
+func (c Config) Validate() error {
 	if !c.Enable {
 		return nil
 	}
 	if c.BitcoinHost == "" {
-		return fmt.Errorf("ebifrost.bitcoin_host is required")
+		return fmt.Errorf("btc_reader.bitcoin_host is required")
 	}
 	if c.ConfirmationDepth == 0 {
-		return fmt.Errorf("ebifrost.confirmation_depth must be at least 1")
+		return fmt.Errorf("btc_reader.confirmation_depth must be at least 1")
 	}
 	if c.PollInterval <= 0 {
-		return fmt.Errorf("ebifrost.poll_interval must be positive")
+		return fmt.Errorf("btc_reader.poll_interval must be positive")
 	}
 	if c.MaxCachedBlocks < 1 {
-		return fmt.Errorf("ebifrost.max_cached_blocks must be at least 1")
+		return fmt.Errorf("btc_reader.max_cached_blocks must be at least 1")
 	}
 	return nil
 }
 
 // ConfigTemplate toml snippet for app.toml
-func ConfigTemplate(c EBifrostConfig) string {
+func ConfigTemplate(c Config) string {
 	return fmt.Sprintf(`
-[ebifrost]
+[btc_reader]
 # Whether this node reads Bitcoin blocks and attests them in its vote extensions.
 # Validators must enable it and point it at a Bitcoin Core node they trust.
 enable = %t
@@ -100,14 +100,14 @@ rpc_timeout = "%s"
 }
 
 func DefaultConfigTemplate() string {
-	return ConfigTemplate(DefaultEBifrostConfig())
+	return ConfigTemplate(DefaultConfig())
 }
 
 // ____________________________________________________________________________
 
 // AddModuleInitFlags implements servertypes.ModuleInitFlags interface.
 func AddModuleInitFlags(startCmd *cobra.Command) {
-	defaults := DefaultEBifrostConfig()
+	defaults := DefaultConfig()
 	startCmd.Flags().Bool(flagEnabled, defaults.Enable, "Read Bitcoin blocks and attest them in vote extensions")
 	startCmd.Flags().String(flagBitcoinHost, defaults.BitcoinHost, "Bitcoin Core RPC host")
 	startCmd.Flags().Int64(flagBitcoinPort, defaults.BitcoinPort, "Bitcoin Core RPC port")
@@ -119,9 +119,9 @@ func AddModuleInitFlags(startCmd *cobra.Command) {
 	startCmd.Flags().Duration(flagRPCTimeout, defaults.RPCTimeout, "Timeout of each Bitcoin RPC request")
 }
 
-// ReadEBifrostConfig reads the ebifrost specific configuration
-func ReadEBifrostConfig(opts servertypes.AppOptions) (EBifrostConfig, error) {
-	cfg := DefaultEBifrostConfig()
+// ReadConfig reads the [btc_reader] configuration
+func ReadConfig(opts servertypes.AppOptions) (Config, error) {
+	cfg := DefaultConfig()
 	var err error
 
 	if v := opts.Get(flagEnabled); v != nil {

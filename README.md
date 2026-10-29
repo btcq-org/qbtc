@@ -110,9 +110,9 @@ QBTC_VERSION=1.0.7 bash -c "$(curl -sSL https://raw.githubusercontent.com/btcq-o
 
 After installation, configure your node:
 
-1. Point qbtcd at your own Bitcoin node in the `[ebifrost]` section of `~/.qbtc/config/app.toml`:
+1. Point qbtcd at your own Bitcoin node in the `[btc_reader]` section of `~/.qbtc/config/app.toml`:
    ```toml
-   [ebifrost]
+   [btc_reader]
    enable = true
    bitcoin_host = "127.0.0.1"
    bitcoin_port = 8332

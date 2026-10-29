@@ -30,7 +30,7 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	// ante handler only sees top-level messages, so a message nested in authz
 	// MsgExec, a wasm contract or an ICA packet reaches this handler directly;
 	// on all of those paths the signer is an account the sender controls.
-	if msg.Signer != types.EBifrostSignerAddress {
+	if msg.Signer != types.BtcBlockSignerAddress {
 		return nil, sdkerror.ErrUnauthorized.Wrap("MsgBtcBlock is only accepted from the block proposer's injection path")
 	}
 	if !VoteExtensionsEnabled(sdkCtx) {

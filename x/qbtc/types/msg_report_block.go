@@ -7,12 +7,12 @@ import (
 
 var _ sdk.Msg = &MsgBtcBlock{}
 
-// EBifrostSignerAddress is the signer of every MsgBtcBlock that the block
-// proposer injects. It is the truncated SHA-256 of "ebifrost_signer", not the
+// BtcBlockSignerAddress is the signer of every MsgBtcBlock that the block
+// proposer injects. It is the truncated SHA-256 of "btc_block_signer", not the
 // address of any public key, so no one can sign for it. The block handler
 // rejects MsgBtcBlock with any other signer, which keeps the message off every
 // path where a user picks the signer (a normal tx, authz MsgExec, wasm, ICA).
-const EBifrostSignerAddress = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
+const BtcBlockSignerAddress = "qbtc1z4zgnyehf8dk0fgrwrx9mrt8qk8qlxhvaat6u4"
 
 // MaxBtcBlocksPerMsg is the maximum number of Bitcoin blocks one MsgBtcBlock
 // carries, so one qbtc block processes at most this many. Validators attest

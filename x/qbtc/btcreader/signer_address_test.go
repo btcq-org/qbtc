@@ -1,4 +1,4 @@
-package ebifrost_test
+package btcreader_test
 
 import (
 	"testing"
@@ -9,13 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSignerAddress test to generate the signer address for the ebifrost signer
+// TestSignerAddress test to generate the signer address for the injected MsgBtcBlock
 func TestSignerAddress(t *testing.T) {
 	t.Skip("skipping signer address test")
-	signerAddress, err := bech32.ConvertAndEncode(common.AccountAddressPrefix, crypto.AddressHash([]byte("ebifrost_signer")))
+	signerAddress, err := bech32.ConvertAndEncode(common.AccountAddressPrefix, crypto.AddressHash([]byte("btc_block_signer")))
 	if err != nil {
 		t.Fatalf("failed to encode signer address: %v", err)
 	}
 
-	require.Equal(t, "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv", signerAddress)
+	require.Equal(t, "qbtc1z4zgnyehf8dk0fgrwrx9mrt8qk8qlxhvaat6u4", signerAddress)
 }

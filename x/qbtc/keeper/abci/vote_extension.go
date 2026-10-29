@@ -23,7 +23,7 @@ func (h *ProposalHandler) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote)
 		return nil, err
 	}
 	var ext types.BtcBlockVoteExtension
-	for _, block := range h.bifrost.CachedBlocks(lastProcessedBlock+1, types.MaxBtcBlockVotes) {
+	for _, block := range h.reader.CachedBlocks(lastProcessedBlock+1, types.MaxBtcBlockVotes) {
 		ext.Votes = append(ext.Votes, &types.BtcBlockVote{
 			Height:     block.Height,
 			Hash:       block.Hash,

@@ -189,7 +189,7 @@ func setupWithChain(t *testing.T) (*voteFixture, *regtestChain, *types.MsgBtcBlo
 	b1 := c.nextBlock(c.coinbase())
 	msg := &types.MsgBtcBlock{
 		Blocks: []*types.BtcBlock{blockOf(t, 800001, b1)},
-		Signer: types.EBifrostSignerAddress,
+		Signer: types.BtcBlockSignerAddress,
 	}
 	return vf, c, msg, blockVotes(t, msg.Blocks)
 }

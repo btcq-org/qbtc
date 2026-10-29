@@ -1,10 +1,10 @@
-package ebifrost_test
+package btcreader_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -63,7 +63,7 @@ func TestFreeClaimDecorator_CreatesAccountForFirstTimeClaimer(t *testing.T) {
 	claimer := sdk.AccAddress([]byte("first-time-claimer-addr-01"))
 
 	ak := newFakeAccountKeeper()
-	decorator := ebifrost.NewFreeClaimDecorator(ak)
+	decorator := btcreader.NewFreeClaimDecorator(ak)
 
 	tx := fakeTx{
 		msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String()}},
@@ -91,7 +91,7 @@ func TestFreeClaimDecorator_PreservesExistingAccount(t *testing.T) {
 	_ = existing.SetAccountNumber(42)
 	ak.SetAccount(context.Background(), existing)
 
-	decorator := ebifrost.NewFreeClaimDecorator(ak)
+	decorator := btcreader.NewFreeClaimDecorator(ak)
 
 	tx := fakeTx{
 		msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String()}},
@@ -114,7 +114,7 @@ func TestFreeClaimDecorator_RejectsMultiMsgClaimTx(t *testing.T) {
 	claimerB := sdk.AccAddress([]byte("multi-claimer-addr-bbbbbbb"))
 
 	ak := newFakeAccountKeeper()
-	decorator := ebifrost.NewFreeClaimDecorator(ak)
+	decorator := btcreader.NewFreeClaimDecorator(ak)
 
 	tx := fakeTx{
 		msgs: []sdk.Msg{
@@ -143,7 +143,7 @@ func TestFreeClaimDecorator_SkipsNonClaimTx(t *testing.T) {
 	sender := sdk.AccAddress([]byte("bank-sender-addr-1234567890"))
 
 	ak := newFakeAccountKeeper()
-	decorator := ebifrost.NewFreeClaimDecorator(ak)
+	decorator := btcreader.NewFreeClaimDecorator(ak)
 
 	tx := fakeTx{
 		msgs: []sdk.Msg{&banktypes.MsgSend{

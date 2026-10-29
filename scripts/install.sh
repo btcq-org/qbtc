@@ -459,7 +459,7 @@ print_summary() {
     echo -e "${YELLOW}Next steps:${NC}"
     local step=1
 
-    echo "  ${step}. Edit $QBTCD_HOME/config/app.toml: in [ebifrost] set bitcoin_host, bitcoin_port,"
+    echo "  ${step}. Edit $QBTCD_HOME/config/app.toml: in [btc_reader] set bitcoin_host, bitcoin_port,"
     echo "     bitcoin_rpc_user, bitcoin_rpc_password and enable = true"
     ((step++))
 
