@@ -16,6 +16,10 @@
 #                        CONFIRMATION_DEPTH, so the first blocks are attested right away)
 #   GENESIS_BIN          optional UTXO snapshot (genesis.md); then BTC_INITIAL_HEIGHT is
 #                        required and is the height after the snapshot's
+#   GENESIS_UTXO         UTXOs to put in genesis with their amount as entitlement, for
+#                        claim tests: txid:vout:amount_sats:address, comma separated
+#                        (P2WPKH bc1q... or P2PKH 1...); genesis then also carries the ZK
+#                        verifying key ZK_VERIFYING_KEY (default: the vetest cache's)
 #   CONFIRMATION_DEPTH   confirmations before a block is attested (default 6)
 #   CHAIN_ID             default qbtc-localnet
 #   QBTC_IMAGE           default btcq-org/qbtc:localnet, built by `make docker-localnet`
@@ -33,6 +37,7 @@ CHAIN_ID=${CHAIN_ID:-qbtc-localnet}
 DEPTH=${CONFIRMATION_DEPTH:-6}
 PROXY_PORT=18449
 PROXY_CONTROL=18450
+VETEST_LIB="$ROOT/tests/vetest/vetest_lib.py"
 DEFAULT_RPC_PORTS=(26657 26654 26651 26648)
 DEFAULT_API_PORTS=(1317 1316 1315 1314)
 DEFAULT_GRPC_PORTS=(9090 9088 9086 9084)
@@ -165,6 +170,16 @@ generate() {
     --confirmation-depth "$DEPTH" --enable-api --docker-image "$IMAGE" \
     || die "network generation failed"
 
+  if [ -n "${GENESIS_UTXO:-}" ]; then
+    local specs vk
+    read -ra specs <<< "${GENESIS_UTXO//,/ }"
+    vk=${ZK_VERIFYING_KEY:-$ROOT/tests/vetest/.cache/zk/setup/verifying.key}
+    [ -f "$vk" ] || die "ZK verifying key $vk not found (tests/vetest/run.sh builds it for S9; or set ZK_VERIFYING_KEY)"
+    python3 "$VETEST_LIB" genesis-utxos --out "$NET/genesis_utxos.json" "${specs[@]}" >/dev/null
+    python3 "$VETEST_LIB" genesis-patch --net "$NET" --utxo-file "$NET/genesis_utxos.json" --vk-file "$vk" >/dev/null
+    log "genesis: ${#specs[@]} UTXO(s) with the ZK verifying key $vk"
+  fi
+
   if [ -n "${GENESIS_BIN:-}" ]; then
     # each node splits its copy into chunks and deletes it, so the snapshot
     # must be a regular file in every config directory: a hard link when the
@@ -180,6 +195,11 @@ generate() {
 up() {
   command -v docker >/dev/null || die "docker is required"
   docker compose version >/dev/null 2>&1 || die "docker compose (v2) is required"
+  if [ -n "${GENESIS_UTXO:-}" ]; then        # validate before anything is started
+    local specs
+    read -ra specs <<< "${GENESIS_UTXO//,/ }"
+    python3 "$VETEST_LIB" genesis-utxos --out /dev/null "${specs[@]}" >/dev/null || exit 2
+  fi
   ensure_image
   if [ -d "$NET/validator0" ]; then
     log "using the network in $NET (make localnet-clean to generate a new one)"
@@ -224,7 +244,7 @@ case "${1:-}" in
     log "removed $NET"
     ;;
   *)
-    sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

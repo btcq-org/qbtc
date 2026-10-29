@@ -72,6 +72,7 @@ go test -tags=testing ./x/qbtc/zk/...
 make localnet                                  # public API (mempool.space), starts a few blocks below the tip
 BITCOIN_RPC_HOST=localhost BITCOIN_RPC_PORT=8332 BITCOIN_RPC_USER=u BITCOIN_RPC_PASSWORD=p make localnet
 GENESIS_BIN=~/genesis-931372.bin BTC_INITIAL_HEIGHT=931373 make localnet   # with a UTXO snapshot
+GENESIS_UTXO=<txid>:<vout>:<sats>:<bc1q...> make localnet   # UTXOs in genesis (claimable at once), with the ZK verifying key
 make localnet-status                           # chain height and last processed Bitcoin block per validator
 make localnet-down                             # stop, keep .testnets/
 make localnet-clean                            # stop and delete .testnets/
