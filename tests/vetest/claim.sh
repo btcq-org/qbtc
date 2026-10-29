@@ -57,7 +57,7 @@ fi
 for t in docker curl python3; do command -v "$t" >/dev/null 2>&1 || die "missing prerequisite: $t"; done
 
 # ------------------------------------------------------------- network settings
-[ -f "$ENV_FILE" ] || die "$ENV_FILE not found: start a network first with scripts/vetest/run.sh --keep (the file is written once the chain is up)"
+[ -f "$ENV_FILE" ] || die "$ENV_FILE not found: start a network first with tests/vetest/run.sh --keep (the file is written once the chain is up)"
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 PROJECT=$VETEST_PROJECT; CHAIN_ID=$VETEST_CHAIN_ID; CACHE=$VETEST_CACHE; OUT=$VETEST_OUT; NET=$VETEST_NET

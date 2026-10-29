@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Checks that this machine can run scripts/vetest/run.sh: tools, Docker, free
+# Checks that this machine can run tests/vetest/run.sh: tools, Docker, free
 # ports, disk and memory, and reachability of everything the run downloads.
 # Makes only small requests (HEAD / a few bytes); nothing is built or started.
 #
-#   scripts/vetest/preflight.sh            # or: scripts/vetest/run.sh --check
-#   SKIP_ZK=1 scripts/vetest/preflight.sh  # skip the ZK checks (when not running S9)
+#   tests/vetest/preflight.sh            # or: tests/vetest/run.sh --check
+#   SKIP_ZK=1 tests/vetest/preflight.sh  # skip the ZK checks (when not running S9)
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

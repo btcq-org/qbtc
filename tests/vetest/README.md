@@ -1,4 +1,4 @@
-# Vote-extension scenario harness (`scripts/vetest`)
+# Vote-extension scenario harness (`tests/vetest`)
 
 End-to-end checks of Bitcoin ingestion through ABCI vote extensions: four qbtc
 validators run in Docker, each reads Bitcoin **mainnet** through a
@@ -25,20 +25,20 @@ mempool.space or blockstream.info, Docker Hub, GitHub (libwasmvm), the Go
 module proxy and circom.info. Free host ports: 26657/26654/26651/26648 (CometBFT
 RPC), 9090/9088/9086/9084 (gRPC), 1317..1314, 18449, 18450 and 18480.
 
-Run `scripts/vetest/preflight.sh` first (`SKIP_ZK=1` when skipping S9).
+Run `tests/vetest/preflight.sh` first (`SKIP_ZK=1` when skipping S9).
 
 ## Running
 
 ```bash
-scripts/vetest/preflight.sh
-scripts/vetest/run.sh                     # all scenarios, tears everything down at the end
-scripts/vetest/run.sh --only S3,S9        # selected scenarios
-scripts/vetest/run.sh --keep              # leave the network up for inspection
-scripts/vetest/run.sh --no-build          # reuse the qbtcd-vetest:* images
-scripts/vetest/run.sh --vendor            # build from a host-vendored context (see below)
-scripts/vetest/run.sh --clean             # remove containers, network and out/
-scripts/vetest/run.sh --output-dir /data/vetest-out   # custom output directory (created if missing)
-scripts/vetest/run.sh --restore-honest    # --keep network only: recreate validator 0 on the normal image
+tests/vetest/preflight.sh
+tests/vetest/run.sh                     # all scenarios, tears everything down at the end
+tests/vetest/run.sh --only S3,S9        # selected scenarios
+tests/vetest/run.sh --keep              # leave the network up for inspection
+tests/vetest/run.sh --no-build          # reuse the qbtcd-vetest:* images
+tests/vetest/run.sh --vendor            # build from a host-vendored context (see below)
+tests/vetest/run.sh --clean             # remove containers, network and out/
+tests/vetest/run.sh --output-dir /data/vetest-out   # custom output directory (created if missing)
+tests/vetest/run.sh --restore-honest    # --keep network only: recreate validator 0 on the normal image
 ```
 
 `run.sh` generates the nodes with `--timeout-propose 10s` (`TIMEOUT_PROPOSE`
@@ -72,7 +72,7 @@ retried with backoff). Comma separated URLs are allowed. To use a real
 bitcoind:
 
 ```bash
-UPSTREAM=rpc:http://user:pass@host:8332 scripts/vetest/run.sh
+UPSTREAM=rpc:http://user:pass@host:8332 tests/vetest/run.sh
 ```
 
 The host must be reachable from the proxy container. Blocks are cached on disk
@@ -137,7 +137,7 @@ that protects real funds.
 
 ```bash
 umask 077; echo 'KwDi...your-WIF' > ~/claim.key       # compressed WIF or 64 hex chars
-scripts/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
+tests/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
 #   optional: --dest <qbtc address> | --dest-key <keyring name>   (default: a new key claim-dest-<txid8>-<vout>)
 #             --from <keyring name>                              (default validator0, pays the fee-free tx)
 #             --tss-port <port>                                  (default: first free port above 18480)
@@ -158,7 +158,7 @@ following mainnet, start with `--follow-mainnet` (implies `--keep`), which clear
 the cap (`POST /release {"clear":true}`) after the scenarios:
 
 ```bash
-scripts/vetest/run.sh --follow-mainnet
+tests/vetest/run.sh --follow-mainnet
 # or, on a network already kept: curl -X POST -d '{"clear":true}' http://127.0.0.1:18450/release
 ```
 
@@ -169,7 +169,7 @@ output index, and about an hour later (the block plus 6 confirmations plus
 ingestion) claim it:
 
 ```bash
-scripts/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
+tests/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
 ```
 
 Until then `claim.sh` reports that the UTXO is not in chain state; check progress
@@ -184,10 +184,10 @@ genesis. The flag is repeatable and adds to the S9 test UTXO; the amount is the
 output value in satoshis and becomes the entitled amount:
 
 ```bash
-scripts/vetest/run.sh --keep \
+tests/vetest/run.sh --keep \
   --genesis-utxo <txid>:<vout>:<amount_sats>:<bc1q... or 1... address> \
   --genesis-utxo <txid2>:<vout2>:<amount_sats>:<address2>
-scripts/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
+tests/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
 ```
 
 Arguments are validated before anything starts (64-hex txid, numeric vout,

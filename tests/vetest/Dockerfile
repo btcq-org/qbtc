@@ -1,12 +1,12 @@
-# qbtcd image for the vote-extension scenario harness (scripts/vetest/run.sh).
+# qbtcd image for the vote-extension scenario harness (tests/vetest/run.sh).
 #
 # Default: Docker downloads the Go modules itself. With `run.sh --vendor` the
 # build context carries a vendor/ directory made on the host (`go mod vendor`)
 # and VENDOR=1 makes the build use it, for machines where the Docker build
 # cannot reach the Go module proxy. Only ./cmd/qbtcd is built.
 #
-#   docker build -f scripts/vetest/Dockerfile -t qbtcd-vetest:normal <ctx>
-#   docker build -f scripts/vetest/Dockerfile --build-arg EXTRA_TAGS=vetest_malicious \
+#   docker build -f tests/vetest/Dockerfile -t qbtcd-vetest:normal <ctx>
+#   docker build -f tests/vetest/Dockerfile --build-arg EXTRA_TAGS=vetest_malicious \
 #       -t qbtcd-vetest:malicious <ctx>
 FROM golang:1.26-alpine AS builder
 

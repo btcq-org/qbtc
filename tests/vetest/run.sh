@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # End-to-end scenario harness for Bitcoin ingestion through ABCI vote
 # extensions: 4 qbtc validators in Docker, each reading Bitcoin MAINNET through a
-# fault-injecting proxy. See scripts/vetest/README.md.
+# fault-injecting proxy. See tests/vetest/README.md.
 #
-#   scripts/vetest/run.sh                  # everything, tear down at the end
-#   scripts/vetest/run.sh --only S3,S9     # selected scenarios
-#   scripts/vetest/run.sh --keep           # leave the network running
-#   scripts/vetest/run.sh --clean          # only remove containers/network/output
-#   scripts/vetest/run.sh --follow-mainnet # implies --keep; then keeps ingesting new mainnet blocks
-#   scripts/vetest/run.sh --keep --genesis-utxo TXID:VOUT:SATS:ADDR   # then claim it with claim.sh
+#   tests/vetest/run.sh                  # everything, tear down at the end
+#   tests/vetest/run.sh --only S3,S9     # selected scenarios
+#   tests/vetest/run.sh --keep           # leave the network running
+#   tests/vetest/run.sh --clean          # only remove containers/network/output
+#   tests/vetest/run.sh --follow-mainnet # implies --keep; then keeps ingesting new mainnet blocks
+#   tests/vetest/run.sh --keep --genesis-utxo TXID:VOUT:SATS:ADDR   # then claim it with claim.sh
 #
 # Target: a Linux server (bash, GNU coreutils, docker compose v2, python3, Go 1.26.x).
-# Run scripts/vetest/preflight.sh (or `run.sh --check`) first.
+# Run tests/vetest/preflight.sh (or `run.sh --check`) first.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,10 +74,10 @@ Options:
   --no-build         reuse existing qbtcd-vetest:* images
   --backlog N        confirmed blocks to ingest at activation (default 150)
   --btc-initial-height H   fix the first Bitcoin height instead of deriving it from the tip
-  --output-dir DIR   write logs and state to DIR (created when missing; default scripts/vetest/out)
+  --output-dir DIR   write logs and state to DIR (created when missing; default tests/vetest/out)
   --restore-honest   recreate validator 0 on the normal image (no malicious override) in an
                      already-running --keep network, then exit
-  --clean            remove containers, network and scripts/vetest/out, then exit
+  --clean            remove containers, network and tests/vetest/out, then exit
   -h, --help
 EOF
 }
@@ -334,7 +334,7 @@ build_context() {
 import os, sys
 root = sys.argv[1]
 names = sys.stdin.buffer.read().split(b"\0")
-skip = (b".claude/", b"scripts/vetest/", b".git/", b"vendor/")
+skip = (b".claude/", b"tests/vetest/", b".git/", b"vendor/")
 out = [n for n in names if n and not n.startswith(skip) and os.path.lexists(os.path.join(root.encode(), n))]
 sys.stdout.buffer.write(b"\0".join(out) + b"\0")
 ' "$ROOT" > "$OUT/ctx.files"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Helpers for scripts/vetest/run.sh (Python 3.8+, stdlib only).
+"""Helpers for tests/vetest/run.sh (Python 3.8+, stdlib only).
 
     vetest_lib.py bech32-p2wpkh HASH160_HEX
     vetest_lib.py base58-p2pkh HASH160_HEX
