@@ -167,8 +167,9 @@ tests/vetest/run.sh --follow-mainnet
 The chain ingests blocks at the pace of mainnet (about 10 minutes each, backlog
 first). Send a small amount on **mainnet** to the P2WPKH or P2PKH address of your
 fresh key (`claim.sh --show-address --key-file ~/claim.key` prints its P2WPKH and P2PKH addresses), note the txid and
-output index, and about an hour later (the block plus 6 confirmations plus
-ingestion) claim it:
+output index, and claim it once the chain has processed 144 blocks past it
+(`MinUtxoConfirmationBlocks`, about a day; ingestion itself only waits for the
+6 confirmations). Genesis UTXOs, path (b), are claimable at once:
 
 ```bash
 tests/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
