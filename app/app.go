@@ -302,12 +302,23 @@ func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig
 	docs.RegisterOpenAPIService(Name, apiSvr.Router)
 }
 
-// RegisterNodeService registers the node services for the application.
+// RegisterNodeService registers the node services for the application. The
+// server only calls it when the API or gRPC server is enabled, so qbtcd start
+// also starts the reader from its PostSetup hook.
 func (app *App) RegisterNodeService(ctx client.Context, config config.Config) {
 	app.App.RegisterNodeService(ctx, config)
-	if err := app.EnshrinedBifrost.Start(app.lastProcessedBtcBlock); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
-		panic(fmt.Errorf("failed to start the bitcoin reader: %w", err))
+	if err := app.StartBitcoinReader(); err != nil {
+		panic(err)
 	}
+}
+
+// StartBitcoinReader starts the in-process Bitcoin reader if it is enabled.
+// Calling it again once the reader runs does nothing.
+func (app *App) StartBitcoinReader() error {
+	if err := app.EnshrinedBifrost.Start(app.lastProcessedBtcBlock); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
+		return fmt.Errorf("failed to start the bitcoin reader: %w", err)
+	}
+	return nil
 }
 
 // lastProcessedBtcBlock returns the last Bitcoin height processed in the latest
