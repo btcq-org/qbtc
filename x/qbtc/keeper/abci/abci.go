@@ -119,7 +119,7 @@ func (h *ProposalHandler) votedInjectTxs(ctx sdk.Context, req *abci.RequestPrepa
 	}
 	var txBz []byte
 	var txBzLen int64
-	for height := lastProcessedBlock + 1; len(msg.Blocks) < types.MaxBtcBlockVotes; height++ {
+	for height := lastProcessedBlock + 1; len(msg.Blocks) < types.MaxBtcBlocksPerMsg; height++ {
 		voted, ok := votedBlock(ctx, req.LocalLastCommit, height)
 		if !ok {
 			break

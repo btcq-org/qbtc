@@ -27,6 +27,7 @@ import (
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protowire"
 	protov2 "google.golang.org/protobuf/proto"
 
 	"github.com/btcq-org/qbtc/common"
@@ -339,10 +340,32 @@ func TestPrepareProposalInjectsVotedBlocks(t *testing.T) {
 		for h := uint64(101); h <= 112; h++ {
 			heights = append(heights, h)
 		}
-		ext := g.voteFor(heights[:8]...)
+		ext := g.voteFor(heights...)
 		msg, _ := g.prepare(g.commit(ext, ext, ext), 100<<20)
 		require.NotNil(t, msg)
-		require.Len(t, msg.Blocks, types.MaxBtcBlockVotes)
+		require.Len(t, msg.Blocks, types.MaxBtcBlocksPerMsg)
+	})
+
+	t.Run("the attested heights cover the next block's injection too", func(t *testing.T) {
+		// extensions are built on the state before the block they vote on: after
+		// a block that processed MaxBtcBlocksPerMsg, the next proposer injects
+		// the rest of the attested heights from the same extensions
+		g := newFixture(t, types.MaxBtcBlockVotes, 40, 30, 30)
+		var heights []uint64
+		for h := uint64(101); h <= uint64(100+types.MaxBtcBlockVotes); h++ {
+			heights = append(heights, h)
+		}
+		ext := g.voteFor(heights...)
+		ec := g.commit(ext, ext, ext)
+		msg, _ := g.prepare(ec, 100<<20)
+		require.NotNil(t, msg)
+		require.Equal(t, heights[:types.MaxBtcBlocksPerMsg], heightsOf(msg))
+
+		require.NoError(t, g.keeper.LastProcessedBlock.Set(g.ctx, heights[types.MaxBtcBlocksPerMsg-1]))
+		msg, _ = g.prepare(ec, 100<<20)
+		require.NotNil(t, msg)
+		require.Equal(t, heights[types.MaxBtcBlocksPerMsg:], heightsOf(msg))
+		require.NoError(t, g.keeper.ValidateBtcBlockVotes(g.ctxWith(ec), msg))
 	})
 
 	t.Run("the byte limit counts the blocks that fit", func(t *testing.T) {
@@ -413,8 +436,8 @@ func TestExtendVote(t *testing.T) {
 		}
 	})
 
-	t.Run("at most 8 blocks", func(t *testing.T) {
-		f := newFixture(t, 12, 100)
+	t.Run("at most 16 blocks", func(t *testing.T) {
+		f := newFixture(t, 20, 100)
 		require.Len(t, ext(f).Votes, types.MaxBtcBlockVotes)
 	})
 
@@ -465,6 +488,15 @@ func TestVerifyVoteExtension(t *testing.T) {
 		return marshal(votes...)
 	}
 
+	// a valid extension followed by an unknown field, which Unmarshal skips:
+	// only the size check rejects it
+	padded := protowire.AppendTag(marshal(good()), 15, protowire.BytesType)
+	padded = protowire.AppendBytes(padded, make([]byte, types.MaxVoteExtensionSize))
+	var decoded types.BtcBlockVoteExtension
+	require.NoError(t, decoded.Unmarshal(padded))
+	require.NoError(t, decoded.ValidateFormat())
+	require.Greater(t, len(padded), types.MaxVoteExtensionSize)
+
 	cases := []struct {
 		name   string
 		ext    []byte
@@ -474,7 +506,7 @@ func TestVerifyVoteExtension(t *testing.T) {
 		{"one block", marshal(good()), true},
 		{"the maximum number of blocks", many(types.MaxBtcBlockVotes), true},
 		{"too many blocks", many(types.MaxBtcBlockVotes + 1), false},
-		{"too large", make([]byte, types.MaxVoteExtensionSize+1), false},
+		{"too large", padded, false},
 		{"not a vote extension", []byte{0xff, 0xff, 0xff}, false},
 		{"duplicate heights", marshal(good(), good()), false},
 		{"short commit hash", with(func(v *types.BtcBlockVote) { v.CommitHash = v.CommitHash[:31] }), false},

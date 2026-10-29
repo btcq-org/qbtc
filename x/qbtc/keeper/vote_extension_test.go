@@ -12,6 +12,7 @@ import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtctestutil "github.com/btcq-org/qbtc/x/qbtc/testutil"
@@ -119,6 +120,17 @@ func TestTallyBtcBlockVotes(t *testing.T) {
 		), 10)
 		require.Equal(t, int64(100), total)
 		require.Equal(t, map[keeper.BtcVoteKey]int64{voteKey('a'): 30}, power)
+	})
+
+	t.Run("an oversized extension does not count", func(t *testing.T) {
+		// decodable, but larger than VerifyVoteExtension accepts: only the
+		// proposer can put it in a commit
+		ext := voteExt(t, btcVote(10, 'a'))
+		big := protowire.AppendTag(ext, 15, protowire.BytesType)
+		big = protowire.AppendBytes(big, make([]byte, types.MaxVoteExtensionSize))
+		power, total := keeper.TallyBtcBlockVotes(unsignedCommit(commitVote(60, big), commitVote(40, ext)), 10)
+		require.Equal(t, int64(100), total)
+		require.Equal(t, map[keeper.BtcVoteKey]int64{voteKey('a'): 40}, power)
 	})
 }
 
@@ -306,7 +318,14 @@ func TestValidateBtcBlockVotes(t *testing.T) {
 
 	t.Run("signatures cover less than 2/3 of the power", func(t *testing.T) {
 		vf, msg, ext := setup(t)
-		// 50 signed the attestation, 50 voted without the block
+		// 50 signed the attestation, 50 did not vote
+		votes := append(votesFor(vf, ext, 50), qbtctestutil.TestVote{Key: vf.keys[1], Power: 50, Flag: cmtproto.BlockIDFlagAbsent})
+		vf.msgWithCommit(t, msg, votes)
+		require.ErrorContains(t, vf.validate(msg), "insufficient cumulative voting power")
+	})
+
+	t.Run("a commit vote without an extension signature", func(t *testing.T) {
+		vf, msg, ext := setup(t)
 		votes := append(votesFor(vf, ext, 50), qbtctestutil.TestVote{Key: vf.keys[1], Power: 50, Extension: ext})
 		ec := qbtctestutil.NewExtendedCommit(voteChainID, voteHeight, 0, votes)
 		ec.Votes[1].ExtensionSignature = nil
@@ -314,7 +333,7 @@ func TestValidateBtcBlockVotes(t *testing.T) {
 		require.NoError(t, err)
 		msg.ExtendedCommitInfo = bz
 		vf.setLastCommit(ec)
-		require.Error(t, vf.validate(msg))
+		require.ErrorContains(t, vf.validate(msg), "empty vote extension signature")
 	})
 
 	t.Run("not decodable", func(t *testing.T) {
@@ -417,7 +436,7 @@ func TestSetMsgReportBlock_RejectsMalformedMessage(t *testing.T) {
 		"block without content": func(msg *types.MsgBtcBlock) { msg.Blocks[0].BlockContent = nil },
 		"no extended commit":    func(msg *types.MsgBtcBlock) { msg.ExtendedCommitInfo = nil },
 		"too many blocks": func(msg *types.MsgBtcBlock) {
-			msg.Blocks = append(msg.Blocks, make([]*types.BtcBlock, types.MaxBtcBlockVotes)...)
+			msg.Blocks = append(msg.Blocks, make([]*types.BtcBlock, types.MaxBtcBlocksPerMsg)...)
 		},
 	}
 	for name, mutate := range cases {

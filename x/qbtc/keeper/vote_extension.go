@@ -30,14 +30,16 @@ func VoteExtensionsEnabled(ctx sdk.Context) bool {
 // TallyBtcBlockVotes returns, for each (hash, commit hash) attested at the
 // Bitcoin height, the voting power behind it, and the total power of the
 // commit. The total counts every vote, as baseapp.ValidateVoteExtensions does.
-// Only commit votes with a decodable extension count; a validator counts once
-// per height, with its first vote for that height.
+// Only commit votes with a decodable extension of at most
+// types.MaxVoteExtensionSize bytes count (VerifyVoteExtension rejects larger
+// ones, so one in a commit was put there by the proposer); a validator counts
+// once per height, with its first vote for that height.
 func TallyBtcBlockVotes(extCommit abci.ExtendedCommitInfo, height uint64) (map[BtcVoteKey]int64, int64) {
 	power := make(map[BtcVoteKey]int64)
 	var total int64
 	for _, vote := range extCommit.Votes {
 		total += vote.Validator.Power
-		if vote.BlockIdFlag != cmtproto.BlockIDFlagCommit || len(vote.VoteExtension) == 0 {
+		if vote.BlockIdFlag != cmtproto.BlockIDFlagCommit || len(vote.VoteExtension) == 0 || len(vote.VoteExtension) > types.MaxVoteExtensionSize {
 			continue
 		}
 		var ext types.BtcBlockVoteExtension

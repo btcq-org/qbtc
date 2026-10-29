@@ -25,7 +25,7 @@ func TestMsgBtcBlockValidateBasic(t *testing.T) {
 
 	cases := map[string]func(m *types.MsgBtcBlock){
 		"no blocks":                func(m *types.MsgBtcBlock) { m.Blocks = nil },
-		"too many blocks":          func(m *types.MsgBtcBlock) { m.Blocks = make([]*types.BtcBlock, types.MaxBtcBlockVotes+1) },
+		"too many blocks":          func(m *types.MsgBtcBlock) { m.Blocks = make([]*types.BtcBlock, types.MaxBtcBlocksPerMsg+1) },
 		"nil block":                func(m *types.MsgBtcBlock) { m.Blocks = []*types.BtcBlock{nil} },
 		"block without hash":       func(m *types.MsgBtcBlock) { m.Blocks[0].Hash = "" },
 		"block without content":    func(m *types.MsgBtcBlock) { m.Blocks[0].BlockContent = nil },
@@ -42,7 +42,7 @@ func TestMsgBtcBlockValidateBasic(t *testing.T) {
 	}
 
 	max := validBtcBlockMsg()
-	for len(max.Blocks) < types.MaxBtcBlockVotes {
+	for len(max.Blocks) < types.MaxBtcBlocksPerMsg {
 		max.Blocks = append(max.Blocks, max.Blocks[0])
 	}
 	require.NoError(t, max.ValidateBasic())

@@ -12,6 +12,11 @@ import (
 // ExtendVote attests the Bitcoin blocks this node has read, checked and cached:
 // consecutive heights from the next unprocessed one, at most
 // types.MaxBtcBlockVotes. The extension is empty if there are none.
+//
+// The context holds the state before the block being voted on, so the next
+// unprocessed height ignores what that block processes. The attested heights
+// reach past them (MaxBtcBlockVotes is twice MaxBtcBlocksPerMsg), so the
+// proposer of the following block still has attested blocks to inject.
 func (h *ProposalHandler) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote) (*abci.ResponseExtendVote, error) {
 	lastProcessedBlock, err := h.keeper.GetLastProcessedBlock(ctx)
 	if err != nil {

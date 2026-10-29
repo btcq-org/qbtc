@@ -14,12 +14,19 @@ var _ sdk.Msg = &MsgBtcBlock{}
 // path where a user picks the signer (a normal tx, authz MsgExec, wasm, ICA).
 const EBifrostSignerAddress = "qbtc102aqxl4u8h9q4lcsruq56kkmeey0v699phhvuv"
 
+// MaxBtcBlocksPerMsg is the maximum number of Bitcoin blocks one MsgBtcBlock
+// carries, so one qbtc block processes at most this many. Validators attest
+// more heights than this (MaxBtcBlockVotes): extensions are built on the state
+// before the block they vote on, so the next proposer only has attested blocks
+// to inject if they reach past the ones that block processes.
+const MaxBtcBlocksPerMsg = 8
+
 func (m *MsgBtcBlock) ValidateBasic() error {
 	if len(m.Blocks) == 0 {
 		return errors.ErrInvalidRequest.Wrap("blocks cannot be empty")
 	}
-	if len(m.Blocks) > MaxBtcBlockVotes {
-		return errors.ErrInvalidRequest.Wrapf("%d blocks, maximum is %d", len(m.Blocks), MaxBtcBlockVotes)
+	if len(m.Blocks) > MaxBtcBlocksPerMsg {
+		return errors.ErrInvalidRequest.Wrapf("%d blocks, maximum is %d", len(m.Blocks), MaxBtcBlocksPerMsg)
 	}
 	for i, block := range m.Blocks {
 		if block == nil {

@@ -8,8 +8,10 @@ import (
 
 const (
 	// MaxBtcBlockVotes is the maximum number of Bitcoin blocks a vote extension
-	// attests, and so the maximum number of blocks in a MsgBtcBlock.
-	MaxBtcBlockVotes = 8
+	// attests: twice MaxBtcBlocksPerMsg, because an extension is built on the
+	// state before the block it votes on, and the next proposer needs attested
+	// heights past the ones that block processes.
+	MaxBtcBlockVotes = 2 * MaxBtcBlocksPerMsg
 
 	// MaxVoteExtensionSize caps the size of a vote extension in bytes. Each vote
 	// is below 120 bytes, so the cap leaves room for MaxBtcBlockVotes votes.
