@@ -23,7 +23,8 @@ mainnet blocks, the 2.4 GB Hermez ptau and the proving key), 16 GB RAM or more
 for S9 (the PLONK setup and proof use several GB), and outbound access to
 mempool.space or blockstream.info, Docker Hub, GitHub (libwasmvm), the Go
 module proxy and circom.info. Free host ports: 26657/26654/26651/26648 (CometBFT
-RPC), 9090/9088/9086/9084 (gRPC), 1317..1314, 18449, 18450 and 18480.
+RPC), 9090/9088/9086 (gRPC), 1317..1314, 18449, 18450 and 18480. Validator 3
+runs with gRPC and REST off.
 
 Run `tests/vetest/preflight.sh` first (`SKIP_ZK=1` when skipping S9).
 
@@ -97,7 +98,7 @@ Validators have equal stake, so one validator is 25% of the power.
 | | Checks |
 |---|---|
 | S1 Activation | state at each qbtc height: no Bitcoin block is processed up to the enable height (10); the first injection happens at height >= 11 |
-| S2 Happy path | the backlog is fully ingested; every applied hash equals the mainnet hash; >= 10 consecutive heights tallied with power == total; qbtc block time and extension / inject tx / evidence sizes recorded |
+| S2 Happy path | the backlog is fully ingested; every applied hash equals the mainnet hash; >= 10 consecutive heights tallied with power == total (so validator 3's Bitcoin reader runs with gRPC and REST off); qbtc block time and extension / inject tx / evidence sizes recorded |
 | S3 One Bitcoin node down | validator 3's proxy fails every call: ingestion continues with power 3/4; after restoring, tallies return to 4/4 |
 | S4 One validator on a fork | validator 3 gets the block of height-1 at each height: tallies with two candidates (3/4 mainnet, 1/4 fork); applied hashes equal mainnet; restored -> 4/4 |
 | S5 Three Bitcoin nodes down | consensus height advances >= 5 while the last processed Bitcoin height stays; restoring resumes ingestion |

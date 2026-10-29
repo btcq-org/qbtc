@@ -424,6 +424,11 @@ if [ "$WANT_ZK" = 1 ]; then
 fi
 # shellcheck disable=SC2086
 python3 "$LIB" genesis-patch $PATCH_ARGS >/dev/null
+# validator 3 runs with both the API and gRPC servers off, as a locked-down
+# validator might; its Bitcoin reader must still start
+sed -i '/^\[grpc\]/,/^\[/ s/^enable = true/enable = false/' "$NET/validator3/config/app.toml"
+grep -A3 '^\[grpc\]' "$NET/validator3/config/app.toml" | grep -q '^enable = false' \
+  || die "could not turn off gRPC for validator 3"
 
 # -------------------------------------------------- step 5: wait for prefetch, start
 log "waiting for the block prefetch"
@@ -670,6 +675,7 @@ s7_two_nodes_offline() {
   docker stop "$(cname 2)" "$(cname 3)" >/dev/null
   sleep 15
   ha=$(chain_height 0)
+  [ "$ha" -gt 0 ] || fail "could not read the chain height from validator 0"
   sleep 35
   hb=$(chain_height 0)
   [ "$ha" = "$hb" ] || fail "chain advanced from $ha to $hb with half of the voting power offline (halt expected)"
@@ -696,7 +702,7 @@ EOF
 }
 s8_malicious_proposer() {
   ensure_drained
-  local mode t0 L0 h0 rej d t1 L1 end next
+  local mode t0 L0 h0 rej d t1 L1 end next expect
   # whatever happens below, validator 0 goes back to the honest image
   trap 'restore_honest_node0 || true' EXIT
   for mode in forge noevidence; do
@@ -715,7 +721,11 @@ s8_malicious_proposer() {
     release_more "$BATCH"
     wait_until 300 "ingestion through the honest proposers ($mode)" '[ "$(lpb 1)" -ge '"$((L0 + 8))"' ]'
     d=$(snap_logs "S8_$mode" "$t0")
-    python3 "$LIB" rejects --logs "$d" --nodes 1,2,3 --min 1
+    case "$mode" in
+      forge) expect="insufficient vote extension power" ;;
+      noevidence) expect="extended commit info cannot be empty" ;;
+    esac
+    python3 "$LIB" rejects --logs "$d" --nodes 1,2,3 --min 1 --error-contains "$expect"
     python3 "$LIB" processed --logs "$d" --after "$L0" --truth "$CONTROL" --min-count 8
     # the rejection and the ingestion can both be done within fewer than 5 heights
     wait_until 120 "the chain to advance 5 heights under the '$mode' proposer (stalled)" \

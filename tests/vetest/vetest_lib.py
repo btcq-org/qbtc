@@ -421,15 +421,19 @@ def cmd_rejects(a):
         c = 0
         for line in logs.get(n, []):
             kv = parse_line(line, "rejecting proposal")
-            if kv is not None:
-                c += 1
-                sample = sample or kv.get("error")
+            if kv is None:
+                continue
+            sample = sample or kv.get("error")
+            if a.error_contains and a.error_contains not in str(kv.get("error", "")):
+                continue
+            c += 1
         print("node %d: %d 'rejecting proposal' lines" % (n, c))
         total += c
     if sample:
         print("sample error: " + str(sample)[:300])
     if total < a.min:
-        fail("expected at least %d rejections, saw %d" % (a.min, total))
+        what = "rejections" if not a.error_contains else "rejections with %r in the error" % a.error_contains
+        fail("expected at least %d %s, saw %d" % (a.min, what, total))
     print("PASS")
 
 
@@ -552,6 +556,7 @@ def main():
     p.add_argument("--logs", required=True)
     p.add_argument("--nodes", required=True)
     p.add_argument("--min", type=int, default=1)
+    p.add_argument("--error-contains", default="", help="count only rejections whose error contains this text")
     p.set_defaults(fn=cmd_rejects)
 
     p = sub.add_parser("sizes")
