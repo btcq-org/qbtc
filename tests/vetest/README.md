@@ -23,8 +23,9 @@ mainnet blocks, the 2.4 GB Hermez ptau and the proving key), 16 GB RAM or more
 for S9 (the PLONK setup and proof use several GB), and outbound access to
 mempool.space or blockstream.info, Docker Hub, GitHub (libwasmvm), the Go
 module proxy and circom.info. Free host ports: 26657/26654/26651/26648 (CometBFT
-RPC), 9090/9088/9086 (gRPC), 1317..1314, 18449, 18450 and 18480. Validator 3
-runs with gRPC and REST off.
+RPC), 9090/9088/9086 (gRPC), 18449, 18450 and 18480. REST is off on every
+validator (the harness queries through `docker exec`), and validator 3 also
+runs with gRPC off.
 
 Run `tests/vetest/preflight.sh` first (`SKIP_ZK=1` when skipping S9).
 

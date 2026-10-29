@@ -190,6 +190,23 @@ docker-localnet:
 	@echo "Building docker image for local development"
 	@docker build -t btcq-org/qbtc:localnet .
 
+# A 4-validator chain in Docker that follows Bitcoin mainnet (docker-compose.yml).
+# BITCOIN_RPC_HOST/PORT/USER/PASSWORD, BTC_INITIAL_HEIGHT and GENESIS_BIN are
+# read by scripts/localnet.sh; see its header.
+localnet:
+	@scripts/localnet.sh up
+
+localnet-status:
+	@scripts/localnet.sh status
+
+localnet-down:
+	@scripts/localnet.sh down
+
+localnet-clean:
+	@scripts/localnet.sh clean
+
+.PHONY: docker-localnet localnet localnet-status localnet-down localnet-clean
+
 
 
 generate-testnet:

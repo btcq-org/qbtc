@@ -56,6 +56,7 @@ var (
 	flagVoteExtensionsEnableHeight = "vote-extensions-enable-height"
 	flagDockerImage                = "docker-image"
 	flagDockerNetwork              = "docker-network"
+	flagEnableAPI                  = "enable-api"
 
 	// deprecated alias of flagBtcInitialHeight, kept so old command lines work
 	flagBifrostStartBlockHeight = "bifrost-start-block-height"
@@ -97,6 +98,8 @@ type initArgs struct {
 	voteExtensionsEnableHeight int64
 	dockerImage                string
 	dockerNetwork              string
+	// enableAPI turns on the REST API server in every node's app.toml
+	enableAPI bool
 
 	// bitcoin node the generator reads the anchor from
 	bitcoinRPCHost     string
@@ -191,6 +194,7 @@ Example:
 			args.voteExtensionsEnableHeight, _ = cmd.Flags().GetInt64(flagVoteExtensionsEnableHeight)
 			args.dockerImage, _ = cmd.Flags().GetString(flagDockerImage)
 			args.dockerNetwork, _ = cmd.Flags().GetString(flagDockerNetwork)
+			args.enableAPI, _ = cmd.Flags().GetBool(flagEnableAPI)
 			args.bitcoinRPCHost, _ = cmd.Flags().GetString(flagBitcoinRPCHost)
 			args.bitcoinRPCPort, _ = cmd.Flags().GetInt64(flagBitcoinRPCPort)
 			args.bitcoinRPCUser, _ = cmd.Flags().GetString(flagBitcoinRPCUser)
@@ -239,6 +243,7 @@ Example:
 	cmd.Flags().Int64(flagVoteExtensionsEnableHeight, 2, "consensus.params.abci.vote_extensions_enable_height written to genesis")
 	cmd.Flags().String(flagDockerImage, "btcq-org/qbtc:localnet", "Docker image used for every node in the generated docker-compose.yml")
 	cmd.Flags().String(flagDockerNetwork, "", "If set, the generated docker-compose.yml joins this pre-existing external Docker network instead of creating its own")
+	cmd.Flags().Bool(flagEnableAPI, false, "Enable the REST API server in every node's app.toml")
 
 	// bitcoin specific arguments
 	cmd.Flags().String(flagBitcoinRPCHost, "localhost", "Bitcoin RPC host the generator reads the genesis anchor from (also the validators' default)")
@@ -291,7 +296,7 @@ func initTestnetFiles(
 	if args.minGasPrices == "" {
 		appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
 	}
-	appConfig.API.Enable = false
+	appConfig.API.Enable = args.enableAPI
 	// 	appConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
 	appConfig.Telemetry.EnableHostnameLabel = false
 	appConfig.Telemetry.Enabled = false
@@ -480,7 +485,7 @@ func initTestnetFiles(
 		return err
 	}
 
-	def, err := docker(nodes, args.dockerImage, args.dockerNetwork)
+	def, err := docker(nodes, args.dockerImage, args.dockerNetwork, args.enableAPI)
 	if err != nil {
 		return err
 	}
@@ -813,8 +818,8 @@ services:{{range $validator := .Validators }}
 		image: {{ $.Image }}
 		restart: unless-stopped
 		ports:
-			- "{{ $validator.RPCPort }}:{{ $validator.RPCPort }}"
-			- "{{ $validator.APIPort }}:{{ $validator.APIPort }}"
+			- "{{ $validator.RPCPort }}:{{ $validator.RPCPort }}"{{ if $.EnableAPI }}
+			- "{{ $validator.APIPort }}:{{ $validator.APIPort }}"{{ end }}
 			- "{{ $validator.GRPCPort }}:{{ $validator.GRPCPort }}"
 		volumes:
 			- ./{{ $validator.Volume }}:/qbtc_data/.qbtc
@@ -826,7 +831,10 @@ networks:
 {{end}}
 `
 
-func docker(validators []ValidatorNode, image, network string) (string, error) {
+// docker renders the docker-compose.yml of the network. The REST API ports are
+// published only when the API server is enabled, so a host that has them in
+// use can still run the network.
+func docker(validators []ValidatorNode, image, network string, enableAPI bool) (string, error) {
 	def := strings.ReplaceAll(dockerComposeDefinition, "\t", "  ")
 	t, err := template.New("definition").Parse(def)
 	if err != nil {
@@ -836,7 +844,8 @@ func docker(validators []ValidatorNode, image, network string) (string, error) {
 		Validators []ValidatorNode
 		Image      string
 		Network    string
-	}{Validators: validators, Image: image, Network: network}
+		EnableAPI  bool
+	}{Validators: validators, Image: image, Network: network, EnableAPI: enableAPI}
 
 	buf := bytes.NewBufferString("")
 	err = t.Execute(buf, d)
