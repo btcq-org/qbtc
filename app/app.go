@@ -251,6 +251,11 @@ func New(
 	if err := app.Load(loadLatest); err != nil {
 		panic(err)
 	}
+	if loadLatest {
+		if err := repairIncompleteCommit(app.CommitMultiStore(), app.GetStoreKeys(), logger); err != nil {
+			panic(err)
+		}
+	}
 
 	return app
 }
