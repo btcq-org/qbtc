@@ -13,6 +13,7 @@ import (
 	storetypes "cosmossdk.io/store/types"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -329,14 +330,19 @@ func (app *App) StartBitcoinReader() error {
 // lastProcessedBtcBlock returns the last Bitcoin height processed in the latest
 // committed state, for the Bitcoin reader.
 func (app *App) lastProcessedBtcBlock() (uint64, error) {
-	if app.LastBlockHeight() == 0 {
+	height := app.LastBlockHeight()
+	if height == 0 {
 		// no committed state yet
 		return 0, btcreader.ErrNoBtcAnchor
 	}
-	ctx, err := app.CreateQueryContext(0, false)
+	// Read the committed state directly rather than through a query context:
+	// after a restart there is no check state until the first block commits,
+	// and the reader polls before that.
+	cms, err := app.CommitMultiStore().CacheMultiStoreWithVersion(height)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("load the committed state at height %d: %w", height, err)
 	}
+	ctx := sdk.NewContext(cms, cmtproto.Header{Height: height}, true, app.Logger())
 	if _, err := app.QbtcKeeper.BtcTipHeader.Get(ctx); err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return 0, btcreader.ErrNoBtcAnchor
