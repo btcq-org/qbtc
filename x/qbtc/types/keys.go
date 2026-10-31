@@ -21,8 +21,6 @@ var (
 	// UTXOKeys is the prefix for UTXO store
 	UTXOKeys = collections.NewPrefix("utxo")
 
-	// NodePeerAddressKeys is the prefix for validators to store their node peer address
-	NodePeerAddressKeys = collections.NewPrefix("node_peer_address")
 	// ConstOverrideKeys is the prefix for constant overrides
 	ConstOverrideKeys = collections.NewPrefix("const_override")
 
@@ -46,7 +44,7 @@ var (
 
 const (
 	// String parameter keys for governance-controlled addresses.
-	DevFundAddressKey      = "DevFundAddress"
+	DevFundAddressKey       = "DevFundAddress"
 	MarketingFundAddressKey = "MarketingFundAddress"
 )
 

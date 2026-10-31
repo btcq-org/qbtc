@@ -27,7 +27,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/cosmos/cosmos-sdk/x/bank/types"
 
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 )
 
 func init() {
@@ -89,10 +89,10 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 			CustomGetSigners:      make(map[protoreflect.FullName]txsigning.GetSignersFunc),
 		},
 		CustomSignModes: customSignModeHandlers,
-		ProtoEncoder:    ebifrost.TxEncoder(tx.DefaultTxEncoder()),
-		ProtoDecoder:    ebifrost.TxDecoder(in.Codec, tx.DefaultTxDecoder(in.Codec)),
-		JSONEncoder:     ebifrost.JSONTxEncoder(in.Codec, tx.DefaultJSONTxEncoder(in.Codec)),
-		JSONDecoder:     ebifrost.JSONTxDecoder(in.Codec, tx.DefaultJSONTxDecoder(in.Codec)),
+		ProtoEncoder:    btcreader.TxEncoder(tx.DefaultTxEncoder()),
+		ProtoDecoder:    btcreader.TxDecoder(in.Codec, tx.DefaultTxDecoder(in.Codec)),
+		JSONEncoder:     btcreader.JSONTxEncoder(in.Codec, tx.DefaultJSONTxEncoder(in.Codec)),
+		JSONDecoder:     btcreader.JSONTxDecoder(in.Codec, tx.DefaultJSONTxDecoder(in.Codec)),
 	}
 
 	for _, mode := range in.CustomGetSigners {

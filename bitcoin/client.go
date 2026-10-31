@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/wire"
@@ -27,8 +28,10 @@ type BtcClient struct {
 	logger zerolog.Logger
 }
 
+// NewBtcClient connects to a Bitcoin node. db stores the start height of the
+// utxo indexer and may be nil for callers that do not use it.
 func NewBtcClient(cfg Config, db *leveldb.DB) (*BtcClient, error) {
-	client, err := newClient(cfg.Host, cfg.Port, cfg.RPCUser, cfg.Password)
+	client, err := newClient(cfg.Host, cfg.Port, cfg.RPCUser, cfg.Password, cfg.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create rpc client: %w", err)
 	}
@@ -41,7 +44,8 @@ func NewBtcClient(cfg Config, db *leveldb.DB) (*BtcClient, error) {
 }
 
 // newClient returns a client connection to a UTXO daemon.
-func newClient(host string, port int64, user, password string) (*rpc.Client, error) {
+// A positive timeout bounds each HTTP request.
+func newClient(host string, port int64, user, password string, timeout time.Duration) (*rpc.Client, error) {
 	authFn := func(h http.Header) error {
 		auth := base64.StdEncoding.EncodeToString([]byte(user + ":" + password))
 		h.Set("Authorization", fmt.Sprintf("Basic %s", auth))
@@ -55,7 +59,11 @@ func newClient(host string, port int64, user, password string) (*rpc.Client, err
 	if port != 80 && port != 443 {
 		host = fmt.Sprintf("%s:%d", host, port)
 	}
-	c, err := rpc.DialOptions(context.Background(), host, rpc.WithHTTPAuth(authFn))
+	opts := []rpc.ClientOption{rpc.WithHTTPAuth(authFn)}
+	if timeout > 0 {
+		opts = append(opts, rpc.WithHTTPClient(&http.Client{Timeout: timeout}))
+	}
+	c, err := rpc.DialOptions(context.Background(), host, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +71,9 @@ func newClient(host string, port int64, user, password string) (*rpc.Client, err
 	return c, nil
 }
 func (c *BtcClient) GetStartBlockHeight() (int64, error) {
+	if c.db == nil {
+		return 0, errors.New("no local database")
+	}
 	value, err := c.db.Get([]byte("start_block_height"), nil)
 	if err != nil {
 		if errors.Is(err, leveldb.ErrNotFound) {
@@ -80,6 +91,9 @@ func (c *BtcClient) GetStartBlockHeight() (int64, error) {
 // setStartBlockHeight saves an int64 to LevelDB under the key "start_block_height".
 // It stores the value as a decimal string (e.g. "12345").
 func (c *BtcClient) SetStartBlockHeight(height int64) error {
+	if c.db == nil {
+		return errors.New("no local database")
+	}
 	b := []byte(fmt.Sprintf("%d", height))
 	if err := c.db.Put([]byte("start_block_height"), b, nil); err != nil {
 		return fmt.Errorf("failed to set start block height: %w", err)
@@ -144,6 +158,13 @@ func (c *BtcClient) GetBlock(hash string) (*wire.MsgBlock, error) {
 		return nil, fmt.Errorf("node returned block %s for %s", got, hash)
 	}
 	return &block, nil
+}
+
+// GetBlockCount returns the height of the node's best chain tip.
+func (c *BtcClient) GetBlockCount() (int64, error) {
+	var count int64
+	err := c.client.Call(&count, "getblockcount")
+	return count, extractBTCError(err)
 }
 
 func (c *BtcClient) GetBlockHash(height int64) (string, error) {

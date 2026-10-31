@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Build
 
 ```bash
-# Build all binaries (qbtcd, bifrost, utxo-indexer)
+# Build all binaries (qbtcd, utxo-indexer)
 make build
 
 # Install qbtcd to $GOPATH/bin
@@ -147,7 +147,7 @@ On-chain (x/qbtc module):
   MsgClaimWithProof → ZK Verifier → BankKeeper.MintCoins
                                   → mark UTXO as claimed
 Background:
-  Bifrost (P2P) → observes Bitcoin blocks → indexes UTXOs via gRPC
+  qbtcd (in-process Bitcoin reader) → vote extensions → proposer injects attested blocks → indexes UTXOs
 ```
 
 ### Key Packages
@@ -157,8 +157,7 @@ Background:
 | `app/` | Cosmos SDK app wiring; all module keepers connected here |
 | `x/qbtc/keeper/` | Core state: UTXOs, claims, ZK verifying key; handles `MsgClaimWithProof` |
 | `x/qbtc/zk/` | ZK proof system: five circuits, PLONK verifier, trusted setup |
-| `x/qbtc/ebifrost/` | EnshrinedBifrost — P2P gossip embedded inside the validator node |
-| `bifrost/` | Standalone bifrost daemon (separate process, same P2P protocol) |
+| `x/qbtc/btcreader/` | In-process Bitcoin reader and vote-extension handling inside the validator node |
 | `bitcoin/` | Bitcoin RPC client for UTXO indexing |
 | `cmd/zkprover/` | CLI tool users run to generate proofs locally |
 | `cmd/proof-service/` | HTTP service wrapper around zkprover for remote proof generation |
@@ -169,9 +168,9 @@ Background:
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 
-### Bifrost / P2P
+### Bitcoin Block Ingestion
 
-The `EnshrinedBifrost` (`x/qbtc/ebifrost/`) runs as an embedded service inside each validator, using libp2p for gossip. A separate standalone `bifrost` daemon (`bifrost/`) can also be run for distributed Bitcoin block observation. Both use the same P2P protocol and submit observed Bitcoin block data via gRPC to `qbtcd`.
+Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-process reader configured in the `[btc_reader]` section of `app.toml` (`enable`, `bitcoin_host`, `bitcoin_port`, `bitcoin_rpc_user`, `bitcoin_rpc_password`, `confirmation_depth` default 6). Validators attest blocks in ABCI vote extensions; the next proposer injects blocks attested by more than 2/3 of the voting power, together with the signed votes as evidence. There is no separate bifrost daemon and no P2P gossip.
 
 ### Claim Message Flow
 

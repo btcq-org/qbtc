@@ -25,8 +25,7 @@ import (
 // constructed later against each validator's own RootDir. Callers typically
 // customize cfg.GenesisState for their module after DefaultConfig returns.
 //
-// ebifrost is disabled — integration tests do not use P2P gossip and enabling
-// it would spawn a libp2p host per validator.
+// the Bitcoin reader is disabled — integration tests have no Bitcoin node to read from.
 func NewTestNetworkFixture() network.TestFixture {
 	dir, err := os.MkdirTemp("", "qbtc")
 	if err != nil {
@@ -67,7 +66,7 @@ func NewTestNetworkFixture() network.TestFixture {
 
 func testAppOptions(home string) simtestutil.AppOptionsMap {
 	return simtestutil.AppOptionsMap{
-		flags.FlagHome:    home,
-		"ebifrost.enable": false,
+		flags.FlagHome:      home,
+		"btc_reader.enable": false,
 	}
 }
