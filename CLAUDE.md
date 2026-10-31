@@ -118,7 +118,8 @@ make setup-prover
 # Start a local node
 ./scripts/start-node.sh
 
-# Generate testnet config files (requires BITCOIN_RPC_* env vars)
+# Generate testnet config files only, starting at the Bitcoin tip minus CONFIRMATION_DEPTH
+# (requires BITCOIN_RPC_* env vars; BTC_INITIAL_HEIGHT overrides the start)
 make generate-testnet
 
 # 4-validator network in Docker following Bitcoin mainnet (docker-compose.yml):
