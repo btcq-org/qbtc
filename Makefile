@@ -211,24 +211,25 @@ localnet-clean:
 
 generate-testnet:
 	@echo "Generating testnet files"
-	@for v in BITCOIN_RPC_HOST BITCOIN_RPC_PORT BITCOIN_RPC_USER BITCOIN_RPC_PASSWORD; do \
-		eval "val=\$$$$v"; if [ -z "$$val" ]; then echo "Error: $$v environment variable is not set"; exit 1; fi; \
-	done
+	@if [ -z "$$BITCOIN_RPC_HOST" ]; then \
+		echo "Error: BITCOIN_RPC_HOST environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_PORT" ]; then \
+		echo "Error: BITCOIN_RPC_PORT environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_USER" ]; then \
+		echo "Error: BITCOIN_RPC_USER environment variable is not set"; \
+		exit 1; \
+	fi
+	@if [ -z "$$BITCOIN_RPC_PASSWORD" ]; then \
+		echo "Error: BITCOIN_RPC_PASSWORD environment variable is not set"; \
+		exit 1; \
+	fi
 	rm -rf .testnets
-	@tip=$$(curl -sf --user "$$BITCOIN_RPC_USER:$$BITCOIN_RPC_PASSWORD" \
-		--data-binary '{"jsonrpc":"1.0","id":"qbtc","method":"getblockcount","params":[]}' \
-		"http://$$BITCOIN_RPC_HOST:$$BITCOIN_RPC_PORT/" | sed -nE 's/.*"result": *([0-9]+).*/\1/p'); \
-	if [ -z "$$tip" ]; then echo "Error: getblockcount failed on $$BITCOIN_RPC_HOST:$$BITCOIN_RPC_PORT"; exit 1; fi; \
-	depth=$${CONFIRMATION_DEPTH:-6}; \
-	height=$${BTC_INITIAL_HEIGHT:-$$((tip - depth))}; \
-	echo "Bitcoin tip $$tip, chain starts at block $$height (BTC_INITIAL_HEIGHT to override)"; \
-	node_host=$$BITCOIN_RPC_HOST; \
-	case "$$node_host" in localhost|127.0.0.1) node_host=host.docker.internal ;; esac; \
 	go run cmd/qbtcd/main.go multi-node \
-		--btc-initial-height $$height \
-		--confirmation-depth $$depth \
-		--node-bitcoin-rpc-host $$node_host \
-		--enable-api \
+		--btc-initial-height 927000 \
 		--bitcoin-rpc-host $$BITCOIN_RPC_HOST \
 		--bitcoin-rpc-port $$BITCOIN_RPC_PORT \
 		--bitcoin-rpc-user $$BITCOIN_RPC_USER \
