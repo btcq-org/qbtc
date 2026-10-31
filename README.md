@@ -64,22 +64,6 @@ go test -tags=testing ./x/qbtc/zk/...
 ./scripts/start-node.sh
 ```
 
-### Start a 4-Validator Network
-
-`make localnet` runs four validators in Docker ([docker-compose.yml](docker-compose.yml)) that follow Bitcoin mainnet, from your own Bitcoin node or, without one, through a proxy over a public Esplora API:
-
-```bash
-make localnet                                  # public API (mempool.space), starts a few blocks below the tip
-BITCOIN_RPC_HOST=localhost BITCOIN_RPC_PORT=8332 BITCOIN_RPC_USER=u BITCOIN_RPC_PASSWORD=p make localnet
-GENESIS_BIN=~/genesis-931372.bin BTC_INITIAL_HEIGHT=931373 make localnet   # with a UTXO snapshot
-GENESIS_UTXO=<txid>:<vout>:<sats>:<bc1q...> make localnet   # UTXOs in genesis (claimable at once), with the ZK verifying key
-make localnet-status                           # chain height and last processed Bitcoin block per validator
-make localnet-down                             # stop, keep .testnets/
-make localnet-clean                            # stop and delete .testnets/
-```
-
-Validator `i` listens on CometBFT RPC `26657-3i`, REST `1317-i` and gRPC `9090-2i` (move a taken host port with `RPC_PORT_i`, `API_PORT_i` or `GRPC_PORT_i`, e.g. `API_PORT_0=11317 make localnet`); the state lives in `.testnets/`. The image is built with `make docker-localnet` when missing. `scripts/localnet.sh` lists every option.
-
 ## Running a Node
 
 Use the install script to set up a qbtc node on a server:

@@ -120,10 +120,6 @@ make setup-prover
 
 # Generate testnet config files (requires BITCOIN_RPC_* env vars)
 make generate-testnet
-
-# 4-validator network in Docker following Bitcoin mainnet (docker-compose.yml):
-# own node via BITCOIN_RPC_* env vars, or a public API; optional GENESIS_BIN snapshot
-make localnet          # also localnet-status, localnet-down, localnet-clean
 ```
 
 ### Release
