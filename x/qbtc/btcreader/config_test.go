@@ -50,13 +50,13 @@ func TestReadConfig(t *testing.T) {
 
 func TestReadConfigRejectsInvalid(t *testing.T) {
 	for name, opts := range map[string]simtestutil.AppOptionsMap{
-		"not a bool":      {"btc_reader.enable": "maybe"},
-		"not a duration":  {"btc_reader.poll_interval": "soon"},
-		"zero depth":      {"btc_reader.enable": true, "btc_reader.confirmation_depth": 0},
-		"no cache":        {"btc_reader.enable": true, "btc_reader.max_cached_blocks": 0},
-		"no poll":         {"btc_reader.enable": true, "btc_reader.poll_interval": "0s"},
-		"no host":         {"btc_reader.enable": true, "btc_reader.bitcoin_host": ""},
-		"negative number": {"btc_reader.bitcoin_port": "abc"},
+		"not a bool":     {"btc_reader.enable": "maybe"},
+		"not a duration": {"btc_reader.poll_interval": "soon"},
+		"zero depth":     {"btc_reader.enable": true, "btc_reader.confirmation_depth": 0},
+		"no cache":       {"btc_reader.enable": true, "btc_reader.max_cached_blocks": 0},
+		"no poll":        {"btc_reader.enable": true, "btc_reader.poll_interval": "0s"},
+		"no host":        {"btc_reader.enable": true, "btc_reader.bitcoin_host": ""},
+		"not a number":   {"btc_reader.bitcoin_port": "abc"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := btcreader.ReadConfig(opts)

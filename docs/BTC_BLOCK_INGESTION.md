@@ -42,7 +42,7 @@ Without an anchor, no Bitcoin block is accepted. The chain applies Bitcoin mainn
 ## Trust model
 
 - The chain proves that a block is part of a chain of headers with real proof of work at the right difficulty, starting from the genesis anchor, and that the transactions it applies are exactly that block's.
-- The validators still choose which branch to follow. More than 2/3 of the power could vote for to a valid block that later leaves the best chain (for example a block they mined privately with real work), but they cannot invent transactions or outputs.
+- The validators still choose which branch to follow. More than 2/3 of the power could vote for a valid block that later leaves the best chain (for example a block they mined privately with real work), but they cannot invent transactions or outputs.
 - There is no reorg handling. A processed block is final. If Bitcoin reorgs deeper than `confirmation_depth`, the next block does not link to the stored tip and ingestion stops until the chain is rolled back by an upgrade. Six confirmations make this very unlikely.
 - A single Bitcoin block larger than half of qbtc's block space cannot be injected, which stops ingestion at that block (#164).
 

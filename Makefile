@@ -194,7 +194,9 @@ docker-localnet:
 
 
 
-generate-testnet:
+# Builds the btcq-org/qbtc:localnet image first, so the generated genesis and
+# the binary that runs it come from the same commit.
+generate-testnet: docker-localnet
 	@echo "Generating testnet files"
 	@if [ -z "$$BITCOIN_RPC_HOST" ]; then \
 		echo "Error: BITCOIN_RPC_HOST environment variable is not set"; \
