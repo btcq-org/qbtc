@@ -14,21 +14,39 @@ import (
 )
 
 // ProveRequest is the JSON request body for POST /prove.
+//
+// The signature is given in one of two forms:
+//   - signature: a base64 BIP-137 message signature from a Bitcoin wallet
+//     ("Sign message" over the claim text). The public key is recovered from it.
+//   - signature_r, signature_s and public_key: a raw ECDSA signature over the
+//     32-byte BIP-137 claim digest, for TSS/MPC signers.
 type ProveRequest struct {
+	// Signature is the base64 BIP-137 signature of the claim message.
+	Signature string `json:"signature,omitempty"`
+
 	// SignatureR is the raw ECDSA signature R value (64 hex chars, 32 bytes).
-	SignatureR string `json:"signature_r"`
+	SignatureR string `json:"signature_r,omitempty"`
 
 	// SignatureS is the raw ECDSA signature S value (64 hex chars, 32 bytes).
-	SignatureS string `json:"signature_s"`
+	SignatureS string `json:"signature_s,omitempty"`
 
-	// PublicKey is the compressed public key (66 hex chars, 33 bytes).
-	PublicKey string `json:"public_key"`
+	// PublicKey is the compressed public key (66 hex chars, 33 bytes). Only
+	// used with signature_r/signature_s.
+	PublicKey string `json:"public_key,omitempty"`
+
+	// BitcoinAddress is the P2PKH or P2WPKH address being claimed, exactly as
+	// stored on the UTXOs. It is part of the signed claim message.
+	BitcoinAddress string `json:"bitcoin_address"`
 
 	// UTXOs are the UTXOs to claim.
 	UTXOs []types.UTXORef `json:"utxos"`
 
-	// ClaimerAddress is the QBTC claimer address.
+	// ClaimerAddress is the qbtc claimer address.
 	ClaimerAddress string `json:"claimer_address"`
+
+	// ReceiverAddress optionally redirects the minted coins. When set, it is
+	// the destination named in the signed claim message instead of the claimer.
+	ReceiverAddress string `json:"receiver_address,omitempty"`
 
 	// ChainID for message binding (e.g., "qbtc-1").
 	// If empty, uses the configured default.
@@ -41,30 +59,30 @@ type ProveRequest struct {
 }
 
 // ProveResponse is the JSON response for POST /prove.
-// All fields are ready for use in MsgClaimWithProof.
+// Proof and PubKeyHashSHA256 are the fields MsgClaimWithProof needs.
 type ProveResponse struct {
 	// Proof is the hex-encoded PLONK proof.
 	Proof string `json:"proof"`
 
-	// MessageHash is the hex-encoded message hash (64 chars, 32 bytes).
-	MessageHash string `json:"message_hash"`
-
-	// AddressHash is the hex-encoded Bitcoin address hash - Hash160 (40 chars, 20 bytes).
-	AddressHash string `json:"address_hash"`
-
 	// PubKeyHashSHA256 is the hex-encoded SHA256 of the SEC-compressed pubkey
 	// (64 chars, 32 bytes). The chain's verifier natively applies RIPEMD160 to
-	// it to recover AddressHash, so MsgClaimWithProof must carry this value.
+	// it to recover the address hash, so MsgClaimWithProof must carry this value.
 	PubKeyHashSHA256 string `json:"pub_key_hash_sha256"`
 
-	// QBTCAddressHash is the hex-encoded QBTC address hash (64 chars, 32 bytes).
-	QBTCAddressHash string `json:"qbtc_address_hash"`
+	// MessageText is the claim message the signature covers (echoed back).
+	MessageText string `json:"message_text"`
+
+	// BitcoinAddress is the address being claimed (echoed back).
+	BitcoinAddress string `json:"bitcoin_address"`
 
 	// UTXOs are the UTXOs included in the request (echoed back).
 	UTXOs []types.UTXORef `json:"utxos"`
 
 	// ClaimerAddress is the claimer address (echoed back).
 	ClaimerAddress string `json:"claimer_address"`
+
+	// ReceiverAddress is the receiver address (echoed back, may be empty).
+	ReceiverAddress string `json:"receiver_address,omitempty"`
 
 	// TxHash is the on-chain transaction hash, populated only when broadcast=true.
 	TxHash string `json:"tx_hash,omitempty"`

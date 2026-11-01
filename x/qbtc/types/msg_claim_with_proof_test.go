@@ -2,7 +2,6 @@ package types
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -64,30 +63,6 @@ func makeValidUTXORefs(count int) []UTXORef {
 	return refs
 }
 
-// makeValidAddressHash creates a valid 40-character hex address hash (20 bytes)
-func makeValidAddressHash() string {
-	hash := make([]byte, 20) // Bitcoin address hash is 20 bytes (RIPEMD160)
-	_, err := rand.Read(hash)
-	if err != nil {
-		panic(fmt.Sprintf("failed to generate random address hash: %v", err))
-	}
-	return hex.EncodeToString(hash) // 40 hex characters
-}
-
-// makeValidMessageHash creates a valid 64-character hex message hash (32 bytes)
-func makeValidMessageHash() string {
-	hash := make([]byte, 32) // SHA256 hash is 32 bytes
-	_, err := rand.Read(hash)
-	if err != nil {
-		panic(fmt.Sprintf("failed to generate random message hash: %v", err))
-	}
-	return hex.EncodeToString(hash) // 64 hex characters
-}
-func makeValidQBTCAddressHash() string {
-	h := sha256.Sum256([]byte(validBech32Address))
-	return hex.EncodeToString(h[:])
-}
-
 // makeValidPubKeyHashSHA256 creates a valid 64-character hex value (32 bytes)
 // for the SHA256(SEC-compressed pubkey) public input to the ZK circuit.
 func makeValidPubKeyHashSHA256() string {
@@ -111,9 +86,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -125,9 +97,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      makeValidReceiverAddress(),
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -143,9 +112,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 					{Txid: validBitcoinTxID, Vout: 1},
 					{Txid: validBitcoinTxID2, Vout: 0},
 				},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -157,9 +123,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            makeValidUTXORefs(MaxBatchClaimUTXOs),
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -172,9 +135,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Broadcaster:      validBech32Address,
 				Receiver:         makeValidReceiverAddress(),
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -187,9 +147,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Broadcaster:      validBech32Address,
 				Receiver:         "not-a-valid-bech32",
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -202,9 +159,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      "",
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -217,9 +171,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      "not-a-valid-bech32",
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -233,11 +184,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				MessageHash:     makeValidMessageHash(),
-				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
-				Proof:           makeValidProof(),
+				Proof:            makeValidProof(),
 			},
 			expectErr: true,
 			errMsg:    "claimer address is required",
@@ -249,11 +197,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
-				MessageHash:     makeValidMessageHash(),
-				AddressHash:     makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
-				Proof:           makeValidProof(),
+				Proof:            makeValidProof(),
 			},
 			expectErr: true,
 			errMsg:    "invalid claimer address",
@@ -264,9 +209,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -279,9 +221,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            makeValidUTXORefs(MaxBatchClaimUTXOs + 1),
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -302,12 +241,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid txid length - too short",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: "0123456789abcdef", Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: "0123456789abcdef", Vout: 0}},
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -322,9 +258,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Utxos: []UTXORef{
 					{Txid: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", Vout: 0},
 				},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -340,9 +273,6 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 					{Txid: validBitcoinTxID, Vout: 0},
 					{Txid: validBitcoinTxID, Vout: 0}, // duplicate
 				},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeValidProof(),
 			},
@@ -352,12 +282,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "missing proof data",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            "",
 			},
@@ -367,12 +294,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof data too small",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            "d6aa", // too small
 			},
@@ -382,12 +306,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof data too large",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
 				Proof:            makeProofBiggerThanMax(),
 			},
@@ -395,44 +316,11 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 			errMsg:    "proof data too large",
 		},
 		{
-			name: "invalid message - no message hash",
-			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      "",
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
-				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
-				Proof:            makeValidProof(),
-			},
-			expectErr: true,
-			errMsg:    "message_hash must be 64 hex characters",
-		},
-		{
-			name: "invalid message - no qbtc address hash",
-			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  "",
-				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
-				Proof:            makeValidProof(),
-			},
-			expectErr: true,
-			errMsg:    "qbtc_address_hash is required",
-		},
-		{
 			name: "invalid message - no pub_key_hash_sha256",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
-				MessageHash:      makeValidMessageHash(),
-				AddressHash:      makeValidAddressHash(),
-				QbtcAddressHash:  makeValidQBTCAddressHash(),
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
 				PubKeyHashSha256: "",
 				Proof:            makeValidProof(),
 			},

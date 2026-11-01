@@ -104,10 +104,10 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrInvalidRequest.Wrap("no valid claimable UTXOs found")
 	}
 
-	// Verify the ZK proof against the determined address.
-	// recipientBech32 is used to derive qbtcAddressHash so the proof binds to
-	// the actual coin destination (receiver when set, claimer otherwise).
-	if err := s.verifyProof(sdkCtx, msg, provenAddressHash, recipientBech32); err != nil {
+	// Verify the ZK proof against the determined address. The signed claim
+	// message names recipientBech32 as destination (receiver when set, claimer
+	// otherwise), so the proof binds to where the coins actually go.
+	if err := s.verifyProof(sdkCtx, msg, provenBtcAddress, recipientBech32); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("proof verification failed: %v", err)
 	}
 
@@ -233,20 +233,20 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	}, nil
 }
 
-// verifyProof verifies the ZK proof for the claim.
-// recipientBech32 is the address the proof must commit to — it is the receiver
-// when set, otherwise the claimer. This binding prevents front-running.
-func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, addressHash [20]byte, recipientBech32 string) error {
-	// Convert the proof from proto format
+// verifyProof verifies the ZK proof for the claim. provenBtcAddress is the
+// address string stored on the UTXO being claimed and recipientBech32 is the
+// address the proof must commit to: the receiver when set, otherwise the
+// claimer. Both are part of the signed claim message, which prevents
+// front-running and redirection.
+func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, provenBtcAddress, recipientBech32 string) error {
 	proofBytes, err := hex.DecodeString(msg.Proof)
 	if err != nil {
 		return fmt.Errorf("proof data is not valid hex: %w", err)
 	}
 
 	// The claimer supplies SHA256 of their SEC-compressed pubkey; the verifier
-	// natively checks RIPEMD160 of it matches the UTXO's AddressHash. This
-	// replaces the in-circuit RIPEMD160 gadget with a ~microsecond native
-	// operation, and ValidateBasic has already enforced the hex/length shape.
+	// natively checks RIPEMD160 of it matches the UTXO's address. ValidateBasic
+	// has already enforced the hex/length shape.
 	pubKeyHashBytes, err := hex.DecodeString(msg.PubKeyHashSha256)
 	if err != nil {
 		return fmt.Errorf("pub_key_hash_sha256 is not valid hex: %w", err)
@@ -254,26 +254,10 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 	var pubKeyHashSHA256 [32]byte
 	copy(pubKeyHashSHA256[:], pubKeyHashBytes)
 
-	// Derive qbtcAddressHash from the recipient (receiver when set, else claimer).
-	// The proof must commit to the actual coin destination to prevent redirection.
-	qbtcAddressHash := zk.HashQBTCAddress(recipientBech32)
-
-	// Compute chain ID hash from the chain ID (prevents cross-chain replay)
-	chainID := sdkCtx.ChainID()
-	chainIDHash := zk.ComputeChainIDHash(chainID)
-
-	// Compute expected message hash that should have been signed
-	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	// Build verification params
-	params := zk.VerificationParams{
-		MessageHash:      messageHash,
-		AddressHash:      addressHash,
+	return zk.VerifyProofGlobal(proofBytes, zk.VerificationParams{
+		ChainID:          sdkCtx.ChainID(),
+		BitcoinAddress:   provenBtcAddress,
+		QBTCAddress:      recipientBech32,
 		PubKeyHashSHA256: pubKeyHashSHA256,
-		QBTCAddressHash:  qbtcAddressHash,
-		ChainID:          chainIDHash,
-	}
-
-	// Verify the proof using the global verifier
-	return zk.VerifyProofGlobal(proofBytes, params)
+	})
 }

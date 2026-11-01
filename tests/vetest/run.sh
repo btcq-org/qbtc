@@ -789,12 +789,11 @@ s9_claim() {
   detail "destination $dest; genesis UTXO $CLAIM_TXID:0 entitled $CLAIM_AMOUNT"
 
   t_proof=$SECONDS
-  "$CACHE/bin/zkprover" prove --tss-url "http://127.0.0.1:$TSS_PORT" --qbtc-address "$dest" --chain-id "$CHAIN_ID" \
-    --address-hash "$CLAIM_HASH160" --setup-dir "$CACHE/zk/setup" -o "$OUT/claim/proof.json" > "$OUT/claim/prove.log" 2>&1 \
+  "$CACHE/bin/zkprover" prove --tss-url "http://127.0.0.1:$TSS_PORT" --chain-id "$CHAIN_ID" \
+    --bitcoin-address "$CLAIM_BTC_ADDR" --claimer "$claimer" --receiver "$dest" --utxo "$CLAIM_TXID:0" \
+    --setup-dir "$CACHE/zk/setup" -o "$NET/validator0/claim_msg.json" > "$OUT/claim/prove.log" 2>&1 \
     || fail "zkprover prove failed, see $OUT/claim/prove.log"
   detail "PLONK proof generated in $((SECONDS - t_proof))s"
-  python3 "$LIB" claim-msg --proof "$OUT/claim/proof.json" --claimer "$claimer" --receiver "$dest" \
-    --txid "$CLAIM_TXID" --vout 0 --out "$NET/validator0/claim_msg.json"
 
   code1=$(claim_tx)
   [ "$code1" = 0 ] || fail "claim transaction failed: $code1 ($(head -c 400 "$OUT/claim/tx_last.json"))"

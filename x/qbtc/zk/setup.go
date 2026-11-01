@@ -524,23 +524,16 @@ func bigIntToLimbs(n *big.Int) []frontend.Variable {
 	return limbs
 }
 
-// HashQBTCAddress hashes a QBTC address string to get the binding commitment
-func HashQBTCAddress(qbtcAddress string) [32]byte {
-	return sha256.Sum256([]byte(qbtcAddress))
-}
-
-// VerificationParams contains parameters needed for proof verification.
-//
-// PubKeyHashSHA256 is the SHA256 of the 33-byte SEC-compressed public key. It
-// is a public input to the circuit, and the verifier additionally checks
-// RIPEMD160(PubKeyHashSHA256) == AddressHash natively to close the Hash160
-// binding. Callers must supply both AddressHash and PubKeyHashSHA256.
+// VerificationParams is everything the verifier needs besides the proof. All
+// fields are public on-chain data: the chain ID, the Bitcoin address string
+// stored on the UTXO, the destination qbtc address, and the claimer-supplied
+// SHA256 of their compressed public key (the circuit's second public input).
+// The verifier derives the claim digest and the Bitcoin AddressHash itself.
 type VerificationParams struct {
-	MessageHash      [32]byte // The message that was signed
-	AddressHash      [20]byte // Hash160 of BTC pubkey (natively checked against RIPEMD160(PubKeyHashSHA256))
-	PubKeyHashSHA256 [32]byte // SHA256(SEC-compressed pubkey); public input to circuit
-	QBTCAddressHash  [32]byte // H(claimer_address)
-	ChainID          [8]byte  // First 8 bytes of H(chain_id)
+	ChainID          string
+	BitcoinAddress   string
+	QBTCAddress      string
+	PubKeyHashSHA256 [32]byte
 }
 
 // computePubKeyHashSHA256 returns SHA256 of the 33-byte SEC-compressed encoding
@@ -558,15 +551,6 @@ func computePubKeyHashSHA256(x, y *big.Int) ([32]byte, error) {
 	}
 	x.FillBytes(compressed[1:])
 	return sha256.Sum256(compressed[:]), nil
-}
-
-// ComputeChainIDHash computes the chain ID hash from a chain ID string.
-// Returns the first 8 bytes of SHA256(chain_id).
-func ComputeChainIDHash(chainID string) [8]byte {
-	hash := sha256.Sum256([]byte(chainID))
-	var result [8]byte
-	copy(result[:], hash[:8])
-	return result
 }
 
 // SaveSetupToWriter writes the setup result to a writer

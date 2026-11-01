@@ -4,7 +4,6 @@
     vetest_lib.py bech32-p2wpkh HASH160_HEX
     vetest_lib.py base58-p2pkh HASH160_HEX
     vetest_lib.py genesis-patch --net DIR [--enable-height N] [--utxo-file F] [--vk-file F]
-    vetest_lib.py claim-msg --proof F --claimer A --receiver A --txid T --vout N --out F
     vetest_lib.py genesis-utxos --out F [--base F] SPEC...   (SPEC = txid:vout:amount_sats:address)
     vetest_lib.py key-hex FILE                               (WIF or 64 hex chars -> 32-byte hex)
     vetest_lib.py tallies  --logs DIR [filters/predicates, see --help]
@@ -209,24 +208,6 @@ def cmd_genesis_patch(a):
         with open(gpath, "w") as f:
             json.dump(g, f, indent=2)
         print("patched " + gpath)
-
-
-def cmd_claim_msg(a):
-    with open(a.proof) as f:
-        p = json.load(f)
-    msg = {
-        "claimer": a.claimer,
-        "utxos": [{"txid": a.txid, "vout": a.vout}],
-        "proof": p["proof_data"],
-        "message_hash": p["message_hash"],
-        "address_hash": p["address_hash"],
-        "qbtc_address_hash": p["qbtc_address_hash"],
-        "pub_key_hash_sha256": p["pub_key_hash_sha256"],
-        "receiver": a.receiver,
-        "broadcaster": a.claimer,
-    }
-    with open(a.out, "w") as f:
-        json.dump(msg, f, indent=2)
 
 
 def cmd_genesis_utxos(a):
@@ -508,15 +489,6 @@ def main():
     p.add_argument("--utxo-file")
     p.add_argument("--vk-file")
     p.set_defaults(fn=cmd_genesis_patch)
-
-    p = sub.add_parser("claim-msg")
-    p.add_argument("--proof", required=True)
-    p.add_argument("--claimer", required=True)
-    p.add_argument("--receiver", required=True)
-    p.add_argument("--txid", required=True)
-    p.add_argument("--vout", type=int, default=0)
-    p.add_argument("--out", required=True)
-    p.set_defaults(fn=cmd_claim_msg)
 
     p = sub.add_parser("genesis-utxos")
     p.add_argument("--out", required=True)

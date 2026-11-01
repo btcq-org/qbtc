@@ -35,18 +35,13 @@ message MsgClaimWithProof {
   // Hex-encoded ZK proof proving ownership of the Bitcoin address associated
   // with the UTXOs being claimed.
   string proof = 3;
-  // hex encoded message hash
-  string message_hash = 4;
-  // hex encoded address hash
-  string address_hash = 5;
-  // hex encoded qbtc address hash
-  string qbtc_address_hash = 6;
+  reserved 4 to 6;
   // hex encoded SHA256 of the 33-byte SEC-compressed public key. This is a
   // public input to the ZK circuit; the handler natively verifies
   // RIPEMD160(pub_key_hash_sha256) matches the UTXO's Bitcoin address hash.
   string pub_key_hash_sha256 = 7;
   // Optional. If set, minted tokens are sent to this address instead of
-  // claimer. The ZK proof must commit to this address (via qbtc_address_hash).
+  // claimer. The signed claim message must name this address as destination.
   string receiver = 8;
   // The cosmos tx signer. For direct claims this equals claimer; for
   // proof-service broadcasts this is the service's broadcast key address.

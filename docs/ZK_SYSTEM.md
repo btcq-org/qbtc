@@ -1,7 +1,7 @@
 # ZK Proof System Technical Specification
 
-**Version**: 2.0  
-**Last Updated**: December 2025
+**Version**: 3.0  
+**Last Updated**: November 2026
 **Status**: Ready for Security Audit
 
 ---
@@ -35,6 +35,8 @@ The qbtc ZK proof system enables users to claim Bitcoin UTXOs on the qbtc chain 
 
 This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge of a valid signature for a specific message, where the public key corresponds to the claimed Bitcoin address.
 
+The signed message is an ordinary BIP-137 "Bitcoin Signed Message", so any wallet with a "Sign message" feature (Electrum, Sparrow, Ledger, Trezor, Bitcoin Core for legacy addresses) can produce the signature. TSS/MPC signers work too: they sign the same 32-byte digest.
+
 ### 1.2 Supported Bitcoin Address Types
 
 | Address Type           | Prefix            | Circuit | Status           |
@@ -47,10 +49,10 @@ This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge 
 
 | Goal                         | Implementation                                          |
 | ---------------------------- | ------------------------------------------------------- |
-| **TSS/MPC Compatibility**    | Only requires a signature; no private key access needed |
+| **Wallet Compatibility**     | Signature is a BIP-137 signed message; works with wallets and TSS/MPC |
 | **Privacy**                  | Signature and public key are private circuit inputs     |
 | **Front-running Protection** | Proof bound to destination address                      |
-| **Replay Protection**        | Chain ID and version string in signed message           |
+| **Replay Protection**        | Chain ID, address and version string in signed message  |
 | **Double-spend Prevention**  | UTXO marked as claimed after successful verification    |
 
 ### 1.4 Key Parameters
@@ -77,9 +79,9 @@ This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge 
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────┐    1. Sign Message    ┌──────────────┐                    │
-│  │ TSS/MPC     │ ──────────────────────▶│  zkprover   │                    │
-│  │ Signer      │◀────────────────────── │  CLI Tool   │                    │
-│  │             │    (r, s, pubkey)      │             │                    │
+│  │ Bitcoin     │ ──────────────────────▶│  zkprover   │                    │
+│  │ wallet or   │◀────────────────────── │  CLI Tool   │                    │
+│  │ TSS signer  │   (BIP-137 signature)  │             │                    │
 │  └─────────────┘                        └──────┬──────┘                    │
 │        │                                       │                            │
 │        │ Never leaves                          │ 2. Generate ZK Proof      │
@@ -112,13 +114,13 @@ This is achieved through PLONK zero-knowledge proofs that demonstrate knowledge 
 
 ### 2.2 Data Flow
 
-1. **Message Construction**: User computes claim message hash from Bitcoin address hash, destination qbtc address hash, chain ID hash, and version string
+1. **Message Construction**: `zkprover message` prints the claim text `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>` (see Section 5)
 
-2. **Signature**: TSS/MPC system signs the message hash with ECDSA on secp256k1
+2. **Signature**: The user signs that text in their Bitcoin wallet ("Sign message", BIP-137), or a TSS/MPC signer signs its 32-byte BIP-137 digest with ECDSA on secp256k1
 
-3. **Proof Generation**: zkprover creates a PLONK proof with private inputs (signature, public key) and only two public inputs: `MessageHash` and `PubKeyHashSHA256` (SHA256 of the SEC-compressed pubkey). `QBTCAddressHash`, `ChainID`, and the 20-byte `AddressHash` are *not* circuit public inputs — they bind to the proof via `MessageHash` and the native RIPEMD160 check, both re-derived by the verifier.
+3. **Proof Generation**: zkprover recovers the public key from the signature and creates a PLONK proof with private inputs (signature, public key) and only two public inputs: `MessageHash` (the BIP-137 digest) and `PubKeyHashSHA256` (SHA256 of the SEC-compressed pubkey). The chain ID, Bitcoin address and destination are *not* circuit public inputs — they bind to the proof via `MessageHash`, which the verifier re-derives.
 
-4. **On-chain Verification**: Handler verifies the PLONK proof against the two circuit public inputs (`MessageHash`, `PubKeyHashSHA256`) and natively checks `MessageHash == SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")` and `RIPEMD160(PubKeyHashSHA256) == AddressHash` to bind the proof to the destination qbtc address, chain, and Bitcoin address.
+4. **On-chain Verification**: Handler rebuilds the claim text from the chain ID, the UTXO's stored Bitcoin address and the destination (receiver or claimer), computes its BIP-137 digest as `MessageHash`, natively checks `RIPEMD160(PubKeyHashSHA256) == Hash160(address)`, and verifies the PLONK proof against the two public inputs.
 
 5. **Claim Execution**: Tokens minted to claimer, UTXO marked as claimed
 
@@ -206,12 +208,12 @@ The ZK system uses a single circuit, `BTCPubKeyOwnershipCircuit`, covering P2PKH
 | `MessageHash` | 32 bytes | SHA256 of the claim message |
 | `PubKeyHashSHA256` | 32 bytes | SHA256 of the 33-byte SEC-compressed pubkey |
 
-`QBTCAddressHash`, `ChainID`, and the 20-byte Bitcoin `AddressHash` are *not* circuit public inputs. They are supplied alongside the proof and bound natively by the verifier:
+The chain ID, the Bitcoin address and the destination qbtc address are *not* circuit public inputs. The verifier takes them from chain state and the message, and binds them natively:
 
-- `MessageHash == SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")` ties `QBTCAddressHash` and `ChainID` to the proof.
-- `RIPEMD160(PubKeyHashSHA256) == AddressHash` closes the Hash160 binding to the 20-byte Bitcoin address.
+- `MessageHash == BIP137Digest("qbtc-claim-v1|chainID|bitcoinAddress|destination")` ties the chain, the address and the destination to the proof.
+- `RIPEMD160(PubKeyHashSHA256) == Hash160(bitcoinAddress)` closes the Hash160 binding to the Bitcoin address.
 
-Keeping RIPEMD160 and the message-binding tuple out of the circuit roughly halves prover time.
+Keeping RIPEMD160 and the message derivation out of the circuit roughly halves prover time, and lets the message format change without touching the circuit or the verifying key.
 
 ### 4.3 Circuit Constraints Detail
 
@@ -233,9 +235,9 @@ The public key is a finite point on secp256k1, and `SHA256(SEC-compressed pubkey
 
 #### Constraint Group 3: Message Binding (Native in Verifier)
 
-The verifier independently computes the expected message hash from the claim parameters. If the computed message doesn't match `MessageHash`, verification fails.
+The verifier independently computes the BIP-137 digest of the claim text and uses it as the `MessageHash` public input. A proof made for any other text fails PLONK verification.
 
-**What this proves**: The signature was created for the specific claim parameters (address, destination, chain).
+**What this proves**: The signature was created for the specific claim parameters (chain, address, destination).
 
 ### 4.4 Public Key Compression (In-Circuit)
 
@@ -272,31 +274,58 @@ The conversion handles big-endian to little-endian limb ordering and proper bit 
 
 ## 5. Message Format and Binding
 
-### 5.1 Claim Message Structure
+### 5.1 Claim Message Text
 
 **File**: `x/qbtc/zk/message.go`
 
+The user signs a single line of ASCII text:
+
 ```
-MessageHash = SHA256(AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
+qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>
 ```
 
-| Component         | Size     | Description                              |
-| ----------------- | -------- | ---------------------------------------- |
-| `AddressHash`     | 20 bytes | Hash160 of Bitcoin public key            |
-| `QBTCAddressHash` | 32 bytes | SHA256(destination_qbtc_address)         |
-| `ChainID`         | 8 bytes  | First 8 bytes of SHA256(chain_id_string) |
-| Version           | 13 bytes | Literal string "qbtc-claim-v1"           |
+| Field           | Example                                      | Source                                          |
+| --------------- | -------------------------------------------- | ----------------------------------------------- |
+| Version         | `qbtc-claim-v1`                              | `ClaimMessageVersion`                           |
+| Chain ID        | `qbtc-1`                                     | `sdk.Context.ChainID()`                         |
+| Bitcoin address | `bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc` | `UTXO.ScriptPubKey.Address`, byte for byte      |
+| Destination     | `qbtc1...`                                   | `MsgClaimWithProof.receiver`, else `.claimer`   |
 
-**Total preimage**: 73 bytes
+Neither address alphabet (base58, bech32) contains `|`, so the text parses unambiguously even if the chain ID contains one. The text is one line with no trailing newline, which survives every wallet's message dialog unchanged.
 
-### 5.2 Binding Properties
+### 5.2 BIP-137 Digest
 
-| Binding           | Prevents                                                |
-| ----------------- | ------------------------------------------------------- |
-| `AddressHash`     | Claiming someone else's Bitcoin                         |
-| `QBTCAddressHash` | Front-running (proof only works for intended recipient) |
-| `ChainID`         | Cross-chain replay attacks                              |
-| Version string    | Cross-version replay attacks                            |
+The ECDSA message scalar is the standard "Bitcoin Signed Message" digest:
+
+```
+MessageHash = SHA256(SHA256(varstr("Bitcoin Signed Message:\n") || varstr(text)))
+```
+
+where `varstr` is a Bitcoin compact-size length prefix followed by the bytes. This is exactly what `bitcoin-cli signmessage`, Electrum, Sparrow, Ledger and Trezor sign. The magic prefix guarantees the digest can never be a valid transaction hash. A TSS/MPC signer signs this 32-byte digest directly.
+
+### 5.3 Signature Encoding
+
+Wallets return a base64 string of 65 bytes: `header || r (32) || s (32)`. The header encodes the recovery id and, informally, the address type:
+
+| Header | Meaning                          | Accepted |
+| ------ | -------------------------------- | -------- |
+| 27..30 | P2PKH, uncompressed public key   | No       |
+| 31..34 | P2PKH, compressed public key     | Yes      |
+| 35..38 | P2SH-P2WPKH                      | Yes*     |
+| 39..42 | P2WPKH                           | Yes      |
+
+Wallets disagree on which range to use for segwit addresses, so `zk.ParseBIP137Signature` accepts every header from 31 to 42 and uses only its recovery id (`(header-27) & 3`) to recover the public key with `RecoverCompact`. The recovered key must then own the claimed address (`zk.CheckPubKeyOwnsAddress`); a P2SH-P2WPKH signature recovers fine but fails that check because the address type is unsupported.
+
+Headers 27 to 30 are rejected: the circuit commits to the 33-byte compressed public key, so addresses derived from an uncompressed key cannot be claimed.
+
+### 5.4 Binding Properties
+
+| Binding         | Prevents                                                |
+| --------------- | ------------------------------------------------------- |
+| Bitcoin address | Claiming someone else's Bitcoin (together with Hash160) |
+| Destination     | Front-running (proof only works for intended recipient) |
+| Chain ID        | Cross-chain replay attacks                              |
+| Version string  | Cross-version replay attacks                            |
 
 ---
 
@@ -368,9 +397,9 @@ The `Prover` struct holds the constraint system and proving key. The `ProofParam
 
 - Signature components (r, s as big integers)
 - Public key coordinates (x, y as big integers)
-- `MessageHash` (32 bytes)
+- `MessageHash` (32 bytes, the BIP-137 digest)
 
-`QBTCAddressHash`, `ChainID`, and `AddressHash` are not prover inputs — they bind to the proof via `MessageHash` (re-derived natively by the verifier) and via the native `RIPEMD160(PubKeyHashSHA256) == AddressHash` check.
+`zk.ParseBIP137Signature` produces (r, s, pubkey) from a wallet's base64 signature and `zk.ProofParamsFromSignature` packs them. The chain ID, address and destination are not prover inputs — they bind to the proof via `MessageHash`.
 
 ### 7.2 Proof Generation Flow
 
@@ -401,10 +430,11 @@ The verifier is a thread-safe singleton initialized once from genesis. After ini
 
 ### 8.2 Verification Flow
 
-1. **Message binding check**: Compute expected message hash from verification parameters; reject if mismatch
-2. **Proof deserialization**: Parse PLONK proof from bytes
-3. **Public witness construction**: Create witness with only public inputs
-4. **PLONK verification**: Call gnark's PLONK verifier with proof, VK, and witness
+1. **Address binding check**: Decode the Bitcoin address to its Hash160; reject unless `RIPEMD160(PubKeyHashSHA256)` equals it
+2. **Message derivation**: Compute the BIP-137 digest of the claim text from `(ChainID, BitcoinAddress, QBTCAddress)`
+3. **Proof deserialization**: Parse PLONK proof from bytes
+4. **Public witness construction**: Create witness with the derived `MessageHash` and the supplied `PubKeyHashSHA256`
+5. **PLONK verification**: Call gnark's PLONK verifier with proof, VK, and witness
 
 ### 8.3 On-Chain Handler
 
@@ -412,9 +442,9 @@ The verifier is a thread-safe singleton initialized once from genesis. After ini
 
 The handler:
 
-1. Finds the first valid UTXO to determine the proven Bitcoin address
-2. Computes verification parameters (message hash, address hash, etc.)
-3. Calls the global verifier
+1. Finds the first valid UTXO to determine the proven Bitcoin address string
+2. Resolves the destination (receiver when set, otherwise claimer)
+3. Calls the global verifier with the chain ID, the address, the destination and the supplied `pub_key_hash_sha256`
 4. On success, claims all matching UTXOs by minting tokens and zeroing EntitledAmount
 
 ---
@@ -463,8 +493,8 @@ All three are computationally infeasible.
 
 **Argument**:
 
-1. Proof commits to `MessageHash`, which the verifier re-derives from `(AddressHash, QBTCAddressHash, ChainID, "qbtc-claim-v1")` where `QBTCAddressHash = SHA256(claimer_address)`
-2. If an attacker submits with a different claimer, the re-derived `MessageHash` won't match the one committed in the proof
+1. Proof commits to `MessageHash`, which the verifier re-derives from the claim text naming the destination address
+2. If an attacker submits with a different claimer or receiver, the re-derived `MessageHash` won't match the one committed in the proof
 3. Proof verification fails
 
 #### 9.2.4 Replay Resistance
@@ -496,9 +526,9 @@ All three are computationally infeasible.
 | Proof forgery       | PLONK soundness               | gnark library                        |
 | Signature forgery   | ECDSA security                | secp256k1                            |
 | Address collision   | Hash160 collision resistance  | 160-bit security                     |
-| Front-running       | QBTCAddressHash binding       | `message.go:23`                      |
-| Cross-chain replay  | ChainID binding               | `message.go:28`                      |
-| Version replay      | Version string binding        | `message.go:29`                      |
+| Front-running       | Destination in signed text    | `message.go`                         |
+| Cross-chain replay  | Chain ID in signed text       | `message.go`                         |
+| Version replay      | Version string in signed text | `message.go`                         |
 | Double-spend        | EntitledAmount zeroing        | `handle_msg_claim_with_proof.go:157` |
 | DoS via large proof | Max proof size 1MB            | `setup.go:30`                        |
 | DoS via many UTXOs  | Max 50 UTXOs per batch        | protobuf validation                  |
@@ -559,7 +589,9 @@ Prior to the RIPEMD160-out-of-circuit change: ~1.3M constraints, ~36s proof, ~5 
 | -------------------------------- | ---------------------------------------------- |
 | `x/qbtc/zk/circuit.go`           | ECDSA ownership circuit (P2PKH/P2WPKH)         |
 | `x/qbtc/zk/hash.go`              | SHA-256 and pubkey-compression helpers in-circuit |
-| `x/qbtc/zk/message.go`           | Claim message construction                     |
+| `x/qbtc/zk/message.go`           | Claim text and BIP-137 digest                  |
+| `x/qbtc/zk/bip137.go`            | Wallet signature parsing and pubkey recovery   |
+| `x/qbtc/zk/zktest/`              | Local-key claim signing for tests and demos    |
 | `x/qbtc/zk/setup.go`             | PLONK setup and prover                         |
 | `x/qbtc/zk/verifier.go`          | Global verifier and verification               |
 | `x/qbtc/zk/btc.go`               | Bitcoin address utilities                      |
@@ -578,6 +610,8 @@ Prior to the RIPEMD160-out-of-circuit change: ~1.3M constraints, ~36s proof, ~5 
 | File                                                | Coverage                       |
 | --------------------------------------------------- | ------------------------------ |
 | `x/qbtc/zk/circuit_test.go`                         | ECDSA circuit end-to-end tests |
+| `x/qbtc/zk/message_test.go`                         | Claim text, digest, signature parsing |
+| `x/qbtc/zk/bip137_vectors_test.go`                  | Signatures from other implementations (`testdata/bip137_vectors.json`) |
 | `x/qbtc/zk/integration_test.go`                     | Full claim flow simulation     |
 | `x/qbtc/zk/security_audit_test.go`                  | Security property verification |
 | `x/qbtc/keeper/handle_msg_claim_with_proof_test.go` | Handler integration tests      |
@@ -590,13 +624,32 @@ Prior to the RIPEMD160-out-of-circuit change: ~1.3M constraints, ~36s proof, ~5 
 
 ---
 
-## Appendix A: TSS/MPC Integration
+## Appendix A: Signing the Claim
 
-### A.1 Required TSS API
+### A.1 With a Bitcoin Wallet
+
+```bash
+zkprover message --chain-id qbtc-1 --bitcoin-address bc1q... --claimer qbtc1...
+# → qbtc-claim-v1|qbtc-1|bc1q...|qbtc1...
+```
+
+Sign the printed line with the wallet that holds the address ("Sign message" in Electrum or Sparrow, `bitcoin-cli signmessage` for legacy addresses, the message-signing feature of Ledger or Trezor). Then:
+
+```bash
+zkprover prove --chain-id qbtc-1 --bitcoin-address bc1q... --claimer qbtc1... \
+  --utxo <txid>:<vout> --signature '<base64 from the wallet>' -o claim.json
+qbtcd tx qbtc claim-with-proof claim.json --from <key>
+```
+
+Add `--receiver qbtc1...` to both commands to send the coins elsewhere. The address must be given exactly as the chain stores it on the UTXO (`qbtcd q qbtc utxo`).
+
+### A.2 With a TSS/MPC Signer
+
+`zkprover prove --tss-url http://host:port ...` asks the signer for a signature over the 32-byte BIP-137 digest of the claim text (printed on stderr by `zkprover message`).
 
 **Endpoint**: `POST /sign`
 
-**Request**: JSON object with `message_hash` field (64 hex characters)
+**Request**: JSON object with `message_hash` field (the digest, 64 hex characters)
 
 **Response**: JSON object with:
 
@@ -605,7 +658,7 @@ Prior to the RIPEMD160-out-of-circuit change: ~1.3M constraints, ~36s proof, ~5 
 - `signature.v`: Recovery ID (0 or 1)
 - `public_key`: 33-byte compressed SEC1 format (66 hex characters)
 
-### A.2 TSS Emulator
+### A.3 TSS Emulator
 
 For testing, use the provided emulator:
 

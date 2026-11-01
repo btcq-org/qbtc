@@ -27,9 +27,6 @@ type Service struct {
 	cs constraint.ConstraintSystem
 	pk plonk.ProvingKey
 
-	// Chain ID hash (precomputed at startup)
-	chainIDHash [8]byte
-
 	// Optional on-chain broadcaster (nil when not configured)
 	broadcaster *Broadcaster
 
@@ -75,10 +72,6 @@ func NewService(cfg config.Config) (*Service, error) {
 	}
 	logger.Info().Str("path", pkPath).Msg("loaded proving key")
 
-	// Precompute chain ID hash
-	chainIDHash := zk.ComputeChainIDHash(cfg.ChainID)
-	logger.Info().Str("chain_id", cfg.ChainID).Msg("computed chain ID hash")
-
 	// Optionally create broadcaster
 	broadcaster, err := NewBroadcaster(cfg)
 	if err != nil {
@@ -110,7 +103,6 @@ func NewService(cfg config.Config) (*Service, error) {
 		logger:      logger,
 		cs:          cs,
 		pk:          pk,
-		chainIDHash: chainIDHash,
 		broadcaster: broadcaster,
 		hs:          hs,
 		metrics:     m,
