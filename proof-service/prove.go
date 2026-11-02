@@ -62,6 +62,13 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 			Details: err.Error(),
 		}
 	}
+	if err := zk.CheckBitcoinAddressCanonical(req.BitcoinAddress); err != nil {
+		return nil, http.StatusBadRequest, &ErrorResponse{
+			Error:   "bitcoin_address must be spelled exactly as stored on the UTXO",
+			Code:    "INVALID_REQUEST",
+			Details: err.Error(),
+		}
+	}
 	if req.ClaimerAddress == "" {
 		return nil, http.StatusBadRequest, &ErrorResponse{
 			Error: "claimer_address is required",

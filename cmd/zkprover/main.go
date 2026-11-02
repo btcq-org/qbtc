@@ -180,6 +180,9 @@ func (c *claimTarget) validate() error {
 	if _, err := zk.BitcoinAddressToHash160(c.bitcoinAddress); err != nil {
 		return fmt.Errorf("--bitcoin-address: %w", err)
 	}
+	if err := zk.CheckBitcoinAddressCanonical(c.bitcoinAddress); err != nil {
+		return fmt.Errorf("--bitcoin-address: %w", err)
+	}
 	return nil
 }
 

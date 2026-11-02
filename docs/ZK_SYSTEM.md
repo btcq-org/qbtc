@@ -205,7 +205,7 @@ The ZK system uses a single circuit, `BTCPubKeyOwnershipCircuit`, covering P2PKH
 **Public Inputs** (visible to verifier):
 | Field | Size | Description |
 |-------|------|-------------|
-| `MessageHash` | 32 bytes | SHA256 of the claim message |
+| `MessageHash` | 32 bytes | BIP-137 digest (double SHA-256) of the claim text, see Section 5.2 |
 | `PubKeyHashSHA256` | 32 bytes | SHA256 of the 33-byte SEC-compressed pubkey |
 
 The chain ID, the Bitcoin address and the destination qbtc address are *not* circuit public inputs. The verifier takes them from chain state and the message, and binds them natively:

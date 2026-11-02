@@ -95,18 +95,35 @@ func signatureFromTSS(target claimTarget, tssURL string) (zk.ProofParams, *btcec
 		return zk.ProofParams{}, nil, fmt.Errorf("failed to parse public key: %w", err)
 	}
 
-	var r, s btcec.ModNScalar
-	if r.SetByteSlice(padTo32Bytes(rBytes)) || s.SetByteSlice(padTo32Bytes(sBytes)) {
-		return zk.ProofParams{}, nil, fmt.Errorf("TSS signature scalar is not below the curve order")
+	r, rScalar, err := tssScalar("R", rBytes)
+	if err != nil {
+		return zk.ProofParams{}, nil, err
 	}
-	if !btcecdsa.NewSignature(&r, &s).Verify(digest[:], pub) {
+	s, sScalar, err := tssScalar("S", sBytes)
+	if err != nil {
+		return zk.ProofParams{}, nil, err
+	}
+	if !btcecdsa.NewSignature(rScalar, sScalar).Verify(digest[:], pub) {
 		return zk.ProofParams{}, nil, fmt.Errorf("TSS signature does not verify against its public key and the claim message")
 	}
 
-	return zk.ProofParamsFromSignature(pub,
-		new(big.Int).SetBytes(padTo32Bytes(rBytes)),
-		new(big.Int).SetBytes(padTo32Bytes(sBytes)),
-		digest), pub, nil
+	return zk.ProofParamsFromSignature(pub, r, s, digest), pub, nil
+}
+
+// tssScalar parses a big-endian signature scalar as a TSS returns it. Signers
+// differ on width: some strip leading zeros, some add a DER-style 0x00 byte,
+// so the value is read as an integer and required to lie in [1, n-1]. The
+// same value is returned in both forms so the native check and the prover
+// cannot disagree.
+func tssScalar(name string, b []byte) (*big.Int, *btcec.ModNScalar, error) {
+	v := new(big.Int).SetBytes(b)
+	if v.Sign() == 0 || v.Cmp(btcec.S256().N) >= 0 {
+		return nil, nil, fmt.Errorf("TSS signature %s is not in [1, n-1]", name)
+	}
+	var scalar btcec.ModNScalar
+	var buf [32]byte
+	scalar.SetBytes((*[32]byte)(v.FillBytes(buf[:])))
+	return v, &scalar, nil
 }
 
 // buildClaimMsg assembles the message `qbtcd tx qbtc claim-with-proof` submits.
@@ -172,14 +189,4 @@ func requestTSSSignature(tssURL string, digest [32]byte) (*TSSSignResponse, erro
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return &signResp, nil
-}
-
-// padTo32Bytes left-pads a big-endian scalar to 32 bytes.
-func padTo32Bytes(b []byte) []byte {
-	if len(b) >= 32 {
-		return b
-	}
-	padded := make([]byte, 32)
-	copy(padded[32-len(b):], b)
-	return padded
 }

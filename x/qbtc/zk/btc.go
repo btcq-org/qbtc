@@ -76,6 +76,21 @@ func Hash160ToP2PKHAddress(hash [20]byte) (string, error) {
 	return addr.EncodeAddress(), nil
 }
 
+// CheckBitcoinAddressCanonical returns an error unless address is spelled
+// exactly as the chain stores it, which is the encoding btcutil produces.
+// Bech32 decodes case-insensitively, so "BC1Q..." is a valid address whose
+// claim text would never match the lowercase string on the UTXO.
+func CheckBitcoinAddressCanonical(address string) error {
+	addr, err := btcutil.DecodeAddress(address, &chaincfg.MainNetParams)
+	if err != nil {
+		return fmt.Errorf("invalid Bitcoin address: %w", err)
+	}
+	if canonical := addr.EncodeAddress(); canonical != address {
+		return fmt.Errorf("address must be written as %q, exactly as stored on the UTXO", canonical)
+	}
+	return nil
+}
+
 // BitcoinAddressToHash160 extracts the Hash160 from P2PKH or P2WPKH Bitcoin addresses.
 // Other address types (P2SH, P2TR, P2WSH, P2PK) are not supported.
 func BitcoinAddressToHash160(address string) ([20]byte, error) {

@@ -1,11 +1,16 @@
 package proofservice
 
 import (
+	"context"
 	"crypto/sha256"
+	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
+	"github.com/rs/zerolog"
 )
 
 // fixed, non-secret test key
@@ -85,5 +90,23 @@ func TestVerifyECDSASignature_ZeroComponents(t *testing.T) {
 	}
 	if err := verifyECDSASignature(pub, hash[:], rb, zero); err == nil {
 		t.Fatal("expected error for zero s")
+	}
+}
+
+func TestGenerateProof_RejectsNonCanonicalBitcoinAddress(t *testing.T) {
+	svc := &Service{logger: zerolog.Nop()}
+	req := ProveRequest{
+		Signature:      "H0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000=",
+		BitcoinAddress: strings.ToUpper("bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc"),
+		ClaimerAddress: "qbtc1claimer",
+		UTXOs:          []types.UTXORef{{Txid: "00", Vout: 0}},
+	}
+
+	resp, status, errResp := svc.generateProof(context.Background(), req)
+	if resp != nil || status != http.StatusBadRequest || errResp == nil {
+		t.Fatalf("expected 400 with error, got resp=%v status=%d err=%v", resp, status, errResp)
+	}
+	if errResp.Code != "INVALID_REQUEST" || !strings.Contains(errResp.Details, "exactly as stored") {
+		t.Fatalf("unexpected error response: %+v", errResp)
 	}
 }
