@@ -8,7 +8,6 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/cometbft/cometbft/privval"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	clitestutil "github.com/cosmos/cosmos-sdk/testutil/cli"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -17,7 +16,7 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
-// TestMsgBtcBlockViaAuthzExecRejected sends a correctly attested MsgBtcBlock
+// TestMsgBtcBlockViaAuthzExecRejected sends a well-formed MsgBtcBlock
 // nested in an authz MsgExec where the sender is both granter and grantee
 // (authz needs no grant for that). The ante handler only sees the MsgExec, so
 // the block handler itself has to reject the inner message.
@@ -36,25 +35,19 @@ func (s *E2ETestSuite) TestMsgBtcBlockViaAuthzExecRejected() {
 	s.Require().NoError(block.AddTransaction(coinbase))
 	commit, err := types.NewBtcBlockCommit(block)
 	s.Require().NoError(err)
-	signBytes, content, err := types.EncodeBtcBlockCommit(commit)
+	_, content, err := types.EncodeBtcBlockCommit(commit)
 	s.Require().NoError(err)
 
-	// Attest with the only validator's consensus key, so the attestation check
-	// alone would accept the block.
-	cmtCfg := val.GetCtx().Config
-	pv := privval.LoadFilePV(cmtCfg.PrivValidatorKeyFile(), cmtCfg.PrivValidatorStateFile())
-	sig, err := pv.Key.PrivKey.Sign(signBytes)
-	s.Require().NoError(err)
-
+	// A well-formed message, so that only the signer check can reject it. The
+	// extended commit is a placeholder: the handler rejects the signer first.
 	msg := &types.MsgBtcBlock{
-		Height:       height,
-		Hash:         block.BlockHash().String(),
-		BlockContent: content,
-		Attestations: []*types.Attestation{{
-			Address:   sdk.ConsAddress(pv.Key.PubKey.Address()).String(),
-			Signature: sig,
+		Blocks: []*types.BtcBlock{{
+			Height:       height,
+			Hash:         block.BlockHash().String(),
+			BlockContent: content,
 		}},
-		Signer: val.Address.String(),
+		ExtendedCommitInfo: []byte{0x01},
+		Signer:             val.Address.String(),
 	}
 
 	// authz exec reads the inner messages from an unsigned tx file.

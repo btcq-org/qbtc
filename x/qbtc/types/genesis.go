@@ -10,7 +10,6 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/plonk"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 // MinVerifyingKeySize is the minimum valid verifying key size.
@@ -31,19 +30,6 @@ func DefaultGenesis() *GenesisState {
 // Validate performs basic genesis state validation returning an error upon any
 // failure.
 func (gs GenesisState) Validate() error {
-	for _, nodePeerAddress := range gs.PeerAddresses {
-		if nodePeerAddress.Validator == "" {
-			return fmt.Errorf("validator cannot be empty")
-		}
-		_, err := sdk.ValAddressFromBech32(nodePeerAddress.Validator)
-		if err != nil {
-			return fmt.Errorf("invalid validator address: %s", err)
-		}
-		if err := ValidatePeerAddress(nodePeerAddress.PeerAddress); err != nil {
-			return fmt.Errorf("invalid peer address: %w", err)
-		}
-	}
-
 	// Validate ZK verifying key if present
 	if len(gs.ZkVerifyingKey) > 0 {
 		if err := ValidateVerifyingKey(gs.ZkVerifyingKey); err != nil {

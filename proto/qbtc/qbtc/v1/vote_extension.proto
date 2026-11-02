@@ -1,0 +1,22 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// BtcBlockVoteExtension is the vote extension a validator attaches to its
+// precommit: the Bitcoin blocks it has read, checked and cached, in
+// consecutive height order starting at the next unprocessed height.
+message BtcBlockVoteExtension { repeated BtcBlockVote votes = 1; }
+
+// BtcBlockVote attests one Bitcoin block.
+message BtcBlockVote {
+  // The height of the Bitcoin block
+  uint64 height = 1;
+
+  // The hash of the Bitcoin block, in the usual (byte-reversed) hex
+  string hash = 2;
+
+  // The SHA-256 of the uncompressed proto encoding of the block's
+  // BtcBlockCommit.
+  bytes commit_hash = 3;
+}

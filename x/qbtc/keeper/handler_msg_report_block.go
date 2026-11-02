@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"cosmossdk.io/collections"
-	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
@@ -19,64 +18,10 @@ import (
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerror "github.com/cosmos/cosmos-sdk/types/errors"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
-// ValidateMsgBtcBlockAttestation checks that validators with more than 2/3 of
-// the bonded power signed signBytes, the uncompressed encoding of the block's
-// BtcBlockCommit.
-func (s *msgServer) ValidateMsgBtcBlockAttestation(ctx sdk.Context, msg *types.MsgBtcBlock, signBytes []byte) error {
-	validPower := math.ZeroInt()
-	processedValidator := make(map[string]bool, len(msg.Attestations))
-	validators, err := s.k.stakingKeeper.GetBondedValidatorsByPower(ctx)
-	if err != nil {
-		return sdkerror.ErrUnknownRequest.Wrapf("failed to get bonded validators by power: %v", err)
-	}
-	validatorsByConsAddr := make(map[string]stakingtypes.Validator, len(validators))
-	for _, validator := range validators {
-		pubKey, err := validator.ConsPubKey()
-		if err != nil {
-			ctx.Logger().Error("failed to get consensus address for validator", "address", validator.GetOperator(), "error", err)
-			continue
-		}
-
-		consAddr := sdk.ConsAddress(pubKey.Address())
-		validatorsByConsAddr[consAddr.String()] = validator
-
-	}
-	for _, attestation := range msg.Attestations {
-		if processedValidator[attestation.Address] {
-			// skip duplicate attestation from the same validator
-			continue
-		}
-		val, found := validatorsByConsAddr[attestation.Address]
-		if !found {
-			ctx.Logger().Error("validator not found or not bonded", "address", attestation.Address)
-			continue
-		}
-		publicKey, err := val.ConsPubKey()
-		if err != nil {
-			ctx.Logger().Error("failed to get consensus public key for validator", "address", attestation.Address, "error", err)
-			continue
-		}
-		if publicKey.VerifySignature(signBytes, attestation.Signature) {
-			validPower = validPower.Add(math.NewInt(val.ConsensusPower(s.k.stakingKeeper.PowerReduction(ctx))))
-		}
-		processedValidator[attestation.Address] = true
-	}
-	totalPower, err := s.k.stakingKeeper.GetLastTotalPower(ctx)
-	if err != nil {
-		return sdkerror.ErrUnknownRequest.Wrapf("failed to get total staking power: %v", err)
-	}
-	// require more than 2/3 of total staking power to attest the block
-	requiredPower := totalPower.Mul(math.NewInt(2)).Quo(math.NewInt(3))
-	if validPower.LTE(requiredPower) {
-		return sdkerror.ErrUnauthorized.Wrapf("insufficient attestation power: %s, required: %s", validPower.String(), requiredPower.String())
-	}
-	return nil
-}
-
-// SetMsgReportBlock processes a reported Bitcoin block.
+// SetMsgReportBlock processes the reported Bitcoin blocks. The message is
+// atomic: if any block is rejected, none is processed.
 func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBlock) (*types.MsgEmpty, error) {
 	defer telemetry.MeasureSince(time.Now(), "msg_report_block")
 
@@ -85,45 +30,64 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	// ante handler only sees top-level messages, so a message nested in authz
 	// MsgExec, a wasm contract or an ICA packet reaches this handler directly;
 	// on all of those paths the signer is an account the sender controls.
-	if msg.Signer != types.EBifrostSignerAddress {
+	if msg.Signer != types.BtcBlockSignerAddress {
 		return nil, sdkerror.ErrUnauthorized.Wrap("MsgBtcBlock is only accepted from the block proposer's injection path")
 	}
-	lastProcessedBlock, err := s.k.GetLastProcessedBlock(ctx)
-	if err != nil {
-		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
+	if !VoteExtensionsEnabled(sdkCtx) {
+		return nil, sdkerror.ErrInvalidRequest.Wrap("MsgBtcBlock needs vote extensions, which are not enabled")
 	}
-	if msg.Height != lastProcessedBlock+1 {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("block height %d is not the next block height %d", msg.Height, lastProcessedBlock+1)
-	}
-
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
-
-	signBytes, commit, err := types.DecodeBtcBlockContent(msg.BlockContent)
-	if err != nil {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
+	// The blocks must be attested in the previous block's vote extensions by
+	// validators with more than 2/3 of the voting power.
+	if err := s.k.ValidateBtcBlockVotes(sdkCtx, msg); err != nil {
+		return nil, sdkerror.ErrUnauthorized.Wrap(err.Error())
 	}
-	if err := s.ValidateMsgBtcBlockAttestation(sdkCtx, msg, signBytes); err != nil {
-		return nil, err
+
+	cacheContext, writeCache := sdkCtx.CacheContext()
+	for _, block := range msg.Blocks {
+		lastProcessedBlock, err := s.k.GetLastProcessedBlock(cacheContext)
+		if err != nil {
+			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block height: %v", err)
+		}
+		if block.Height != lastProcessedBlock+1 {
+			return nil, sdkerror.ErrInvalidRequest.Wrapf("block height %d is not the next block height %d", block.Height, lastProcessedBlock+1)
+		}
+		if err := s.processBtcBlock(cacheContext, block); err != nil {
+			return nil, err
+		}
+	}
+
+	// write the cache context to the main context if we reach here without error
+	writeCache()
+	return &types.MsgEmpty{}, nil
+}
+
+// processBtcBlock verifies one Bitcoin block against the stored tip and
+// applies it to ctx: its transactions, the last processed height and the new
+// tip. ctx is a cache context that the caller discards on error.
+func (s *msgServer) processBtcBlock(ctx sdk.Context, block *types.BtcBlock) error {
+	_, commit, err := types.DecodeBtcBlockContent(block.BlockContent)
+	if err != nil {
+		return sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
 	}
 	header, txs, err := types.ParseBtcBlockCommit(commit)
 	if err != nil {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
+		return sdkerror.ErrInvalidRequest.Wrapf("invalid block content: %v", err)
 	}
 	params := s.k.btcParams
 	tip, err := s.k.getBtcTip(ctx)
 	if err != nil {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("cannot accept block %d: %v", msg.Height, err)
+		return sdkerror.ErrInvalidRequest.Wrapf("cannot accept block %d: %v", block.Height, err)
 	}
-	// The header must hash to msg.Hash, extend the stored tip with valid proof
+	// The header must hash to block.Hash, extend the stored tip with valid proof
 	// of work, and commit (merkle root) to exactly these transactions.
-	txids, err := verifyBtcBlock(params, tip, msg.Height, msg.Hash, header, txs)
+	txids, err := verifyBtcBlock(params, tip, block.Height, block.Hash, header, txs)
 	if err != nil {
-		return nil, sdkerror.ErrInvalidRequest.Wrapf("invalid block %d: %v", msg.Height, err)
+		return sdkerror.ErrInvalidRequest.Wrapf("invalid block %d: %v", block.Height, err)
 	}
 
-	cacheContext, writeCache := sdkCtx.CacheContext()
 	claimTxs := make([]int, 0)
 	totalFee := uint64(0)
 	// process the reported block; txs[0] is the coinbase, processed last because
@@ -132,49 +96,45 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 		tx, txid := txs[i], txids[i].String()
 		// check if it is a claim transaction , need to check it before the transaction is processed
 		// because utxo that has been spent will be removed from the store, so we can't check it after processing the transaction
-		if s.isClaimTx(cacheContext, params, tx) {
+		if s.isClaimTx(ctx, params, tx) {
 			claimTxs = append(claimTxs, i)
 		}
-		fee, err := s.processTransaction(cacheContext, params, tx, txid, msg.Height)
+		fee, err := s.processTransaction(ctx, params, tx, txid, block.Height)
 		if err != nil {
-			cacheContext.Logger().Error("failed to process transaction", "txid", txid, "error", err)
-			return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", txid, err)
+			ctx.Logger().Error("failed to process transaction", "txid", txid, "error", err)
+			return sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", txid, err)
 		}
 		totalFee += fee
 	}
 	coinbaseTxid := txids[0].String()
-	if err := s.processCoinbaseVOuts(cacheContext, params, txs[0].TxOut, coinbaseTxid, totalFee, msg.Height); err != nil {
-		cacheContext.Logger().Error("failed to process coinbase transaction", "txid", coinbaseTxid, "error", err)
-		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinbaseTxid, err)
+	if err := s.processCoinbaseVOuts(ctx, params, txs[0].TxOut, coinbaseTxid, totalFee, block.Height); err != nil {
+		ctx.Logger().Error("failed to process coinbase transaction", "txid", coinbaseTxid, "error", err)
+		return sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinbaseTxid, err)
 	}
 	for _, i := range claimTxs {
-		if err := s.processClaimTx(cacheContext, txs[i], txids[i].String()); err != nil {
+		if err := s.processClaimTx(ctx, txs[i], txids[i].String()); err != nil {
 			// if we failed to process claim tx, just log the error and continue
-			cacheContext.Logger().Error("failed to process claim transaction", "txid", txids[i].String(), "error", err)
+			ctx.Logger().Error("failed to process claim transaction", "txid", txids[i].String(), "error", err)
 			continue
 		}
 	}
 
 	// store last block processed height and the new tip
-	err = s.k.LastProcessedBlock.Set(cacheContext, msg.Height)
-	if err != nil {
-		cacheContext.Logger().Error("failed to set last processed block height", "height", msg.Height, "error", err)
-		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
+	if err := s.k.LastProcessedBlock.Set(ctx, block.Height); err != nil {
+		ctx.Logger().Error("failed to set last processed block height", "height", block.Height, "error", err)
+		return sdkerror.ErrUnknownRequest.Wrapf("failed to set last processed block height: %v", err)
 	}
-	if err := s.k.setBtcTip(cacheContext, params, msg.Height, header); err != nil {
-		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to set btc tip: %v", err)
+	if err := s.k.setBtcTip(ctx, params, block.Height, header); err != nil {
+		return sdkerror.ErrUnknownRequest.Wrapf("failed to set btc tip: %v", err)
 	}
-	sdkCtx.Logger().Info("processed btc block", "height", msg.Height, "hash", msg.Hash)
+	ctx.Logger().Info("btc block processed", "height", block.Height, "hash", block.Hash)
 
 	// Record metrics
 	telemetry.IncrCounter(1, types.ModuleName, "blocks_processed")
-	telemetry.SetGauge(float32(msg.Height), types.ModuleName, "last_processed_block_height")
+	telemetry.SetGauge(float32(block.Height), types.ModuleName, "last_processed_block_height")
 	telemetry.SetGauge(float32(len(txs)), types.ModuleName, "block_tx_count")
 	telemetry.SetGauge(float32(totalFee), types.ModuleName, "block_total_fee")
-
-	// write the cache context to the main context if we reach here without error
-	writeCache()
-	return &types.MsgEmpty{}, nil
+	return nil
 }
 
 // outputAmount returns the value of a transaction output in satoshis.

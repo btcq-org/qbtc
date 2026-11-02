@@ -14,12 +14,6 @@ import (
 func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
-	for _, nodePeerAddress := range genState.PeerAddresses {
-		err := k.NodePeerAddresses.Set(ctx, nodePeerAddress.Validator, nodePeerAddress.PeerAddress)
-		if err != nil {
-			return err
-		}
-	}
 	for _, utxo := range genState.Utxos {
 		err := k.Utxoes.Set(ctx, utxo.GetKey(), *utxo)
 		if err != nil {
@@ -72,18 +66,6 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 // ExportGenesis returns the module's exported genesis.
 func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) {
 	genesis := types.DefaultGenesis()
-	ips := make([]types.GenesisPeerAddress, 0)
-	err := k.NodePeerAddresses.Walk(ctx, nil, func(key string, value string) (stop bool, err error) {
-		ips = append(ips, types.GenesisPeerAddress{
-			Validator:   key,
-			PeerAddress: value,
-		})
-		return false, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	genesis.PeerAddresses = ips
 	if err := k.Utxoes.Walk(ctx, nil, func(key string, value types.UTXO) (stop bool, err error) {
 		genesis.Utxos = append(genesis.Utxos, &value)
 		return false, nil

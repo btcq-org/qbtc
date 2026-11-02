@@ -34,11 +34,10 @@ type Keeper struct {
 	btcParams *chaincfg.Params
 
 	// Collections
-	Schema            collections.Schema
-	Utxoes            collections.Map[string, types.UTXO]
-	NodePeerAddresses collections.Map[string, string]
-	ConstOverrides    collections.Map[string, int64]
-	StringParams      collections.Map[string, string]
+	Schema         collections.Schema
+	Utxoes         collections.Map[string, types.UTXO]
+	ConstOverrides collections.Map[string, int64]
+	StringParams   collections.Map[string, string]
 
 	LastProcessedBlock collections.Item[uint64]
 
@@ -71,7 +70,6 @@ func NewKeeper(
 		authKeeper:         authKeeper,
 		btcParams:          &chaincfg.MainNetParams,
 		Utxoes:             collections.NewMap(sb, types.UTXOKeys, "utxoes", collections.StringKey, codec.CollValue[types.UTXO](cdc)),
-		NodePeerAddresses:  collections.NewMap(sb, types.NodePeerAddressKeys, "node_peer_addresses", collections.StringKey, collections.StringValue),
 		ConstOverrides:     collections.NewMap(sb, types.ConstOverrideKeys, "const_overrides", collections.StringKey, collections.Int64Value),
 		StringParams:       collections.NewMap(sb, types.StringParamKeys, "string_params", collections.StringKey, collections.StringValue),
 		ZkVerifyingKey:     collections.NewItem(sb, types.ZkVerifyingKeyKey, "zk_verifying_key", collections.BytesValue),

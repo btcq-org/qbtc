@@ -35,8 +35,7 @@ build:
 	@echo "Build complete. Binary is located at ./build/$(APPNAME)d"
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version
-	@echo "build bifrost and tools"
-	@go build $(BUILD_FLAGS) -o ./build/bifrost  ./cmd/bifrost 
+	@echo "build tools"
 	@go build $(BUILD_FLAGS) -o ./build/utxo-indexer ./cmd/utxo-indexer
 ##############
 ###  Test  ###
@@ -191,9 +190,13 @@ docker-localnet:
 	@echo "Building docker image for local development"
 	@docker build -t btcq-org/qbtc:localnet .
 
+.PHONY: docker-localnet
 
 
-generate-testnet:
+
+# Builds the btcq-org/qbtc:localnet image first, so the generated genesis and
+# the binary that runs it come from the same commit.
+generate-testnet: docker-localnet
 	@echo "Generating testnet files"
 	@if [ -z "$$BITCOIN_RPC_HOST" ]; then \
 		echo "Error: BITCOIN_RPC_HOST environment variable is not set"; \
@@ -213,7 +216,7 @@ generate-testnet:
 	fi
 	rm -rf .testnets
 	go run cmd/qbtcd/main.go multi-node \
-		--bifrost-start-block-height 927000 \
+		--btc-initial-height 927000 \
 		--bitcoin-rpc-host $$BITCOIN_RPC_HOST \
 		--bitcoin-rpc-port $$BITCOIN_RPC_PORT \
 		--bitcoin-rpc-user $$BITCOIN_RPC_USER \

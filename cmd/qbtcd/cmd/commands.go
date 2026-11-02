@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"io"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
 
 	"cosmossdk.io/log"
 	confixcmd "cosmossdk.io/tools/confix/cmd"
@@ -42,8 +44,23 @@ func initRootCmd(
 		snapshot.Cmd(newApp),
 	)
 
-	server.AddCommandsWithStartCmdOptions(rootCmd, app.DefaultNodeHome, newApp, appExport, server.StartCmdOptions{
+	// the app built by qbtcd start, for PostSetup
+	var startedApp *app.App
+	startAppCreator := func(logger log.Logger, db dbm.DB, traceStore io.Writer, appOpts servertypes.AppOptions) servertypes.Application {
+		a := newApp(logger, db, traceStore, appOpts)
+		startedApp, _ = a.(*app.App)
+		return a
+	}
+	server.AddCommandsWithStartCmdOptions(rootCmd, app.DefaultNodeHome, startAppCreator, appExport, server.StartCmdOptions{
 		AddFlags: addModuleInitFlags,
+		// RegisterNodeService only starts the Bitcoin reader when the API or
+		// gRPC server is enabled; a validator needs it either way.
+		PostSetup: func(_ *server.Context, _ client.Context, _ context.Context, _ *errgroup.Group) error {
+			if startedApp == nil {
+				return errors.New("qbtcd start did not build the qbtc app")
+			}
+			return startedApp.StartBitcoinReader()
+		},
 	})
 
 	// add keybase, auxiliary RPC, query, genesis, and tx child commands

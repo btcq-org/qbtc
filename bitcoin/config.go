@@ -2,6 +2,7 @@ package bitcoin
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -30,4 +31,6 @@ type Config struct {
 	RPCUser     string `mapstructure:"rpc_user" json:"rpc_user"`
 	Password    string `mapstructure:"password" json:"password"`
 	LocalDBPath string `mapstructure:"local_db_path" json:"local_db_path"`
+	// Timeout bounds each RPC request; zero means no timeout.
+	Timeout time.Duration `mapstructure:"timeout" json:"timeout"`
 }

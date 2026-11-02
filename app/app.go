@@ -6,12 +6,14 @@ import (
 	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
+	"cosmossdk.io/collections"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -45,7 +47,7 @@ import (
 	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
 	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	"github.com/btcq-org/qbtc/docs"
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	qbtcmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
@@ -80,7 +82,7 @@ type App struct {
 	txConfig          client.TxConfig
 	interfaceRegistry codectypes.InterfaceRegistry
 
-	EnshrinedBifrost *ebifrost.EnshrinedBifrost
+	BtcReader *btcreader.Reader
 
 	// keepers
 	// only keepers required by the app are exposed
@@ -164,9 +166,9 @@ func New(
 		)
 	)
 
-	ebifrostConfig, err := ebifrost.ReadEBifrostConfig(appOpts)
+	readerConfig, err := btcreader.ReadConfig(appOpts)
 	if err != nil {
-		panic(fmt.Sprintf("error while reading ebifrost config: %s", err))
+		panic(fmt.Sprintf("error while reading the Bitcoin reader config: %s", err))
 	}
 
 	var appModules map[string]appmodule.AppModule
@@ -207,17 +209,19 @@ func New(
 		panic(err)
 	}
 
-	app.EnshrinedBifrost = ebifrost.NewEnshrinedBifrost(ebifrostConfig, app.AppCodec(), logger)
+	app.BtcReader = btcreader.NewReader(readerConfig, app.AppCodec(), logger)
 	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
-	eBifrostProposalHandler := qbtcabi.NewProposalHandler(
+	btcProposalHandler := qbtcabi.NewProposalHandler(
 		app.QbtcKeeper,
-		app.EnshrinedBifrost,
+		app.BtcReader,
 		app.TxConfig().TxDecoder(),
 		defaultProposalHandler.PrepareProposalHandler(),
 		defaultProposalHandler.ProcessProposalHandler(),
 	)
-	app.SetPrepareProposal(eBifrostProposalHandler.PrepareProposal)
-	app.SetProcessProposal(eBifrostProposalHandler.ProcessProposal)
+	app.SetPrepareProposal(btcProposalHandler.PrepareProposal)
+	app.SetProcessProposal(btcProposalHandler.ProcessProposal)
+	app.SetExtendVoteHandler(btcProposalHandler.ExtendVote)
+	app.SetVerifyVoteExtensionHandler(btcProposalHandler.VerifyVoteExtension)
 
 	/****  Module Options ****/
 
@@ -247,6 +251,11 @@ func New(
 
 	if err := app.Load(loadLatest); err != nil {
 		panic(err)
+	}
+	if loadLatest {
+		if err := repairIncompleteCommit(app.CommitMultiStore(), app.GetStoreKeys(), logger); err != nil {
+			panic(err)
+		}
 	}
 
 	return app
@@ -299,17 +308,53 @@ func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig
 	docs.RegisterOpenAPIService(Name, apiSvr.Router)
 }
 
-// RegisterNodeService registers the node services for the application.
+// RegisterNodeService registers the node services for the application. The
+// server only calls it when the API or gRPC server is enabled, so qbtcd start
+// also starts the reader from its PostSetup hook.
 func (app *App) RegisterNodeService(ctx client.Context, config config.Config) {
 	app.App.RegisterNodeService(ctx, config)
-	if err := app.EnshrinedBifrost.Start(); err != nil && !errors.Is(err, ebifrost.ErrAlreadyStarted) {
-		panic(fmt.Errorf("failed to start bifrost service: %w", err))
+	if err := app.StartBitcoinReader(); err != nil {
+		panic(err)
 	}
 }
 
-// Close stops enshrined bifrost and closes the application.
+// StartBitcoinReader starts the in-process Bitcoin reader if it is enabled.
+// Calling it again once the reader runs does nothing.
+func (app *App) StartBitcoinReader() error {
+	if err := app.BtcReader.Start(app.lastProcessedBtcBlock); err != nil && !errors.Is(err, btcreader.ErrAlreadyStarted) {
+		return fmt.Errorf("failed to start the bitcoin reader: %w", err)
+	}
+	return nil
+}
+
+// lastProcessedBtcBlock returns the last Bitcoin height processed in the latest
+// committed state, for the Bitcoin reader.
+func (app *App) lastProcessedBtcBlock() (uint64, error) {
+	height := app.LastBlockHeight()
+	if height == 0 {
+		// no committed state yet
+		return 0, btcreader.ErrNoBtcAnchor
+	}
+	// Read the committed state directly rather than through a query context:
+	// after a restart there is no check state until the first block commits,
+	// and the reader polls before that.
+	cms, err := app.CommitMultiStore().CacheMultiStoreWithVersion(height)
+	if err != nil {
+		return 0, fmt.Errorf("load the committed state at height %d: %w", height, err)
+	}
+	ctx := sdk.NewContext(cms, cmtproto.Header{Height: height}, true, app.Logger())
+	if _, err := app.QbtcKeeper.BtcTipHeader.Get(ctx); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return 0, btcreader.ErrNoBtcAnchor
+		}
+		return 0, err
+	}
+	return app.QbtcKeeper.GetLastProcessedBlock(ctx)
+}
+
+// Close stops the Bitcoin reader and closes the application.
 func (app *App) Close() error {
-	app.EnshrinedBifrost.Stop()
+	app.BtcReader.Stop()
 	return app.App.Close()
 }
 

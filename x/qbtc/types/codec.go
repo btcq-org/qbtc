@@ -13,7 +13,6 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgClaimWithProof{},
 		&MsgGovClaimUTXO{},
 		&MsgUpdateParam{},
-		&MsgSetNodePeerAddress{},
 	)
 
 	msgservice.RegisterMsgServiceDesc(registrar, &_Msg_serviceDesc)

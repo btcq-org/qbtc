@@ -2,6 +2,7 @@ package keeper_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"cosmossdk.io/core/address"
@@ -12,7 +13,9 @@ import (
 	module "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtctestutil "github.com/btcq-org/qbtc/x/qbtc/testutil"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
 	"github.com/cometbft/cometbft/crypto/mldsa"
+	cmtprotocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/runtime"
@@ -36,6 +39,8 @@ type fixture struct {
 	bankKeeper            *qbtctestutil.MockBankKeeper
 	authKeeper            *qbtctestutil.MockAuthKeeper
 	storeKey              *storetypes.KVStoreKey
+	// consensus public keys GetPubKeyByConsAddr knows, by consensus address
+	consPubKeys map[string]cmtprotocrypto.PublicKey
 }
 
 func initFixture(t *testing.T) *fixture {
@@ -61,6 +66,18 @@ func initFixture(t *testing.T) *fixture {
 	validator.Status = stakingtypes.Bonded
 	validator.Tokens = math.NewInt(1000000000)
 
+	consPubKeys := make(map[string]cmtprotocrypto.PublicKey)
+	protoPubKey, err := cryptoenc.PubKeyToProto(pubKey)
+	assert.NoError(t, err)
+	consPubKeys[string(pubKey.Address())] = protoPubKey
+	stakingKeeper.EXPECT().GetPubKeyByConsAddr(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(_ context.Context, addr sdk.ConsAddress) (cmtprotocrypto.PublicKey, error) {
+			key, ok := consPubKeys[string(addr)]
+			if !ok {
+				return cmtprotocrypto.PublicKey{}, fmt.Errorf("validator %s not found", addr)
+			}
+			return key, nil
+		})
 	stakingKeeper.EXPECT().GetLastTotalPower(gomock.Any()).AnyTimes().Return(math.NewInt(1000000), nil)
 	stakingKeeper.EXPECT().GetValidator(gomock.Any(), gomock.Any()).AnyTimes().Return(validator, nil)
 	stakingKeeper.EXPECT().PowerReduction(gomock.Any()).AnyTimes().Return(math.NewInt(1000))
@@ -89,6 +106,7 @@ func initFixture(t *testing.T) *fixture {
 		bankKeeper:            bankKeeper,
 		authKeeper:            authKeeper,
 		storeKey:              storeKey,
+		consPubKeys:           consPubKeys,
 	}
 }
 func (f *fixture) GetAddressFromPubKey(pubKey []byte) (string, error) {

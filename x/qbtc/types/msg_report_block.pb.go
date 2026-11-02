@@ -26,44 +26,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type Attestation struct {
-	Address   string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	Signature []byte `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
-}
-
-func (m *Attestation) Reset()         { *m = Attestation{} }
-func (m *Attestation) String() string { return proto.CompactTextString(m) }
-func (*Attestation) ProtoMessage()    {}
-func (*Attestation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_628d11da7ff97b80, []int{0}
-}
-func (m *Attestation) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *Attestation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_Attestation.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *Attestation) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Attestation.Merge(m, src)
-}
-func (m *Attestation) XXX_Size() int {
-	return m.Size()
-}
-func (m *Attestation) XXX_DiscardUnknown() {
-	xxx_messageInfo_Attestation.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Attestation proto.InternalMessageInfo
-
 // BtcBlockCommit is the Bitcoin block content that validators attest to.
 // The chain recomputes every txid from txs, checks the merkle root against
 // the header, and checks the header's proof of work, difficulty and link to
@@ -80,7 +42,7 @@ func (m *BtcBlockCommit) Reset()         { *m = BtcBlockCommit{} }
 func (m *BtcBlockCommit) String() string { return proto.CompactTextString(m) }
 func (*BtcBlockCommit) ProtoMessage()    {}
 func (*BtcBlockCommit) Descriptor() ([]byte, []int) {
-	return fileDescriptor_628d11da7ff97b80, []int{1}
+	return fileDescriptor_628d11da7ff97b80, []int{0}
 }
 func (m *BtcBlockCommit) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -109,16 +71,59 @@ func (m *BtcBlockCommit) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_BtcBlockCommit proto.InternalMessageInfo
 
-type MsgBtcBlock struct {
-	// The height of the reported Bitcoin block
+// BtcBlock is one Bitcoin block carried in MsgBtcBlock.
+type BtcBlock struct {
+	// The height of the Bitcoin block
 	Height uint64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
-	// The hash of the reported Bitcoin block, in the usual (byte-reversed) hex
+	// The hash of the Bitcoin block, in the usual (byte-reversed) hex
 	Hash string `protobuf:"bytes,2,opt,name=hash,proto3" json:"hash,omitempty"`
 	// The gzip-compressed proto encoding of the block's BtcBlockCommit.
-	// Attestations sign the uncompressed encoding.
-	BlockContent []byte         `protobuf:"bytes,3,opt,name=block_content,json=blockContent,proto3" json:"block_content,omitempty"`
-	Attestations []*Attestation `protobuf:"bytes,4,rep,name=attestations,proto3" json:"attestations,omitempty"`
-	Signer       string         `protobuf:"bytes,5,opt,name=signer,proto3" json:"signer,omitempty"`
+	// Validators attest to the SHA-256 of the uncompressed encoding.
+	BlockContent []byte `protobuf:"bytes,3,opt,name=block_content,json=blockContent,proto3" json:"block_content,omitempty"`
+}
+
+func (m *BtcBlock) Reset()         { *m = BtcBlock{} }
+func (m *BtcBlock) String() string { return proto.CompactTextString(m) }
+func (*BtcBlock) ProtoMessage()    {}
+func (*BtcBlock) Descriptor() ([]byte, []int) {
+	return fileDescriptor_628d11da7ff97b80, []int{1}
+}
+func (m *BtcBlock) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BtcBlock) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BtcBlock.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BtcBlock) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BtcBlock.Merge(m, src)
+}
+func (m *BtcBlock) XXX_Size() int {
+	return m.Size()
+}
+func (m *BtcBlock) XXX_DiscardUnknown() {
+	xxx_messageInfo_BtcBlock.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BtcBlock proto.InternalMessageInfo
+
+// MsgBtcBlock carries consecutive Bitcoin blocks, from the next unprocessed
+// height, that validators with more than 2/3 of the voting power attested in
+// the vote extensions of the previous block.
+type MsgBtcBlock struct {
+	Blocks []*BtcBlock `protobuf:"bytes,1,rep,name=blocks,proto3" json:"blocks,omitempty"`
+	// The abci.ExtendedCommitInfo of the previous block, proto-encoded. It holds
+	// the signed vote extensions that prove the attestations.
+	ExtendedCommitInfo []byte `protobuf:"bytes,2,opt,name=extended_commit_info,json=extendedCommitInfo,proto3" json:"extended_commit_info,omitempty"`
+	Signer             string `protobuf:"bytes,3,opt,name=signer,proto3" json:"signer,omitempty"`
 }
 
 func (m *MsgBtcBlock) Reset()         { *m = MsgBtcBlock{} }
@@ -155,8 +160,8 @@ func (m *MsgBtcBlock) XXX_DiscardUnknown() {
 var xxx_messageInfo_MsgBtcBlock proto.InternalMessageInfo
 
 func init() {
-	proto.RegisterType((*Attestation)(nil), "qbtc.qbtc.v1.Attestation")
 	proto.RegisterType((*BtcBlockCommit)(nil), "qbtc.qbtc.v1.BtcBlockCommit")
+	proto.RegisterType((*BtcBlock)(nil), "qbtc.qbtc.v1.BtcBlock")
 	proto.RegisterType((*MsgBtcBlock)(nil), "qbtc.qbtc.v1.MsgBtcBlock")
 }
 
@@ -165,71 +170,33 @@ func init() {
 }
 
 var fileDescriptor_628d11da7ff97b80 = []byte{
-	// 420 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x52, 0xbf, 0x6f, 0xd3, 0x40,
-	0x14, 0xf6, 0xd5, 0x21, 0x28, 0x17, 0x83, 0xca, 0xa9, 0x02, 0xb7, 0x42, 0x27, 0x2b, 0x15, 0x92,
-	0x55, 0xa9, 0x36, 0x2d, 0x5b, 0x25, 0x86, 0x9a, 0x11, 0xb1, 0x98, 0x8d, 0xc5, 0xb2, 0x9d, 0xd3,
-	0xd9, 0x02, 0xfb, 0xd2, 0xbb, 0xd7, 0xaa, 0x6c, 0x88, 0x91, 0x89, 0x3f, 0xa5, 0x03, 0x7f, 0x44,
-	0xc7, 0x88, 0x29, 0x23, 0x71, 0x86, 0xcc, 0xfc, 0x07, 0xc8, 0x77, 0x17, 0x25, 0x4c, 0x5d, 0x9e,
-	0xdf, 0xf7, 0xbe, 0xf7, 0xc3, 0xdf, 0x67, 0xe3, 0xe3, 0xab, 0x02, 0xca, 0x58, 0x87, 0x9b, 0xb3,
-	0xb8, 0x51, 0x3c, 0x93, 0x6c, 0x26, 0x24, 0x64, 0xc5, 0x17, 0x51, 0x7e, 0x8e, 0x66, 0x52, 0x80,
-	0x20, 0x5e, 0xcf, 0x47, 0x3a, 0xdc, 0x9c, 0x1d, 0x3d, 0xcb, 0x9b, 0xba, 0x15, 0xb1, 0x8e, 0xa6,
-	0xe1, 0xe8, 0x45, 0x29, 0x54, 0x23, 0x54, 0x3f, 0x6f, 0xd7, 0x58, 0xe2, 0xd0, 0x10, 0x99, 0x46,
-	0xb1, 0x01, 0x96, 0x3a, 0xe0, 0x82, 0x0b, 0x53, 0xef, 0x33, 0x53, 0x9d, 0x64, 0x78, 0x7c, 0x09,
-	0xc0, 0x14, 0xe4, 0x50, 0x8b, 0x96, 0x9c, 0xe3, 0xc7, 0xf9, 0x74, 0x2a, 0x99, 0x52, 0x3e, 0x0a,
-	0x50, 0x38, 0x4a, 0xfc, 0xdf, 0xbf, 0x4e, 0x0f, 0xec, 0x9e, 0x4b, 0xc3, 0x7c, 0x04, 0x59, 0xb7,
-	0x3c, 0xdd, 0x34, 0x92, 0x97, 0x78, 0xa4, 0x6a, 0xde, 0xe6, 0x70, 0x2d, 0x99, 0xbf, 0x17, 0xa0,
-	0xd0, 0x4b, 0xb7, 0x85, 0xc9, 0x05, 0x7e, 0x9a, 0x40, 0x99, 0xf4, 0xea, 0xde, 0x89, 0xa6, 0xa9,
-	0x81, 0x3c, 0xc7, 0xc3, 0x8a, 0xe5, 0x53, 0x26, 0xf5, 0x09, 0x2f, 0xb5, 0x88, 0xec, 0x63, 0x17,
-	0x6e, 0x95, 0xbf, 0x17, 0xb8, 0xa1, 0x97, 0xf6, 0xe9, 0xe4, 0x2f, 0xc2, 0xe3, 0x0f, 0x8a, 0x6f,
-	0xe6, 0xcd, 0x64, 0xcd, 0x2b, 0xd0, 0x93, 0x83, 0xd4, 0x22, 0x42, 0xf0, 0xa0, 0xca, 0x55, 0xa5,
-	0x8f, 0x8f, 0x52, 0x9d, 0x93, 0x63, 0xfc, 0x44, 0x5b, 0x9a, 0x95, 0xa2, 0x05, 0xd6, 0x82, 0xef,
-	0xea, 0x63, 0x5e, 0x61, 0xde, 0x44, 0xd7, 0xc8, 0x5b, 0xec, 0xe5, 0x5b, 0xf5, 0xca, 0x1f, 0x04,
-	0x6e, 0x38, 0x3e, 0x3f, 0x8c, 0x76, 0xfd, 0x8f, 0x76, 0xfc, 0x49, 0xff, 0x6b, 0x27, 0xaf, 0xf1,
-	0xb0, 0x17, 0xca, 0xa4, 0xff, 0xe8, 0x01, 0xb3, 0x6c, 0xdf, 0x45, 0xf0, 0x7d, 0x7d, 0x77, 0x62,
-	0xc1, 0x8f, 0xf5, 0xdd, 0xc9, 0x7e, 0x01, 0xe5, 0x55, 0xbc, 0xa3, 0x31, 0x79, 0x7f, 0xbf, 0xa4,
-	0xce, 0x62, 0x49, 0xd1, 0xb7, 0x8e, 0x3a, 0xf7, 0x1d, 0x45, 0xf3, 0x8e, 0xa2, 0x3f, 0x1d, 0x45,
-	0x3f, 0x57, 0xd4, 0x99, 0xaf, 0xa8, 0xb3, 0x58, 0x51, 0xe7, 0xd3, 0x2b, 0x5e, 0x43, 0x75, 0x5d,
-	0x44, 0xa5, 0x68, 0xe2, 0x7e, 0xc5, 0xa9, 0x90, 0xdc, 0xfc, 0x55, 0xb7, 0xe6, 0x01, 0x5f, 0x67,
-	0x4c, 0x15, 0x43, 0xfd, 0x91, 0xdf, 0xfc, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x46, 0x31, 0x8f, 0x86,
-	0x76, 0x02, 0x00, 0x00,
-}
-
-func (m *Attestation) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Attestation) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Attestation) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.Signature) > 0 {
-		i -= len(m.Signature)
-		copy(dAtA[i:], m.Signature)
-		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Signature)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Address) > 0 {
-		i -= len(m.Address)
-		copy(dAtA[i:], m.Address)
-		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Address)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
+	// 411 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4c, 0x52, 0x31, 0x6f, 0xd4, 0x30,
+	0x14, 0x8e, 0x9b, 0x2a, 0xa2, 0x6e, 0x40, 0xc5, 0x3a, 0x95, 0xd0, 0xc1, 0x8a, 0xae, 0x42, 0x8a,
+	0x2a, 0x35, 0x69, 0x61, 0xeb, 0x46, 0x98, 0x10, 0x62, 0x09, 0x1b, 0x0c, 0xd1, 0xc5, 0x71, 0x9d,
+	0x08, 0x62, 0x5f, 0x6d, 0x53, 0x1d, 0x1b, 0x62, 0x64, 0xe2, 0xa7, 0xdc, 0xc0, 0x3f, 0x60, 0xb9,
+	0xf1, 0xc4, 0x74, 0x23, 0x97, 0x1b, 0xee, 0x6f, 0xa0, 0xd8, 0xbe, 0xea, 0x96, 0x97, 0xf7, 0xbd,
+	0xef, 0x7d, 0x7e, 0xdf, 0x73, 0x0c, 0xcf, 0xef, 0x2a, 0x4d, 0x32, 0x13, 0xee, 0xaf, 0xb3, 0x4e,
+	0xb1, 0x52, 0xd2, 0xa9, 0x90, 0xba, 0xac, 0xbe, 0x08, 0xf2, 0x39, 0x9d, 0x4a, 0xa1, 0x05, 0x0a,
+	0x07, 0x3e, 0x35, 0xe1, 0xfe, 0xfa, 0xec, 0xe9, 0xa4, 0x6b, 0xb9, 0xc8, 0x4c, 0xb4, 0x0d, 0x67,
+	0xcf, 0x88, 0x50, 0x9d, 0x50, 0x83, 0xde, 0x1d, 0xe3, 0x88, 0xe7, 0x96, 0x28, 0x0d, 0xca, 0x2c,
+	0x70, 0xd4, 0x88, 0x09, 0x26, 0x6c, 0x7d, 0xc8, 0x6c, 0x75, 0x7c, 0x03, 0x9f, 0xe4, 0x9a, 0xe4,
+	0xc3, 0xf0, 0x37, 0xa2, 0xeb, 0x5a, 0x8d, 0x4e, 0x61, 0xd0, 0xd0, 0x49, 0x4d, 0x65, 0x04, 0x62,
+	0x90, 0x84, 0x85, 0x43, 0xe8, 0x04, 0xfa, 0x7a, 0xa6, 0xa2, 0x83, 0xd8, 0x4f, 0xc2, 0x62, 0x48,
+	0xc7, 0x9f, 0xe0, 0xa3, 0x9d, 0xd6, 0xaa, 0x5a, 0xd6, 0x68, 0xa3, 0x3a, 0x2c, 0x1c, 0x42, 0x08,
+	0x1e, 0x36, 0x13, 0xd5, 0x44, 0x07, 0x31, 0x48, 0x8e, 0x0a, 0x93, 0xa3, 0x73, 0xf8, 0xd8, 0x6c,
+	0x5b, 0x12, 0xc1, 0x35, 0xe5, 0x3a, 0xf2, 0xcd, 0xa0, 0xb0, 0xb2, 0x2e, 0x4c, 0x6d, 0xfc, 0x07,
+	0xc0, 0xe3, 0xf7, 0x8a, 0x3d, 0x0c, 0x48, 0x61, 0x60, 0x78, 0x15, 0x81, 0xd8, 0x4f, 0x8e, 0x5f,
+	0x9e, 0xa6, 0xfb, 0x97, 0x94, 0xee, 0xfa, 0x0a, 0xd7, 0x85, 0xae, 0xe0, 0x88, 0xce, 0x34, 0xe5,
+	0x35, 0xad, 0x4b, 0x62, 0x36, 0x2b, 0x5b, 0x7e, 0x2b, 0x8c, 0x91, 0xb0, 0x40, 0x3b, 0xce, 0x2e,
+	0xfd, 0x96, 0xdf, 0x0a, 0x74, 0x05, 0x03, 0xd5, 0x32, 0x4e, 0xa5, 0xf1, 0x73, 0x94, 0x47, 0x7f,
+	0x7f, 0x5f, 0x8e, 0xdc, 0x15, 0xbe, 0xae, 0x6b, 0x49, 0x95, 0xfa, 0xa0, 0x65, 0xcb, 0x59, 0xe1,
+	0xfa, 0x6e, 0xe2, 0x1f, 0xdb, 0xf9, 0x85, 0x03, 0x3f, 0xb7, 0xf3, 0x8b, 0x93, 0x4a, 0x93, 0xbb,
+	0x6c, 0xcf, 0x75, 0xfe, 0x6e, 0xb1, 0xc6, 0xde, 0x6a, 0x8d, 0xc1, 0xf7, 0x1e, 0x7b, 0x8b, 0x1e,
+	0x83, 0x65, 0x8f, 0xc1, 0xbf, 0x1e, 0x83, 0x5f, 0x1b, 0xec, 0x2d, 0x37, 0xd8, 0x5b, 0x6d, 0xb0,
+	0xf7, 0xf1, 0x05, 0x6b, 0x75, 0xf3, 0xb5, 0x4a, 0x89, 0xe8, 0xb2, 0xe1, 0x88, 0x4b, 0x21, 0x99,
+	0x7d, 0x23, 0x33, 0xfb, 0xd1, 0xdf, 0xa6, 0x54, 0x55, 0x81, 0xf9, 0x65, 0xaf, 0xfe, 0x07, 0x00,
+	0x00, 0xff, 0xff, 0x5b, 0xe1, 0x87, 0x84, 0x44, 0x02, 0x00, 0x00,
 }
 
 func (m *BtcBlockCommit) Marshal() (dAtA []byte, err error) {
@@ -271,6 +238,48 @@ func (m *BtcBlockCommit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *BtcBlock) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BtcBlock) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BtcBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.BlockContent) > 0 {
+		i -= len(m.BlockContent)
+		copy(dAtA[i:], m.BlockContent)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.BlockContent)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Hash) > 0 {
+		i -= len(m.Hash)
+		copy(dAtA[i:], m.Hash)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Hash)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Height != 0 {
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Height))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *MsgBtcBlock) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -296,12 +305,19 @@ func (m *MsgBtcBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.Signer)
 		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Signer)))
 		i--
-		dAtA[i] = 0x2a
+		dAtA[i] = 0x1a
 	}
-	if len(m.Attestations) > 0 {
-		for iNdEx := len(m.Attestations) - 1; iNdEx >= 0; iNdEx-- {
+	if len(m.ExtendedCommitInfo) > 0 {
+		i -= len(m.ExtendedCommitInfo)
+		copy(dAtA[i:], m.ExtendedCommitInfo)
+		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.ExtendedCommitInfo)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Blocks) > 0 {
+		for iNdEx := len(m.Blocks) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size, err := m.Attestations[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				size, err := m.Blocks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
 				if err != nil {
 					return 0, err
 				}
@@ -309,27 +325,8 @@ func (m *MsgBtcBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				i = encodeVarintMsgReportBlock(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0x22
+			dAtA[i] = 0xa
 		}
-	}
-	if len(m.BlockContent) > 0 {
-		i -= len(m.BlockContent)
-		copy(dAtA[i:], m.BlockContent)
-		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.BlockContent)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.Hash) > 0 {
-		i -= len(m.Hash)
-		copy(dAtA[i:], m.Hash)
-		i = encodeVarintMsgReportBlock(dAtA, i, uint64(len(m.Hash)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.Height != 0 {
-		i = encodeVarintMsgReportBlock(dAtA, i, uint64(m.Height))
-		i--
-		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -345,23 +342,6 @@ func encodeVarintMsgReportBlock(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *Attestation) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.Address)
-	if l > 0 {
-		n += 1 + l + sovMsgReportBlock(uint64(l))
-	}
-	l = len(m.Signature)
-	if l > 0 {
-		n += 1 + l + sovMsgReportBlock(uint64(l))
-	}
-	return n
-}
-
 func (m *BtcBlockCommit) Size() (n int) {
 	if m == nil {
 		return 0
@@ -381,7 +361,7 @@ func (m *BtcBlockCommit) Size() (n int) {
 	return n
 }
 
-func (m *MsgBtcBlock) Size() (n int) {
+func (m *BtcBlock) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -398,11 +378,24 @@ func (m *MsgBtcBlock) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovMsgReportBlock(uint64(l))
 	}
-	if len(m.Attestations) > 0 {
-		for _, e := range m.Attestations {
+	return n
+}
+
+func (m *MsgBtcBlock) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Blocks) > 0 {
+		for _, e := range m.Blocks {
 			l = e.Size()
 			n += 1 + l + sovMsgReportBlock(uint64(l))
 		}
+	}
+	l = len(m.ExtendedCommitInfo)
+	if l > 0 {
+		n += 1 + l + sovMsgReportBlock(uint64(l))
 	}
 	l = len(m.Signer)
 	if l > 0 {
@@ -416,122 +409,6 @@ func sovMsgReportBlock(x uint64) (n int) {
 }
 func sozMsgReportBlock(x uint64) (n int) {
 	return sovMsgReportBlock(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *Attestation) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMsgReportBlock
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Attestation: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Attestation: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMsgReportBlock
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Address = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMsgReportBlock
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Signature = append(m.Signature[:0], dAtA[iNdEx:postIndex]...)
-			if m.Signature == nil {
-				m.Signature = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMsgReportBlock
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }
 func (m *BtcBlockCommit) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -649,7 +526,7 @@ func (m *BtcBlockCommit) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
+func (m *BtcBlock) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -672,10 +549,10 @@ func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MsgBtcBlock: wiretype end group for non-group")
+			return fmt.Errorf("proto: BtcBlock: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgBtcBlock: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: BtcBlock: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -763,9 +640,59 @@ func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
 				m.BlockContent = []byte{}
 			}
 			iNdEx = postIndex
-		case 4:
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMsgReportBlock(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMsgReportBlock
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MsgBtcBlock: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MsgBtcBlock: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attestations", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Blocks", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -792,12 +719,46 @@ func (m *MsgBtcBlock) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Attestations = append(m.Attestations, &Attestation{})
-			if err := m.Attestations[len(m.Attestations)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.Blocks = append(m.Blocks, &BtcBlock{})
+			if err := m.Blocks[len(m.Blocks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-		case 5:
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExtendedCommitInfo", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMsgReportBlock
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMsgReportBlock
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ExtendedCommitInfo = append(m.ExtendedCommitInfo[:0], dAtA[iNdEx:postIndex]...)
+			if m.ExtendedCommitInfo == nil {
+				m.ExtendedCommitInfo = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Signer", wireType)
 			}

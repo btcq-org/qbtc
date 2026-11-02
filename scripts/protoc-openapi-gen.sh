@@ -8,11 +8,8 @@ OUT_FILE="${REPO_ROOT}/docs/static/openapi.json"
 cd "${REPO_ROOT}/proto"
 
 echo "Generating merged OpenAPI spec from proto files"
-# qbtc/ebifrost is the localhost-only validator-internal control plane; it
-# isn't reachable via REST/grpc-gateway and shouldn't appear in the public spec.
 go tool github.com/bufbuild/buf/cmd/buf generate \
-  --template buf.gen.openapi.yaml \
-  --exclude-path qbtc/ebifrost
+  --template buf.gen.openapi.yaml
 
 mkdir -p "$(dirname "${OUT_FILE}")"
 jq '.info = {

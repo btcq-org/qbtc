@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/btcq-org/qbtc/x/qbtc/ebifrost"
+	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
 )
@@ -21,7 +21,7 @@ func initCometBFTConfig() *cmtcfg.Config {
 // The following code snippet is just for reference.
 type CustomAppConfig struct {
 	serverconfig.Config `mapstructure:",squash"`
-	EBifrost            ebifrost.EBifrostConfig `mapstructure:"ebifrost"`
+	BtcReader           btcreader.Config `mapstructure:"btc_reader"`
 }
 
 // initAppConfig helps to override default appConfig template and configs.
@@ -46,11 +46,11 @@ func initAppConfig() (string, interface{}) {
 	srvCfg.MinGasPrices = "0qbtc"
 
 	customAppConfig := CustomAppConfig{
-		Config:   *srvCfg,
-		EBifrost: ebifrost.DefaultEBifrostConfig(),
+		Config:    *srvCfg,
+		BtcReader: btcreader.DefaultConfig(),
 	}
 
-	customAppTemplate := serverconfig.DefaultConfigTemplate + ebifrost.ConfigTemplate(customAppConfig.EBifrost)
+	customAppTemplate := serverconfig.DefaultConfigTemplate + btcreader.ConfigTemplate(customAppConfig.BtcReader)
 	// Edit the default template file
 	//
 	// customAppTemplate := serverconfig.DefaultConfigTemplate + `

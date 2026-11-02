@@ -5,6 +5,7 @@ import (
 
 	"cosmossdk.io/core/address"
 	"cosmossdk.io/math"
+	cmtprotocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
@@ -30,6 +31,9 @@ type BankKeeper interface {
 // StakingKeeper defines the expected interface for the Staking module.
 type StakingKeeper interface {
 	GetValidator(context.Context, sdk.ValAddress) (stakingtypes.Validator, error)
+	// GetPubKeyByConsAddr returns the consensus public key of a validator, used
+	// to verify the signatures of vote extensions
+	GetPubKeyByConsAddr(context.Context, sdk.ConsAddress) (cmtprotocrypto.PublicKey, error)
 	GetBondedValidatorsByPower(ctx context.Context) ([]stakingtypes.Validator, error)
 	GetAllValidators(ctx context.Context) (validators []stakingtypes.Validator, err error)
 	GetLastTotalPower(ctx context.Context) (math.Int, error)
