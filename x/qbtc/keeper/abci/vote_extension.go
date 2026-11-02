@@ -36,6 +36,13 @@ func (h *ProposalHandler) ExtendVote(ctx sdk.Context, _ *abci.RequestExtendVote)
 			return nil, err
 		}
 	}
+	// CometBFT runs VerifyVoteExtension on this node's own extension before it
+	// broadcasts the vote and halts the node if it is rejected. An extension
+	// that would be rejected is replaced by an empty one, an abstention.
+	if err := validateVoteExtension(bz); err != nil {
+		ctx.Logger().Error("not attesting btc blocks, the vote extension is invalid", "error", err)
+		return &abci.ResponseExtendVote{}, nil
+	}
 	ctx.Logger().Info("btc vote extension", "votes", len(ext.Votes), "bytes", len(bz))
 	return &abci.ResponseExtendVote{VoteExtension: bz}, nil
 }

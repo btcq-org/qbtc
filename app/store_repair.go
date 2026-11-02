@@ -3,9 +3,9 @@ package app
 import (
 	"fmt"
 
-	"cosmossdk.io/log"
-	"cosmossdk.io/store/iavl"
-	storetypes "cosmossdk.io/store/types"
+	"cosmossdk.io/log/v2"
+	"github.com/cosmos/cosmos-sdk/store/v2/iavl"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 )
 
 // repairIncompleteCommit rolls the stores back to the last committed version
@@ -24,7 +24,7 @@ func repairIncompleteCommit(cms storetypes.CommitMultiStore, keys []storetypes.S
 		return nil
 	}
 	for _, key := range keys {
-		st, ok := cms.GetCommitKVStore(key).(*iavl.Store)
+		st, ok := cms.GetStore(key).(*iavl.Store)
 		if !ok || !st.VersionExists(committed+1) {
 			continue
 		}

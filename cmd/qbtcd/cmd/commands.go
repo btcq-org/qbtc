@@ -3,13 +3,14 @@ package cmd
 import (
 	"context"
 	"errors"
-	"io"
+	"fmt"
 
+	cmtmldsa65 "github.com/cometbft/cometbft/crypto/mldsa65"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
 
-	"cosmossdk.io/log"
+	"cosmossdk.io/log/v2"
 	confixcmd "cosmossdk.io/tools/confix/cmd"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -19,6 +20,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/pruning"
 	"github.com/cosmos/cosmos-sdk/client/rpc"
 	"github.com/cosmos/cosmos-sdk/client/snapshot"
+	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
@@ -34,8 +36,11 @@ func initRootCmd(
 	txConfig client.TxConfig,
 	basicManager module.BasicManager,
 ) {
+	initCmd := genutilcli.InitCmd(basicManager, app.DefaultNodeHome)
+	setFlagDefault(initCmd, genutilcli.FlagConsensusKeyAlgo, cmtmldsa65.KeyType)
+
 	rootCmd.AddCommand(
-		genutilcli.InitCmd(basicManager, app.DefaultNodeHome),
+		initCmd,
 		NewInPlaceTestnetCmd(),
 		NewTestnetMultiNodeCmd(basicManager, banktypes.GenesisBalancesIterator{}),
 		debug.Cmd(),
@@ -46,8 +51,8 @@ func initRootCmd(
 
 	// the app built by qbtcd start, for PostSetup
 	var startedApp *app.App
-	startAppCreator := func(logger log.Logger, db dbm.DB, traceStore io.Writer, appOpts servertypes.AppOptions) servertypes.Application {
-		a := newApp(logger, db, traceStore, appOpts)
+	startAppCreator := func(logger log.Logger, db dbm.DB, appOpts servertypes.AppOptions) servertypes.Application {
+		a := newApp(logger, db, appOpts)
 		startedApp, _ = a.(*app.App)
 		return a
 	}
@@ -69,8 +74,32 @@ func initRootCmd(
 		genutilcli.Commands(txConfig, basicManager, app.DefaultNodeHome),
 		queryCommand(),
 		txCommand(),
-		keys.Commands(),
+		keysCommands(),
 	)
+}
+
+// keysCommands returns the keys commands with `keys add` defaulting to the
+// chain's only account key type; the keyring itself refuses other algorithms.
+func keysCommands() *cobra.Command {
+	cmd := keys.Commands()
+	for _, sub := range cmd.Commands() {
+		if sub.Name() == "add" {
+			setFlagDefault(sub, flags.FlagKeyType, string(hd.MlDsa65Type))
+		}
+	}
+	return cmd
+}
+
+// setFlagDefault changes the default of an already defined flag.
+func setFlagDefault(cmd *cobra.Command, name, value string) {
+	f := cmd.Flags().Lookup(name)
+	if f == nil {
+		panic(fmt.Sprintf("command %s has no flag %s", cmd.Name(), name))
+	}
+	f.DefValue = value
+	if err := f.Value.Set(value); err != nil {
+		panic(err)
+	}
 }
 
 // addModuleInitFlags adds more flags to the start command.
@@ -129,13 +158,12 @@ func txCommand() *cobra.Command {
 func newApp(
 	logger log.Logger,
 	db dbm.DB,
-	traceStore io.Writer,
 	appOpts servertypes.AppOptions,
 ) servertypes.Application {
 	baseappOptions := server.DefaultBaseappOptions(appOpts)
 
 	return app.New(
-		logger, db, traceStore, true,
+		logger, db, true,
 		appOpts,
 		baseappOptions...,
 	)
@@ -145,7 +173,6 @@ func newApp(
 func appExport(
 	logger log.Logger,
 	db dbm.DB,
-	traceStore io.Writer,
 	height int64,
 	forZeroHeight bool,
 	jailAllowedAddrs []string,
@@ -168,12 +195,12 @@ func appExport(
 
 	appOpts = viperAppOpts
 	if height != -1 {
-		bApp = app.New(logger, db, traceStore, false, appOpts)
+		bApp = app.New(logger, db, false, appOpts)
 		if err := bApp.LoadHeight(height); err != nil {
 			return servertypes.ExportedApp{}, err
 		}
 	} else {
-		bApp = app.New(logger, db, traceStore, true, appOpts)
+		bApp = app.New(logger, db, true, appOpts)
 	}
 
 	return bApp.ExportAppStateAndValidators(forZeroHeight, jailAllowedAddrs, modulesToExport)

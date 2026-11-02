@@ -206,7 +206,7 @@ func TestHandleMsgGovClaimUTXO(t *testing.T) {
 			},
 		},
 		{
-			name: "unauthorized authority",
+			name:  "unauthorized authority",
 			setup: func(t *testing.T, f *fixture) {},
 			msg: &types.MsgGovClaimUTXO{
 				Authority: "wrong-authority",

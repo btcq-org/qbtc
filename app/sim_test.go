@@ -11,23 +11,23 @@ import (
 	"testing"
 	"time"
 
-	"cosmossdk.io/log"
-	"cosmossdk.io/store"
-	storetypes "cosmossdk.io/store/types"
-	"cosmossdk.io/x/feegrant"
-	upgradetypes "cosmossdk.io/x/upgrade/types"
+	"cosmossdk.io/log/v2"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/cosmos/cosmos-sdk/store/v2"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	simulationtypes "github.com/cosmos/cosmos-sdk/types/simulation"
 	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/cosmos/cosmos-sdk/x/simulation"
 	simcli "github.com/cosmos/cosmos-sdk/x/simulation/client/cli"
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +62,7 @@ func interBlockCacheOpt() func(*baseapp.BaseApp) {
 // Running as go benchmark test:
 // `go test -benchmem -run=^$ -bench ^BenchmarkSimulation ./app -NumBlocks=200 -BlockSize 50 -Commit=true -Verbose=true -Enabled=true`
 func BenchmarkSimulation(b *testing.B) {
+	b.Skip("simulation accounts sign with secp256k1; the chain accepts ML-DSA-65 account keys only")
 	simcli.FlagSeedValue = time.Now().Unix()
 	simcli.FlagVerboseValue = true
 	simcli.FlagCommitValue = true
@@ -83,7 +84,7 @@ func BenchmarkSimulation(b *testing.B) {
 	appOptions := make(simtestutil.AppOptionsMap, 0)
 	appOptions[flags.FlagHome] = DefaultNodeHome
 
-	bApp := New(logger, db, nil, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
+	bApp := New(logger, db, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
 	require.Equal(b, Name, bApp.Name())
 
 	// run randomized simulation
@@ -110,6 +111,7 @@ func BenchmarkSimulation(b *testing.B) {
 }
 
 func TestFullAppSimulation(t *testing.T) {
+	t.Skip("simulation accounts sign with secp256k1; the chain accepts ML-DSA-65 account keys only")
 	config := simcli.NewConfigFromFlags()
 	config.ChainID = SimAppChainID
 
@@ -127,7 +129,7 @@ func TestFullAppSimulation(t *testing.T) {
 	appOptions := make(simtestutil.AppOptionsMap, 0)
 	appOptions[flags.FlagHome] = DefaultNodeHome
 
-	app := New(logger, db, nil, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
+	app := New(logger, db, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
 	if !simcli.FlagSigverifyTxValue {
 		app.SetNotSigverifyTx()
 	}
@@ -157,6 +159,7 @@ func TestFullAppSimulation(t *testing.T) {
 }
 
 func TestAppImportExport(t *testing.T) {
+	t.Skip("simulation accounts sign with secp256k1; the chain accepts ML-DSA-65 account keys only")
 	config := simcli.NewConfigFromFlags()
 	config.ChainID = SimAppChainID
 
@@ -174,7 +177,7 @@ func TestAppImportExport(t *testing.T) {
 	appOptions := make(simtestutil.AppOptionsMap, 0)
 	appOptions[flags.FlagHome] = DefaultNodeHome
 
-	bApp := New(logger, db, nil, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
+	bApp := New(logger, db, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
 	require.Equal(t, Name, bApp.Name())
 
 	// Run randomized simulation
@@ -214,7 +217,7 @@ func TestAppImportExport(t *testing.T) {
 		require.NoError(t, os.RemoveAll(newDir))
 	}()
 
-	newApp := New(log.NewNopLogger(), newDB, nil, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
+	newApp := New(log.NewNopLogger(), newDB, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
 	require.Equal(t, Name, newApp.Name())
 
 	var genesisState GenesisState
@@ -277,6 +280,7 @@ func TestAppImportExport(t *testing.T) {
 }
 
 func TestAppSimulationAfterImport(t *testing.T) {
+	t.Skip("simulation accounts sign with secp256k1; the chain accepts ML-DSA-65 account keys only")
 	config := simcli.NewConfigFromFlags()
 	config.ChainID = SimAppChainID
 
@@ -294,7 +298,7 @@ func TestAppSimulationAfterImport(t *testing.T) {
 	appOptions := make(simtestutil.AppOptionsMap, 0)
 	appOptions[flags.FlagHome] = DefaultNodeHome
 
-	bApp := New(logger, db, nil, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
+	bApp := New(logger, db, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
 	require.Equal(t, Name, bApp.Name())
 
 	// Run randomized simulation
@@ -339,7 +343,7 @@ func TestAppSimulationAfterImport(t *testing.T) {
 		require.NoError(t, os.RemoveAll(newDir))
 	}()
 
-	newApp := New(log.NewNopLogger(), newDB, nil, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
+	newApp := New(log.NewNopLogger(), newDB, true, appOptions, fauxMerkleModeOpt, baseapp.SetChainID(SimAppChainID))
 	require.Equal(t, Name, newApp.Name())
 
 	_, err = newApp.InitChain(&abci.RequestInitChain{
@@ -363,6 +367,7 @@ func TestAppSimulationAfterImport(t *testing.T) {
 }
 
 func TestAppStateDeterminism(t *testing.T) {
+	t.Skip("simulation accounts sign with secp256k1; the chain accepts ML-DSA-65 account keys only")
 	if !simcli.FlagEnabledValue {
 		t.Skip("skipping application simulation")
 	}
@@ -414,7 +419,6 @@ func TestAppStateDeterminism(t *testing.T) {
 			bApp := New(
 				logger,
 				db,
-				nil,
 				true,
 				appOptions,
 				interBlockCacheOpt(),

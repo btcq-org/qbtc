@@ -6,13 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"cosmossdk.io/log"
+	"cosmossdk.io/log/v2"
 	"cosmossdk.io/math"
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtmldsa65 "github.com/cometbft/cometbft/crypto/mldsa65"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/mldsa65"
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"
@@ -116,7 +118,6 @@ func setupTestApp(t *testing.T) (*App, sdk.Context, []simtypes.Account) {
 	application := New(
 		logger,
 		db,
-		nil,
 		true,
 		appOptions,
 		baseapp.SetChainID("qbtc-test-1"),
@@ -124,6 +125,13 @@ func setupTestApp(t *testing.T) (*App, sdk.Context, []simtypes.Account) {
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	accounts := simtypes.RandomAccounts(r, 3)
+	// Simulation accounts carry ed25519 consensus keys; the chain only lets
+	// ML-DSA-65 validators into genesis.
+	for i := range accounts {
+		consKey, err := mldsa65.GenPrivKey()
+		require.NoError(t, err)
+		accounts[i].ConsKey = &consKey
+	}
 
 	config := simtypes.Config{
 		ChainID:     "qbtc-test-1",
@@ -140,7 +148,7 @@ func setupTestApp(t *testing.T) (*App, sdk.Context, []simtypes.Account) {
 	_, err := application.InitChain(&abci.RequestInitChain{
 		ChainId:         "qbtc-test-1",
 		AppStateBytes:   appState,
-		ConsensusParams: simtestutil.DefaultConsensusParams,
+		ConsensusParams: mlDsa65ConsensusParams(),
 	})
 	require.NoError(t, err)
 
@@ -155,4 +163,12 @@ func setupTestApp(t *testing.T) (*App, sdk.Context, []simtypes.Account) {
 	ctx := application.NewUncachedContext(false, header)
 
 	return application, ctx, simAccounts
+}
+
+// mlDsa65ConsensusParams returns the simulation consensus params with the
+// chain's validator key policy: ML-DSA-65 only.
+func mlDsa65ConsensusParams() *cmtproto.ConsensusParams {
+	params := *simtestutil.DefaultConsensusParams
+	params.Validator = &cmtproto.ValidatorParams{PubKeyTypes: []string{cmtmldsa65.KeyType}}
+	return &params
 }

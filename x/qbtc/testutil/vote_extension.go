@@ -6,7 +6,7 @@ import (
 
 	"cosmossdk.io/core/comet"
 	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/crypto/mldsa"
+	"github.com/cometbft/cometbft/crypto/mldsa65"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	protoio "github.com/cosmos/gogoproto/io"
@@ -16,7 +16,7 @@ import (
 
 // TestVote is one validator's vote in a test extended commit.
 type TestVote struct {
-	Key       mldsa.PrivKey
+	Key       mldsa65.PrivKey
 	Power     int64
 	Extension []byte
 	// Flag defaults to a commit vote.

@@ -3,14 +3,10 @@ package app
 import (
 	"errors"
 
-	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
-	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/runtime"
 
-	corestoretypes "cosmossdk.io/core/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth/ante"
 )
@@ -18,9 +14,7 @@ import (
 // HandlerOptions are the options required for constructing a default SDK AnteHandler.
 type HandlerOptions struct {
 	ante.HandlerOptions
-	QbtcKeeper            *keeper.Keeper
-	WasmConfig            *wasmtypes.WasmConfig
-	TXCounterStoreService corestoretypes.KVStoreService
+	QbtcKeeper *keeper.Keeper
 	// AuthKeeper is a superset of ante.AccountKeeper that also exposes
 	// NewAccountWithAddress, required by FreeClaimDecorator to pre-create
 	// first-time claimers' accounts.
@@ -34,23 +28,17 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 	if options.AccountKeeper == nil {
 		return nil, errors.New("account keeper is required for ante builder")
 	}
-
-	if options.AuthKeeper == nil {
-		return nil, errors.New("auth keeper is required for ante builder")
-	}
-
 	if options.BankKeeper == nil {
 		return nil, errors.New("bank keeper is required for ante builder")
 	}
-
 	if options.SignModeHandler == nil {
 		return nil, errors.New("sign mode handler is required for ante builder")
 	}
-	if options.WasmConfig == nil {
-		return nil, errors.New("wasm config is required for ante builder")
+	if options.QbtcKeeper == nil {
+		return nil, errors.New("qbtc keeper is required for ante builder")
 	}
-	if options.TXCounterStoreService == nil {
-		return nil, errors.New("tx counter store service is required for ante builder")
+	if options.AuthKeeper == nil {
+		return nil, errors.New("auth keeper is required for ante builder")
 	}
 
 	anteDecorators := []sdk.AnteDecorator{
@@ -68,19 +56,16 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ante.NewDeductFeeDecorator(options.AccountKeeper, options.BankKeeper, options.FeegrantKeeper, options.TxFeeChecker),
 		ante.NewSetPubKeyDecorator(options.AccountKeeper), // SetPubKeyDecorator must be called before all signature verification decorators
 		ante.NewValidateSigCountDecorator(options.AccountKeeper),
+		// SigGasConsumer is the account key policy: only ML-DSA-65 keys pass.
 		ante.NewSigGasConsumeDecorator(options.AccountKeeper, options.SigGasConsumer),
 		ante.NewSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewIncrementSequenceDecorator(options.AccountKeeper),
-		// wasm decorators
-		wasmkeeper.NewLimitSimulationGasDecorator(options.WasmConfig.SimulationGasLimit),
-		wasmkeeper.NewCountTXDecorator(options.TXCounterStoreService),
 	}
 
 	return sdk.ChainAnteDecorators(anteDecorators...), nil
 }
 
 func (app *App) setAnteHandler(txConfig client.TxConfig) {
-	wasmConfig := wasmtypes.DefaultWasmConfig()
 	anteHandler, err := NewAnteHandler(
 		HandlerOptions{
 			HandlerOptions: ante.HandlerOptions{
@@ -88,12 +73,10 @@ func (app *App) setAnteHandler(txConfig client.TxConfig) {
 				BankKeeper:      app.BankKeeper,
 				SignModeHandler: txConfig.SignModeHandler(),
 				FeegrantKeeper:  app.FeeGrantKeeper,
-				SigGasConsumer:  ante.DefaultSigVerificationGasConsumer,
+				SigGasConsumer:  MlDsa65OnlySigGasConsumer,
 			},
-			QbtcKeeper:            app.QbtcKeeper,
-			WasmConfig:            &wasmConfig,
-			TXCounterStoreService: runtime.NewKVStoreService(app.GetKey(wasmtypes.StoreKey)), // TX counter uses main store, not transient
-			AuthKeeper:            app.AuthKeeper,
+			QbtcKeeper: app.QbtcKeeper,
+			AuthKeeper: app.AuthKeeper,
 		},
 	)
 	if err != nil {

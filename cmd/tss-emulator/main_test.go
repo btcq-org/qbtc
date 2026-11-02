@@ -187,5 +187,3 @@ func TestHash160(t *testing.T) {
 	hash2 := hash160(data)
 	require.Equal(t, hash, hash2)
 }
-
-

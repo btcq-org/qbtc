@@ -7,18 +7,18 @@ import (
 
 	"cosmossdk.io/core/address"
 	"cosmossdk.io/math"
-	storetypes "cosmossdk.io/store/types"
 	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	module "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtctestutil "github.com/btcq-org/qbtc/x/qbtc/testutil"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
-	"github.com/cometbft/cometbft/crypto/mldsa"
+	"github.com/cometbft/cometbft/crypto/mldsa65"
 	cmtprotocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/runtime"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
@@ -34,7 +34,7 @@ type fixture struct {
 	addressCodec          address.Codec
 	validatorAddressCodec address.Codec
 	validator             stakingtypes.Validator
-	privateKey            mldsa.PrivKey
+	privateKey            mldsa65.PrivKey
 	stakingKeeper         *qbtctestutil.MockStakingKeeper
 	bankKeeper            *qbtctestutil.MockBankKeeper
 	authKeeper            *qbtctestutil.MockAuthKeeper
@@ -57,7 +57,7 @@ func initFixture(t *testing.T) *fixture {
 	ctrl := gomock.NewController(t)
 	stakingKeeper := qbtctestutil.NewMockStakingKeeper(ctrl)
 
-	privateKey := mldsa.GenPrivKey()
+	privateKey := qbtctestutil.MustGenPrivKey()
 	pubKey := privateKey.PubKey()
 	pKey, err := codec.FromCmtPubKeyInterface(pubKey)
 	assert.NoError(t, err)
@@ -116,7 +116,7 @@ func (f *fixture) GetValidatorAddress(pubKey []byte) (string, error) {
 	return f.validatorAddressCodec.BytesToString(pubKey)
 }
 func (f *fixture) GetRandomQbtcAddress() (string, error) {
-	privateKey := mldsa.GenPrivKey()
+	privateKey := qbtctestutil.MustGenPrivKey()
 	pubKey := privateKey.PubKey()
 	return f.GetAddressFromPubKey(pubKey.Address().Bytes())
 }

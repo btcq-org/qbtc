@@ -7,20 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"cosmossdk.io/log"
-	storetypes "cosmossdk.io/store/types"
+	"cosmossdk.io/log/v2"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
-	"github.com/cometbft/cometbft/crypto/mldsa"
+	"github.com/cometbft/cometbft/crypto/mldsa65"
 	cmtprotocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/runtime"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
@@ -109,7 +109,7 @@ type abciFixture struct {
 	decode  func([]byte) (sdk.Tx, error)
 	cdc     codec.Codec
 	txs     []sdk.Tx // the transactions the decoder hands out for one-byte transactions
-	keys    []mldsa.PrivKey
+	keys    []mldsa65.PrivKey
 	powers  []int64
 }
 
@@ -126,9 +126,9 @@ func newFixture(t *testing.T, cachedBlocks int, powers ...int64) *abciFixture {
 	ctrl := gomock.NewController(t)
 	staking := qbtctestutil.NewMockStakingKeeper(ctrl)
 	pubKeys := make(map[string]cmtprotocrypto.PublicKey)
-	var keys []mldsa.PrivKey
+	var keys []mldsa65.PrivKey
 	for range powers {
-		key := mldsa.GenPrivKey()
+		key := qbtctestutil.MustGenPrivKey()
 		pub, err := cryptoenc.PubKeyToProto(key.PubKey())
 		require.NoError(t, err)
 		pubKeys[string(key.PubKey().Address())] = pub
@@ -462,6 +462,23 @@ func TestExtendVote(t *testing.T) {
 		resp, err := h.ExtendVote(f.ctx, &abci.RequestExtendVote{})
 		require.NoError(t, err)
 		require.Empty(t, resp.VoteExtension)
+	})
+
+	// CometBFT verifies the proposer's own vote extension before broadcasting
+	// it and halts the node on a rejection, so ExtendVote and
+	// VerifyVoteExtension must agree.
+	t.Run("passes VerifyVoteExtension", func(t *testing.T) {
+		for _, cached := range []int{0, 3, 20} {
+			f := newFixture(t, cached, 100)
+			ext, err := f.handler.ExtendVote(f.ctx, &abci.RequestExtendVote{})
+			require.NoError(t, err)
+			resp, err := f.handler.VerifyVoteExtension(f.ctx, &abci.RequestVerifyVoteExtension{
+				VoteExtension:    ext.VoteExtension,
+				ValidatorAddress: f.keys[0].PubKey().Address(),
+			})
+			require.NoError(t, err)
+			require.Equal(t, abci.ResponseVerifyVoteExtension_ACCEPT, resp.Status, "cached blocks: %d", cached)
+		}
 	})
 }
 

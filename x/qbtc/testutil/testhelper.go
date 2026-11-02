@@ -5,21 +5,31 @@ import (
 
 	"github.com/btcq-org/qbtc/common"
 	"github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/crypto/mldsa"
+	"github.com/cometbft/cometbft/crypto/mldsa65"
 	"github.com/cosmos/cosmos-sdk/crypto/codec"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types/bech32"
 )
 
+// MustGenPrivKey returns a fresh ML-DSA-65 consensus key, the only validator
+// key type the chain accepts.
+func MustGenPrivKey() mldsa65.PrivKey {
+	privateKey, err := mldsa65.GenPrivKey()
+	if err != nil {
+		panic(err)
+	}
+	return privateKey
+}
+
 // GetRandomPublicKey get a random pubkey for test purpose , the key is in hex string format
 func GetRandomPublicKey() string {
-	privateKey := mldsa.GenPrivKey()
+	privateKey := MustGenPrivKey()
 	pubKey := privateKey.PubKey()
 	return hex.EncodeToString(pubKey.Bytes())
 }
 
 func GetRandomMLDsaPublicKey() cryptotypes.PubKey {
-	privateKey := mldsa.GenPrivKey()
+	privateKey := MustGenPrivKey()
 	pubKey := privateKey.PubKey()
 	pKey, err := codec.FromCmtPubKeyInterface(pubKey)
 	if err != nil {
@@ -28,7 +38,7 @@ func GetRandomMLDsaPublicKey() cryptotypes.PubKey {
 	return pKey
 }
 func GetRandomBech32ConsensusPublicKey() string {
-	privateKey := mldsa.GenPrivKey()
+	privateKey := MustGenPrivKey()
 	pubKey := privateKey.PubKey()
 	pKey, err := codec.FromCmtPubKeyInterface(pubKey)
 	if err != nil {
