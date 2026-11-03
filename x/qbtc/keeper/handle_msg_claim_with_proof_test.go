@@ -521,14 +521,15 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	}
 	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "9999000000000000000000000000000000000000000000000000000000000001-0", utxo))
 
-	// Create claim with invalid proof data (random bytes)
+	// Create claim with a well-formed but bogus proof, so it passes the layout
+	// check and fails PLONK verification.
 	msg := &types.MsgClaimWithProof{
 		Claimer:     f.claimerAddr,
 		Broadcaster: f.claimerAddr,
 		Utxos: []types.UTXORef{
 			{Txid: "9999000000000000000000000000000000000000000000000000000000000001", Vout: 0},
 		},
-		Proof:            hex.EncodeToString(make([]byte, 500)),
+		Proof:            hex.EncodeToString(zktest.WellFormedProof(zk.ClaimCircuitNbCommitments)),
 		PubKeyHashSha256: hex.EncodeToString(make([]byte, 32)),
 	}
 
