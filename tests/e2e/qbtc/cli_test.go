@@ -3,6 +3,9 @@ package qbtc
 import (
 	"testing"
 
+	cmtmldsa65 "github.com/cometbft/cometbft/crypto/mldsa65"
+	"github.com/cosmos/cosmos-sdk/crypto/hd"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/testutil/network"
 	"github.com/stretchr/testify/suite"
 
@@ -18,6 +21,15 @@ func TestE2ETestSuite(t *testing.T) {
 	// Pin the chain ID so proofs minted inside the suite can bind to a
 	// known chain. DefaultConfig otherwise picks a random one.
 	cfg.ChainID = e2eChainID
+	// The chain accepts ML-DSA-65 keys only, for validators and accounts alike:
+	// pub_key_types in genesis, the validators' consensus keys, and the keyring
+	// the suite signs with.
+	cfg.ValidatorConsensusKeyType = cmtmldsa65.KeyType
+	cfg.SigningAlgo = string(hd.MlDsa65Type)
+	cfg.KeyringOptions = []keyring.Option{func(o *keyring.Options) {
+		o.SupportedAlgos = keyring.SigningAlgoList{hd.MlDsa65}
+		o.SupportedAlgosLedger = nil
+	}}
 
 	suite.Run(t, NewE2ETestSuite(cfg))
 }

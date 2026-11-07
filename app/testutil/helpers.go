@@ -6,8 +6,8 @@ import (
 
 	dbm "github.com/cosmos/cosmos-db"
 
-	"cosmossdk.io/log"
-	pruningtypes "cosmossdk.io/store/pruning/types"
+	"cosmossdk.io/log/v2"
+	pruningtypes "github.com/cosmos/cosmos-sdk/store/v2/pruning/types"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -36,7 +36,6 @@ func NewTestNetworkFixture() network.TestFixture {
 	tmpApp := app.New(
 		log.NewNopLogger(),
 		dbm.NewMemDB(),
-		nil,
 		true,
 		testAppOptions(dir),
 	)
@@ -46,7 +45,6 @@ func NewTestNetworkFixture() network.TestFixture {
 			return app.New(
 				val.GetCtx().Logger,
 				dbm.NewMemDB(),
-				nil,
 				true,
 				testAppOptions(val.GetCtx().Config.RootDir),
 				baseapp.SetPruning(pruningtypes.NewPruningOptionsFromString(val.GetAppConfig().Pruning)),

@@ -183,7 +183,11 @@ Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-p
 
 ### Dependencies
 
-Uses btcq-org forks of `cosmos-sdk`, `cometbft`, and `wasmd` for IBC v10 / CosmWasm compatibility. See `go.mod` for exact versions. Go 1.25+ required.
+Upstream `cosmos-sdk` v0.55 and `cometbft` v0.40, no forks. See `go.mod` for exact versions. Go 1.26.5+ required.
+
+The chain accepts **ML-DSA-65 keys only**, for validator consensus keys (`consensus_params.validator.pub_key_types = ["ml_dsa_65"]`, checked by staking, by CometBFT and at InitChain by `app/genesis_guard.go`) and for account keys (`app/sig_gas_consumer.go` rejects every other pubkey type, including multisig; the CLI keyring only creates `ml_dsa_65` keys). `qbtcd init` and `qbtcd keys add` default to it.
+
+CosmWasm, IBC and tokenfactory are not wired in v1. They are planned to be added later through a governance software upgrade (see `app/upgrades.go`) once wasmd and ibc-go release on SDK v0.55.
 
 ## Further Reading
 

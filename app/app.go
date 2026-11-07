@@ -3,15 +3,12 @@ package app
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/depinject"
-	"cosmossdk.io/log"
-	storetypes "cosmossdk.io/store/types"
-	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
+	"cosmossdk.io/log/v2"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
@@ -24,6 +21,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/server/api"
 	"github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
@@ -39,19 +37,14 @@ import (
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
 	slashingkeeper "github.com/cosmos/cosmos-sdk/x/slashing/keeper"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
-	icacontrollerkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/keeper"
-	icahostkeeper "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/host/keeper"
-	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
-	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
+	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
 
-	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
-	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	"github.com/btcq-org/qbtc/docs"
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	qbtcmodulekeeper "github.com/btcq-org/qbtc/x/qbtc/keeper"
 	qbtcabi "github.com/btcq-org/qbtc/x/qbtc/keeper/abci"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
-	tokenfactorykeeper "github.com/cosmos/tokenfactory/x/tokenfactory/keeper"
+	feegrantkeeper "github.com/cosmos/cosmos-sdk/x/feegrant/keeper"
 
 	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
 )
@@ -98,18 +91,6 @@ type App struct {
 	FeeGrantKeeper        feegrantkeeper.Keeper
 	DistrKeeper           distrkeeper.Keeper
 
-	// ibc keepers
-	IBCKeeper           *ibckeeper.Keeper
-	ICAControllerKeeper *icacontrollerkeeper.Keeper
-	ICAHostKeeper       *icahostkeeper.Keeper
-	TransferKeeper      *ibctransferkeeper.Keeper
-
-	// wasm keeper
-	WasmKeeper wasmkeeper.Keeper
-
-	// token factory
-	TokenFactoryKeeper tokenfactorykeeper.Keeper
-
 	// simulation manager
 	sm         *module.SimulationManager
 	QbtcKeeper *qbtcmodulekeeper.Keeper
@@ -141,7 +122,6 @@ func AppConfig() depinject.Config {
 func New(
 	logger log.Logger,
 	db dbm.DB,
-	traceStore io.Writer,
 	loadLatest bool,
 	appOpts servertypes.AppOptions,
 	baseAppOptions ...func(*baseapp.BaseApp),
@@ -202,12 +182,7 @@ func New(
 	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
 
 	// build app
-	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
-
-	// register legacy modules
-	if err := app.registerIBCModules(appOpts); err != nil {
-		panic(err)
-	}
+	app.App = appBuilder.Build(db, baseAppOptions...)
 
 	app.BtcReader = btcreader.NewReader(readerConfig, app.AppCodec(), logger)
 	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
@@ -227,7 +202,7 @@ func New(
 
 	// create the simulation manager and define the order of the modules for deterministic simulations
 	overrideModules := map[string]module.AppModuleSimulation{
-		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts, nil),
+		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AuthKeeper, authsims.RandomGenesisAccounts),
 	}
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 
@@ -246,7 +221,14 @@ func New(
 		if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
 			return nil, err
 		}
-		return app.InitChainer(ctx, req)
+		res, err := app.InitChainer(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateGenesisValidatorKeyTypes(req, res); err != nil {
+			return nil, err
+		}
+		return res, nil
 	})
 
 	if err := app.Load(loadLatest); err != nil {

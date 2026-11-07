@@ -31,7 +31,7 @@ BUILD_FLAGS := -tags "$(build_tags)" -ldflags '$(ldflags)'
 
 build:
 	@echo "Building $(APPNAME)d..."
-	@GOPRIVATE=github.com/btcq-org/wasmd go build $(BUILD_FLAGS) -o ./build/$(APPNAME)d -mod=readonly ./cmd/$(APPNAME)d
+	@go build $(BUILD_FLAGS) -o ./build/$(APPNAME)d -mod=readonly ./cmd/$(APPNAME)d
 	@echo "Build complete. Binary is located at ./build/$(APPNAME)d"
 	@chmod +x ./build/$(APPNAME)d
 	@./build/$(APPNAME)d version
@@ -227,7 +227,6 @@ generate-testnet: docker-localnet
 ###                                Release                                  ###
 ###############################################################################
 GORELEASER_IMAGE := ghcr.io/goreleaser/goreleaser-cross:v$(REQUIRE_GO_VERSION)
-COSMWASM_VERSION := $(shell go list -m github.com/CosmWasm/wasmvm/v2 | sed 's/.* //')
 
 # uses goreleaser to create static binaries for darwin on local machine
 release-local:
@@ -236,7 +235,6 @@ release-local:
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v `pwd`:/go/src/qbtcd \
 		-w /go/src/qbtcd \
-		-e COSMWASM_VERSION=$(COSMWASM_VERSION) \
 		$(GORELEASER_IMAGE) \
 		release \
 		--snapshot \
@@ -251,7 +249,6 @@ release:
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v `pwd`:/go/src/qbtcd \
 		-w /go/src/qbtcd \
-		-e COSMWASM_VERSION=$(COSMWASM_VERSION) \
 		-e GITHUB_TOKEN=$(GITHUB_TOKEN) \
 		$(GORELEASER_IMAGE) \
 		release \

@@ -45,6 +45,7 @@ Without an anchor, no Bitcoin block is accepted. The chain applies Bitcoin mainn
 - The validators still choose which branch to follow. More than 2/3 of the power could vote for a valid block that later leaves the best chain (for example a block they mined privately with real work), but they cannot invent transactions or outputs.
 - There is no reorg handling. A processed block is final. If Bitcoin reorgs deeper than `confirmation_depth`, the next block does not link to the stored tip and ingestion stops until the chain is rolled back by an upgrade. Six confirmations make this very unlikely.
 - A single Bitcoin block larger than half of qbtc's block space cannot be injected, which stops ingestion at that block (#164).
+- After a validator rotates its consensus key (`MsgRotateConsPubKey`), the extended commit of the first block still names the old consensus address, which the staking keeper no longer resolves, so the proposer injects nothing for that one block. Ingestion resumes at the next block.
 
 ## Size
 

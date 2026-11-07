@@ -67,7 +67,6 @@ chk() { # chk <description> <url> [curl args...]
 chk "mempool.space (bitcoin upstream)" https://mempool.space/api/blocks/tip/height
 chk "blockstream.info (fallback upstream)" https://blockstream.info/api/blocks/tip/height
 chk "Docker Hub (python:3.12-alpine, golang:1.26-alpine, alpine)" https://registry-1.docker.io/v2/ -I
-chk "GitHub (libwasmvm release download in the Dockerfile)" https://github.com/CosmWasm/wasmvm/releases/download/v2.2.4/libwasmvm_muslc.x86_64.a -I
 chk "Go module proxy (Docker build and host go build)" https://proxy.golang.org/github.com/cosmos/cosmos-sdk/@v/list
 if [ "${SKIP_ZK:-0}" != 1 ]; then
   chk "circom.info (Hermez ptau for the ZK setup, 2.4 GB)" https://circom.info/powersOfTau28_hez_final_21.ptau -I

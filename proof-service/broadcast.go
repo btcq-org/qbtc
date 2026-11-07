@@ -11,10 +11,11 @@ import (
 	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/proof-service/config"
 	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
+	cmtmldsa65 "github.com/cometbft/cometbft/crypto/mldsa65"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/mldsa"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/mldsa65"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -57,23 +58,23 @@ func NewBroadcaster(cfg config.Config) (*Broadcaster, error) {
 		return nil, nil
 	}
 
-	// Decode all private keys (ML-DSA-44, 2560 bytes / 5120 hex chars).
+	// Decode all private keys (ML-DSA-65, 4032 bytes / 8064 hex chars).
 	keys := make([]*keyEntry, 0, len(cfg.BroadcastPrivKeyHexList))
 	for i, hexKey := range cfg.BroadcastPrivKeyHexList {
 		privKeyBytes, err := hex.DecodeString(hexKey)
 		if err != nil {
 			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: invalid hex: %w", i, err)
 		}
-		if len(privKeyBytes) != 2560 {
-			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: expected 2560 bytes (5120 hex chars) for mldsa44, got %d bytes", i, len(privKeyBytes))
+		privKey, err := mldsa65.NewPrivateKeyFromBytes(privKeyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: expected %d bytes (%d hex chars) for ml_dsa_65, got %d bytes: %w", i, cmtmldsa65.PrivKeySize, 2*cmtmldsa65.PrivKeySize, len(privKeyBytes), err)
 		}
-		privKey := &mldsa.PrivKey{Key: privKeyBytes}
 		fromAddr, err := sdk.Bech32ifyAddressBytes(common.AccountAddressPrefix, privKey.PubKey().Address())
 		if err != nil {
 			return nil, fmt.Errorf("broadcast_priv_key_hex_list[%d]: failed to derive address: %w", i, err)
 		}
 		keys = append(keys, &keyEntry{
-			privKey:  cryptotypes.PrivKey(privKey),
+			privKey:  cryptotypes.PrivKey(&privKey),
 			fromAddr: fromAddr,
 		})
 	}

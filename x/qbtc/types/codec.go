@@ -1,10 +1,10 @@
 package types
 
 import (
-	"cosmossdk.io/x/tx/signing"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/msgservice"
+	"github.com/cosmos/cosmos-sdk/x/tx/signing"
 )
 
 func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {

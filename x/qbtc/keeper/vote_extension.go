@@ -78,8 +78,8 @@ func (k Keeper) ValidateBtcBlockVotes(ctx sdk.Context, msg *types.MsgBtcBlock) e
 	if err := extCommit.Unmarshal(msg.ExtendedCommitInfo); err != nil {
 		return fmt.Errorf("decode extended commit info: %w", err)
 	}
-	// The fork ignores the height and chain ID arguments and takes them from the
-	// context. It checks that extCommit matches this block's last commit
+	// ValidateVoteExtensions ignores the height and chain ID arguments and takes
+	// them from the context. It checks that extCommit matches this block's last commit
 	// (round, validators, powers, order), every commit vote's extension
 	// signature (bound to the chain ID, the previous height and the round), and
 	// that signed votes carry more than 2/3 of the power.

@@ -5,12 +5,13 @@ import (
 
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/depinject"
-	"cosmossdk.io/log"
-	txconfig "github.com/btcq-org/qbtc/app/config"
+	"cosmossdk.io/log/v2"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/config"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/crypto/hd"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/server"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
@@ -73,15 +74,6 @@ func NewRootCmd() *cobra.Command {
 		},
 	}
 
-	// Since the IBC modules don't support dependency injection, we need to
-	// manually register the modules on the client side.
-	// This needs to be removed after IBC supports App Wiring.
-	ibcModules := app.RegisterIBC(clientCtx.Codec)
-	for name, mod := range ibcModules {
-		moduleBasicManager[name] = module.CoreAppModuleBasicAdaptor(name, mod)
-		autoCliOpts.Modules[name] = mod
-	}
-
 	initRootCmd(rootCmd, clientCtx.TxConfig, moduleBasicManager)
 
 	if err := autoCliOpts.EnhanceRootCommand(rootCmd); err != nil {
@@ -106,13 +98,12 @@ func ProvideClientContext(
 		WithInput(os.Stdin).
 		WithAccountRetriever(types.AccountRetriever{}).
 		WithHomeDir(app.DefaultNodeHome).
-		WithViper(app.Name) // env variable prefix
+		WithViper(app.Name). // env variable prefix
+		WithKeyringOptions(mlDsa65OnlyKeyring)
 
 	// Read the config again to overwrite the default values with the values from the config file
 	clientCtx, _ = config.ReadFromClientConfig(clientCtx)
 
-	// textual is enabled by default, we need to re-create the tx config grpc instead of bank keeper.
-	txConfigOpts.TextualCoinMetadataQueryFn = txconfig.NewGRPCCoinMetadataQueryFn(clientCtx)
 	txConfig, err := tx.NewTxConfigWithOptions(clientCtx.Codec, txConfigOpts)
 	if err != nil {
 		panic(err)
@@ -120,4 +111,12 @@ func ProvideClientContext(
 	clientCtx = clientCtx.WithTxConfig(txConfig)
 
 	return clientCtx
+}
+
+// mlDsa65OnlyKeyring restricts every keyring the CLI opens to ML-DSA-65 keys,
+// the only account key type the chain accepts. Ledger devices sign secp256k1
+// only, so they are not supported.
+func mlDsa65OnlyKeyring(o *keyring.Options) {
+	o.SupportedAlgos = keyring.SigningAlgoList{hd.MlDsa65}
+	o.SupportedAlgosLedger = nil
 }

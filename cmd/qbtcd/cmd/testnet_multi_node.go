@@ -16,6 +16,7 @@ import (
 
 	"github.com/btcq-org/qbtc/bitcoin"
 	cmtconfig "github.com/cometbft/cometbft/config"
+	cmtmldsa65 "github.com/cometbft/cometbft/crypto/mldsa65"
 	types "github.com/cometbft/cometbft/types"
 	tmtime "github.com/cometbft/cometbft/types/time"
 	"github.com/spf13/cobra"
@@ -256,7 +257,7 @@ func addTestnetFlagsToCmd(cmd *cobra.Command) {
 	cmd.Flags().StringP(flagOutputDir, "o", "./.testnets", "Directory to store initialization data for the testnet")
 	cmd.Flags().String(flags.FlagChainID, "", "genesis file chain-id, if left blank will be randomly created")
 	cmd.Flags().String(server.FlagMinGasPrices, fmt.Sprintf("0.0001%s", sdk.DefaultBondDenom), "Minimum gas prices to accept for transactions; All fees in a tx must meet this minimum (e.g. 0.01photino,0.001stake)")
-	cmd.Flags().String(flags.FlagKeyType, string(hd.Secp256k1Type), "Key signing algorithm to generate keys for")
+	cmd.Flags().String(flags.FlagKeyType, string(hd.MlDsa65Type), "Key signing algorithm to generate keys for")
 
 	// support old flags name for backwards compatibility
 	cmd.Flags().SetNormalizeFunc(func(f *pflag.FlagSet, name string) pflag.NormalizedName {
@@ -331,7 +332,7 @@ func initTestnetFiles(
 			return err
 		}
 
-		nodeIDs[i], valPubKeys[i], err = genutil.InitializeNodeValidatorFiles(nodeConfig)
+		nodeIDs[i], valPubKeys[i], err = genutil.InitializeNodeValidatorFilesFromMnemonicWithKeyType(nodeConfig, "", cmtmldsa65.KeyType)
 		if err != nil {
 			_ = os.RemoveAll(args.outputDir)
 			return err
@@ -347,7 +348,7 @@ func initTestnetFiles(
 
 		genFiles = append(genFiles, nodeConfig.GenesisFile())
 
-		kb, err := keyring.New(sdk.KeyringServiceName(), args.keyringBackend, nodeDir, inBuf, clientCtx.Codec)
+		kb, err := keyring.New(sdk.KeyringServiceName(), args.keyringBackend, nodeDir, inBuf, clientCtx.Codec, clientCtx.KeyringOptions...)
 		if err != nil {
 			return err
 		}
@@ -700,25 +701,29 @@ func collectGenFiles(
 
 		genFile := nodeConfig.GenesisFile()
 
-		// overwrite each validator's genesis file to have a canonical genesis time
-		if err := genutil.ExportGenesisFileWithTime(genFile, chainID, nil, appState, genTime); err != nil {
+		// overwrite each validator's genesis file to have a canonical genesis
+		// time, the canonical app state and the qbtc consensus parameters
+		appGenesis.AppState = appState
+		if err := applyQbtcConsensusParams(appGenesis, args); err != nil {
 			return err
 		}
-
-		// enable ABCI vote extensions from the configured height
-		appGen, err := genutiltypes.AppGenesisFromFile(genFile)
-		if err != nil {
-			return err
-		}
-		if appGen.Consensus == nil || appGen.Consensus.Params == nil {
-			return fmt.Errorf("genesis %s has no consensus params", genFile)
-		}
-		appGen.Consensus.Params.ABCI.VoteExtensionsEnableHeight = args.voteExtensionsEnableHeight
-		if err := appGen.SaveAs(genFile); err != nil {
+		if err := genutil.ExportGenesisFileWithTime(genFile, appGenesis, genTime); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// applyQbtcConsensusParams sets the consensus parameters every qbtc genesis
+// needs: ABCI vote extensions from the configured height, for attesting
+// Bitcoin blocks, and ML-DSA-65 as the only validator key type.
+func applyQbtcConsensusParams(appGenesis *genutiltypes.AppGenesis, args initArgs) error {
+	if appGenesis.Consensus == nil || appGenesis.Consensus.Params == nil {
+		return fmt.Errorf("genesis has no consensus params")
+	}
+	appGenesis.Consensus.Params.ABCI.VoteExtensionsEnableHeight = args.voteExtensionsEnableHeight
+	appGenesis.Consensus.Params.Validator.PubKeyTypes = []string{cmtmldsa65.KeyType}
 	return nil
 }
 

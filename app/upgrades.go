@@ -3,16 +3,14 @@ package app
 import (
 	"fmt"
 
-	upgradetypes "cosmossdk.io/x/upgrade/types"
 	"github.com/btcq-org/qbtc/app/upgrades"
-	testnetupgradev110 "github.com/btcq-org/qbtc/app/upgrades/testnet/v110"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
 )
 
-var Upgrades = []upgrades.Upgrade{
-	// testnet upgrades
-	testnetupgradev110.Upgrade,
-}
+// Upgrades lists the software upgrades the binary knows how to apply. v1 ships
+// none; adding wasm and IBC later goes through this list.
+var Upgrades = []upgrades.Upgrade{}
 
 // RegisterUpgradeHandlers handles upgrade registration
 func (app App) RegisterUpgradeHandlers(configurator module.Configurator) {

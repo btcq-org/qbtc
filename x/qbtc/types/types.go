@@ -33,4 +33,3 @@ func GzipDeterministic(data []byte, level int) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
-

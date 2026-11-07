@@ -1,7 +1,12 @@
 ```bash
 ./qbtcd config set client chain-id qbtc-testnet
 
-./qbtcd init qbtc --chain-id qbtc-testnet
+## the chain accepts ML-DSA-65 keys only: `init` writes
+## consensus_params.validator.pub_key_types = ["ml_dsa_65"] and creates an
+## ML-DSA-65 consensus key, and `keys add` creates ML-DSA-65 account keys
+## (both are the defaults; --consensus-key-algo / --algo accept nothing else)
+./qbtcd init qbtc --chain-id qbtc-testnet --consensus-key-algo ml_dsa_65
+./qbtcd keys add qbtc-init-validator --algo ml_dsa_65
 ## set minimum gas price
 ./qbtcd config set app minimum-gas-prices 0.000qbtc
 

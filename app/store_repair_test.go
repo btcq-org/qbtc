@@ -4,12 +4,11 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"cosmossdk.io/log"
-	"cosmossdk.io/store/iavl"
-	"cosmossdk.io/store/metrics"
-	"cosmossdk.io/store/rootmulti"
-	storetypes "cosmossdk.io/store/types"
+	"cosmossdk.io/log/v2"
 	dbm "github.com/cosmos/cosmos-db"
+	"github.com/cosmos/cosmos-sdk/store/v2/iavl"
+	"github.com/cosmos/cosmos-sdk/store/v2/rootmulti"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +16,7 @@ func TestRepairIncompleteCommit(t *testing.T) {
 	db := dbm.NewMemDB()
 	key := storetypes.NewKVStoreKey("test")
 	open := func() storetypes.CommitMultiStore {
-		cms := rootmulti.NewStore(db, log.NewNopLogger(), metrics.NewNoOpMetrics())
+		cms := rootmulti.NewStore(db, log.NewNopLogger())
 		cms.MountStoreWithDB(key, storetypes.StoreTypeIAVL, nil)
 		require.NoError(t, cms.LoadLatestVersion())
 		return cms
@@ -36,7 +35,7 @@ func TestRepairIncompleteCommit(t *testing.T) {
 
 	cms = open()
 	require.EqualValues(t, 1, cms.LastCommitID().Version)
-	require.True(t, cms.GetCommitKVStore(key).(*iavl.Store).VersionExists(2))
+	require.True(t, cms.GetStore(key).(*iavl.Store).VersionExists(2))
 	// without the repair, the next commit cannot save version 2
 	require.Panics(t, func() {
 		broken := open()
@@ -45,7 +44,7 @@ func TestRepairIncompleteCommit(t *testing.T) {
 	})
 
 	require.NoError(t, repairIncompleteCommit(cms, []storetypes.StoreKey{key}, log.NewNopLogger()))
-	require.False(t, cms.GetCommitKVStore(key).(*iavl.Store).VersionExists(2))
+	require.False(t, cms.GetStore(key).(*iavl.Store).VersionExists(2))
 	require.Equal(t, []byte("v"), cms.GetKVStore(key).Get([]byte("k")))
 	cms.GetKVStore(key).Set([]byte("k2"), []byte("v2"))
 	require.EqualValues(t, 2, cms.Commit().Version)

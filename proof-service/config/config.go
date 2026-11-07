@@ -35,7 +35,7 @@ type Config struct {
 	// Leave empty to disable on-chain broadcasting.
 	BroadcastGRPCAddr string `mapstructure:"broadcast_grpc_addr" json:"broadcast_grpc_addr,omitempty"`
 
-	// BroadcastPrivKeyHexList is a list of hex-encoded ML-DSA-44 private keys (2560 bytes / 5120 hex
+	// BroadcastPrivKeyHexList is a list of hex-encoded ML-DSA-65 private keys (4032 bytes / 8064 hex
 	// chars each) used to sign and broadcast claim txs. Keys are selected in round-robin order.
 	// Leave empty to disable broadcasting.
 	BroadcastPrivKeyHexList []string `mapstructure:"broadcast_priv_key_hex_list" json:"-"`

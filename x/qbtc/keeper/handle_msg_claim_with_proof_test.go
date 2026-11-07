@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"cosmossdk.io/math"
-	storetypes "cosmossdk.io/store/types"
 	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	module "github.com/btcq-org/qbtc/x/qbtc/module"
@@ -16,10 +15,10 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/cometbft/cometbft/crypto/mldsa"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/runtime"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	"github.com/cosmos/cosmos-sdk/testutil"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
@@ -80,7 +79,7 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	ctrl := gomock.NewController(t)
 
 	stakingKeeper := qbtctestutil.NewMockStakingKeeper(ctrl)
-	validatorPrivKey := mldsa.GenPrivKey()
+	validatorPrivKey := qbtctestutil.MustGenPrivKey()
 	pubKey := validatorPrivKey.PubKey()
 	pKey, err := codec.FromCmtPubKeyInterface(pubKey)
 	require.NoError(t, err)

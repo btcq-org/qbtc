@@ -17,20 +17,11 @@ import (
 	feegrantmodulev1 "cosmossdk.io/api/cosmos/feegrant/module/v1"
 	genutilmodulev1 "cosmossdk.io/api/cosmos/genutil/module/v1"
 	govmodulev1 "cosmossdk.io/api/cosmos/gov/module/v1"
-	paramsmodulev1 "cosmossdk.io/api/cosmos/params/module/v1"
 	slashingmodulev1 "cosmossdk.io/api/cosmos/slashing/module/v1"
 	stakingmodulev1 "cosmossdk.io/api/cosmos/staking/module/v1"
 	txconfigv1 "cosmossdk.io/api/cosmos/tx/config/v1"
 	upgrademodulev1 "cosmossdk.io/api/cosmos/upgrade/module/v1"
 	"cosmossdk.io/depinject/appconfig"
-	_ "cosmossdk.io/x/evidence" // import for side-effects
-	evidencetypes "cosmossdk.io/x/evidence/types"
-	"cosmossdk.io/x/feegrant"
-	_ "cosmossdk.io/x/feegrant/module" // import for side-effects
-	_ "cosmossdk.io/x/upgrade"         // import for side-effects
-	upgradetypes "cosmossdk.io/x/upgrade/types"
-	_ "github.com/CosmWasm/wasmd/x/wasm" // import for side-effects
-	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	"github.com/btcq-org/qbtc/common"
 	_ "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtcmoduletypes "github.com/btcq-org/qbtc/x/qbtc/types"
@@ -47,19 +38,19 @@ import (
 	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 	_ "github.com/cosmos/cosmos-sdk/x/epochs" // import for side-effects
 	epochstypes "github.com/cosmos/cosmos-sdk/x/epochs/types"
+	_ "github.com/cosmos/cosmos-sdk/x/evidence" // import for side-effects
+	evidencetypes "github.com/cosmos/cosmos-sdk/x/evidence/types"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
+	_ "github.com/cosmos/cosmos-sdk/x/feegrant/module" // import for side-effects
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	_ "github.com/cosmos/cosmos-sdk/x/gov" // import for side-effects
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
-	_ "github.com/cosmos/cosmos-sdk/x/params" // import for side-effects
-	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	_ "github.com/cosmos/cosmos-sdk/x/slashing" // import for side-effects
 	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
 	_ "github.com/cosmos/cosmos-sdk/x/staking" // import for side-effects
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
-	ibctransfertypes "github.com/cosmos/ibc-go/v10/modules/apps/transfer/types"
-	ibcexported "github.com/cosmos/ibc-go/v10/modules/core/exported"
-	tokenfactorytypes "github.com/cosmos/tokenfactory/x/tokenfactory/types"
+	_ "github.com/cosmos/cosmos-sdk/x/upgrade" // import for side-effects
+	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
 )
 
 var (
@@ -68,13 +59,10 @@ var (
 		{Account: distrtypes.ModuleName},
 		{Account: stakingtypes.BondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
 		{Account: stakingtypes.NotBondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
-		{Account: ibctransfertypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
-		{Account: icatypes.ModuleName},
 		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: qbtcmoduletypes.ModuleName, Permissions: []string{authtypes.Minter}},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
-		{Account: wasmtypes.ModuleName, Permissions: []string{authtypes.Burner}},
-		{Account: tokenfactorytypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
+		{Account: stakingtypes.KeyRotationFeePoolName, Permissions: []string{authtypes.Burner}},
 	}
 
 	// blocked account addresses
@@ -83,6 +71,7 @@ var (
 		distrtypes.ModuleName,
 		stakingtypes.BondedPoolName,
 		stakingtypes.NotBondedPoolName,
+		stakingtypes.KeyRotationFeePoolName,
 
 		// We allow the following module accounts to receive funds:
 		// govtypes.ModuleName
@@ -113,24 +102,19 @@ var (
 						authz.ModuleName,
 						epochstypes.ModuleName,
 						// ibc modules
-						ibcexported.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
 						// wasm module
-						wasmtypes.ModuleName,
-						//tokenfactory
-						tokenfactorytypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
 						govtypes.ModuleName,
 						stakingtypes.ModuleName,
+						banktypes.ModuleName,
 						feegrant.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
 						// wasm module - must be after bank staking,and IBC
-						wasmtypes.ModuleName, //tokenfactory
-						tokenfactorytypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
@@ -158,14 +142,9 @@ var (
 						upgradetypes.ModuleName,
 						epochstypes.ModuleName,
 						// ibc modules
-						ibcexported.ModuleName,
-						ibctransfertypes.ModuleName,
-						icatypes.ModuleName,
 						// chain modules
 						qbtcmoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
-						wasmtypes.ModuleName,
-						tokenfactorytypes.ModuleName,
 					},
 				}),
 			},
@@ -232,10 +211,6 @@ var (
 			{
 				Name:   evidencetypes.ModuleName,
 				Config: appconfig.WrapAny(&evidencemodulev1.Module{}),
-			},
-			{
-				Name:   paramstypes.ModuleName,
-				Config: appconfig.WrapAny(&paramsmodulev1.Module{}),
 			},
 			{
 				Name:   epochstypes.ModuleName,

@@ -8,7 +8,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
-	"github.com/cometbft/cometbft/crypto/mldsa"
+	"github.com/cometbft/cometbft/crypto/mldsa65"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
@@ -146,16 +146,16 @@ func TestHasSupermajority(t *testing.T) {
 // voteFixture is a fixture with several validators, so the power can be split.
 type voteFixture struct {
 	*fixture
-	keys []mldsa.PrivKey
+	keys []mldsa65.PrivKey
 }
 
 // newVoteFixture adds validators to the fixture; keys[0] is the fixture's own.
 func newVoteFixture(t *testing.T, extra int) *voteFixture {
 	t.Helper()
 	f := initFixture(t)
-	vf := &voteFixture{fixture: f, keys: []mldsa.PrivKey{f.privateKey}}
+	vf := &voteFixture{fixture: f, keys: []mldsa65.PrivKey{f.privateKey}}
 	for range extra {
-		key := mldsa.GenPrivKey()
+		key := qbtctestutil.MustGenPrivKey()
 		pub, err := cryptoenc.PubKeyToProto(key.PubKey())
 		require.NoError(t, err)
 		f.consPubKeys[string(key.PubKey().Address())] = pub
@@ -282,7 +282,7 @@ func TestValidateBtcBlockVotes(t *testing.T) {
 		vf, msg, ext := setup(t)
 		votes := votesFor(vf, ext, 100)
 		// signed by an outsider that claims the validator's address
-		impostor := qbtctestutil.NewExtendedCommit(voteChainID, voteHeight, 0, []qbtctestutil.TestVote{{Key: mldsa.GenPrivKey(), Power: 100, Extension: ext}})
+		impostor := qbtctestutil.NewExtendedCommit(voteChainID, voteHeight, 0, []qbtctestutil.TestVote{{Key: qbtctestutil.MustGenPrivKey(), Power: 100, Extension: ext}})
 		ec := qbtctestutil.NewExtendedCommit(voteChainID, voteHeight, 0, votes)
 		ec.Votes[0].ExtensionSignature = impostor.Votes[0].ExtensionSignature
 		bz, err := ec.Marshal()
