@@ -64,7 +64,7 @@ The signed message is an ordinary BIP-137 "Bitcoin Signed Message", so any walle
 | Signature Curve   | secp256k1 (ECDSA)                              |
 | Hash Functions    | SHA-256, RIPEMD-160                            |
 | Trusted Setup     | Hermez/Polygon Powers of Tau (2²¹)             |
-| Proof Size        | ~1 KB                                          |
+| Proof Size        | 584 bytes                                      |
 | Verification Time | ~2-5 ms                                        |
 
 ---
@@ -415,8 +415,11 @@ Wire format: `[4-byte proof length (big-endian)][proof data][public inputs witne
 
 **Validation constraints**:
 
-- Minimum proof length: 100 bytes
-- Maximum proof length: 1 MB
+- The proof must have the exact compressed PLONK BN254 layout for the verifying key, checked by `CheckProofLayout` in `x/qbtc/zk/proof_layout.go`. For the claim circuit, which has one BSB22 commitment, that is 584 bytes.
+- Both length prefixes must match the key: `BatchedProof.ClaimedValues` holds `6 + len(vk.Qcp)` scalars and `Bsb22Commitments` holds `len(vk.Qcp)` points.
+- Every point must be compressed.
+
+gnark-crypto allocates a point slice from its untrusted length prefix before reading any point, so a proof must pass this check before `plonk.Proof.ReadFrom` sees it. `ValidateBasic` runs it with the claim circuit's commitment count, and `VerifyProof` runs it again with the count taken from the stored verifying key.
 
 ---
 
@@ -432,7 +435,7 @@ The verifier is a thread-safe singleton initialized once from genesis. After ini
 
 1. **Address binding check**: Decode the Bitcoin address to its Hash160; reject unless `RIPEMD160(PubKeyHashSHA256)` equals it
 2. **Message derivation**: Compute the BIP-137 digest of the claim text from `(ChainID, BitcoinAddress, QBTCAddress)`
-3. **Proof deserialization**: Parse PLONK proof from bytes
+3. **Proof deserialization**: Check the proof layout against the verifying key, then parse the PLONK proof from bytes
 4. **Public witness construction**: Create witness with the derived `MessageHash` and the supplied `PubKeyHashSHA256`
 5. **PLONK verification**: Call gnark's PLONK verifier with proof, VK, and witness
 
@@ -530,7 +533,7 @@ All three are computationally infeasible.
 | Cross-chain replay  | Chain ID in signed text       | `message.go`                         |
 | Version replay      | Version string in signed text | `message.go`                         |
 | Double-spend        | EntitledAmount zeroing        | `handle_msg_claim_with_proof.go:157` |
-| DoS via large proof | Max proof size 1MB            | `setup.go:30`                        |
+| DoS via large proof | Exact proof layout check      | `proof_layout.go`                    |
 | DoS via many UTXOs  | Max 50 UTXOs per batch        | protobuf validation                  |
 
 ### 9.4 Trust Assumptions

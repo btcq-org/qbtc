@@ -6,19 +6,12 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	se "github.com/cosmos/cosmos-sdk/types/errors"
+
+	"github.com/btcq-org/qbtc/x/qbtc/zk"
 )
 
 // Hash160Length is the length of a Bitcoin Hash160 (RIPEMD160(SHA256(pubkey))).
 const Hash160Length = 20
-
-// MaxProofSize is the maximum allowed proof size in bytes (50KB).
-// PLONK proofs are typically ~1KB, so this provides ample headroom while
-// preventing DoS attacks via oversized proofs.
-const MaxProofSize = 50 * 1024
-
-// MinProofSize is the minimum valid proof size in bytes.
-// A valid PLONK proof must be at least a few hundred bytes.
-const MinProofSize = 100
 
 // MaxTxIDLength is the maximum length of a Bitcoin transaction ID (64 hex chars).
 const MaxTxIDLength = 64
@@ -97,17 +90,17 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	if len(m.Proof) == 0 {
 		return se.ErrInvalidRequest.Wrap("proof data is required")
 	}
+	if want := hex.EncodedLen(zk.ProofSize(zk.ClaimCircuitNbCommitments)); len(m.Proof) != want {
+		return se.ErrInvalidRequest.Wrapf("proof data is %d hex characters, want %d", len(m.Proof), want)
+	}
 	proofBytes, err := hex.DecodeString(m.Proof)
 	if err != nil {
 		return se.ErrInvalidRequest.Wrapf("proof data is not valid hex: %v", err)
 	}
-	// Validate proof size bounds (prevents DoS via oversized proofs)
-	if len(proofBytes) > MaxProofSize {
-		return se.ErrInvalidRequest.Wrapf("proof data too large: %d bytes (max %d)", len(proofBytes), MaxProofSize)
-	}
-
-	if len(proofBytes) < MinProofSize {
-		return se.ErrInvalidRequest.Wrapf("proof data too small: %d bytes (min %d)", len(proofBytes), MinProofSize)
+	// The layout check stops CheckTx from passing a proof whose length
+	// prefixes would make deserialization allocate unbounded memory.
+	if err := zk.CheckProofLayout(proofBytes, zk.ClaimCircuitNbCommitments); err != nil {
+		return se.ErrInvalidRequest.Wrapf("malformed proof: %v", err)
 	}
 
 	if len(m.PubKeyHashSha256) != 64 {

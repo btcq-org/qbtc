@@ -79,6 +79,14 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 
 	messageHash := ClaimMessageDigest(params.ChainID, params.BitcoinAddress, params.QBTCAddress)
 
+	key, ok := v.vk.(*plonkbn254.VerifyingKey)
+	if !ok {
+		return fmt.Errorf("verifying key is %T, want a BN254 PLONK key", v.vk)
+	}
+	if err := CheckProofLayout(proof, len(key.Qcp)); err != nil {
+		return fmt.Errorf("malformed proof: %w", err)
+	}
+
 	// Deserialize the proof
 	plonkProof := plonk.NewProof(ecc.BN254)
 	_, err = plonkProof.ReadFrom(bytes.NewReader(proof))

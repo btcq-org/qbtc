@@ -2,11 +2,15 @@ package types
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/btcq-org/qbtc/common"
+	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 )
@@ -31,22 +35,20 @@ const validBitcoinTxID = "0123456789abcdef0123456789abcdef0123456789abcdef012345
 // validBitcoinTxID2 is another valid 64-character hex Bitcoin transaction ID for testing batch claims
 const validBitcoinTxID2 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 
-// makeValidProof creates a valid proof with proper size for testing
+// makeValidProof returns a hex proof with the claim circuit's layout. It
+// passes ValidateBasic but would fail PLONK verification.
 func makeValidProof() string {
-	// Create proof data that meets minimum size requirement
-	proofData := make([]byte, MinProofSize+100)
-	for i := range proofData {
-		proofData[i] = byte(i % 256)
-	}
-	return hex.EncodeToString(proofData)
+	return hex.EncodeToString(zktest.WellFormedProof(zk.ClaimCircuitNbCommitments))
 }
-func makeProofBiggerThanMax() string {
-	// Create proof data that exceeds maximum size requirement
-	proofData := make([]byte, MaxProofSize+1)
-	for i := range proofData {
-		proofData[i] = byte(i % 256)
-	}
-	return hex.EncodeToString(proofData)
+
+// makeProofWithBsb22Prefix returns a correctly sized hex proof whose
+// Bsb22Commitments length prefix, its last 4 bytes before the commitment
+// points, is set to count.
+func makeProofWithBsb22Prefix(count uint32) string {
+	proof := zktest.WellFormedProof(zk.ClaimCircuitNbCommitments)
+	off := len(proof) - 4 - zk.ClaimCircuitNbCommitments*32
+	binary.BigEndian.PutUint32(proof[off:], count)
+	return hex.EncodeToString(proof)
 }
 
 // makeValidUTXORefs creates a slice of UTXORef for testing
@@ -298,10 +300,10 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
-				Proof:            "d6aa", // too small
+				Proof:            "d6aa",
 			},
 			expectErr: true,
-			errMsg:    "proof data too small",
+			errMsg:    "proof data is 4 hex characters, want 1168",
 		},
 		{
 			name: "proof data too large",
@@ -310,10 +312,46 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
 				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
-				Proof:            makeProofBiggerThanMax(),
+				Proof:            makeValidProof() + "00",
 			},
 			expectErr: true,
-			errMsg:    "proof data too large",
+			errMsg:    "proof data is 1170 hex characters, want 1168",
+		},
+		{
+			name: "proof data not hex",
+			msg: &MsgClaimWithProof{
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            strings.Repeat("zz", 584),
+			},
+			expectErr: true,
+			errMsg:    "proof data is not valid hex",
+		},
+		{
+			name: "proof with huge Bsb22Commitments count",
+			msg: &MsgClaimWithProof{
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeProofWithBsb22Prefix(0xFFFFFFFF),
+			},
+			expectErr: true,
+			errMsg:    "Bsb22Commitments count is 4294967295",
+		},
+		{
+			name: "proof with no Bsb22Commitments",
+			msg: &MsgClaimWithProof{
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeProofWithBsb22Prefix(0),
+			},
+			expectErr: true,
+			errMsg:    "Bsb22Commitments count is 0",
 		},
 		{
 			name: "invalid message - no pub_key_hash_sha256",
