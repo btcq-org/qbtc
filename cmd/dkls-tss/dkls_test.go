@@ -151,7 +151,7 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	chainID := "qbtc-mainnet-1"
 
 	// The TSS signs the BIP-137 digest of the claim message
-	messageHash := zk.ComputeClaimMessage(chainID, bitcoinAddress, claimerAddress)
+	messageHash := zk.ClaimMessageDigest(chainID, bitcoinAddress, claimerAddress)
 	t.Logf("  Message hash: %x", messageHash)
 
 	// ========================================
@@ -267,7 +267,7 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 
 	claimerAddress := "qbtc1tss_2of3_test"
 	chainID := "qbtc-mainnet-1"
-	messageHash := zk.ComputeClaimMessage(chainID, bitcoinAddress, claimerAddress)
+	messageHash := zk.ClaimMessageDigest(chainID, bitcoinAddress, claimerAddress)
 	valid := zk.VerificationParams{
 		ChainID:          chainID,
 		BitcoinAddress:   bitcoinAddress,

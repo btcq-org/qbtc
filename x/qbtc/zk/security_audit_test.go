@@ -101,7 +101,7 @@ func (s *SecurityAuditTestSuite) TestSoundness_InvalidSignature() {
 
 	privateKey, _ := btcec.NewPrivateKey()
 	pubKey := privateKey.PubKey()
-	messageHash := ComputeClaimMessage("qbtc-1", p2pkhAddressForTest(pubKey), "qbtc1test")
+	messageHash := ClaimMessageDigest("qbtc-1", p2pkhAddressForTest(pubKey), "qbtc1test")
 
 	invalidR := new(big.Int).SetBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32})
@@ -252,7 +252,7 @@ func (s *SecurityAuditTestSuite) TestVerifier_ImmutabilityAfterInit() {
 // TestEdgeCase_ZeroValues tests handling of edge case inputs.
 func (s *SecurityAuditTestSuite) TestEdgeCase_ZeroValues() {
 	s.T().Run("empty fields still produce a digest", func(t *testing.T) {
-		require.NotEqual(t, [32]byte{}, ComputeClaimMessage("", "", ""))
+		require.NotEqual(t, [32]byte{}, ClaimMessageDigest("", "", ""))
 	})
 
 	s.T().Run("nil proof rejection", func(t *testing.T) {
@@ -281,8 +281,8 @@ func (s *SecurityAuditTestSuite) TestEdgeCase_LargeInputs() {
 
 // TestDeterminism_SameInputsSameOutput verifies message derivation is deterministic.
 func (s *SecurityAuditTestSuite) TestDeterminism_SameInputsSameOutput() {
-	msg1 := ComputeClaimMessage("qbtc-1", "bc1qaddress", "qbtc1test")
-	msg2 := ComputeClaimMessage("qbtc-1", "bc1qaddress", "qbtc1test")
+	msg1 := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test")
+	msg2 := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test")
 	s.Require().Equal(msg1, msg2, "message computation should be deterministic")
 }
 
@@ -372,18 +372,18 @@ func TestAudit_NoSecretInputLeakage(t *testing.T) {
 
 // TestAudit_MessageBindingComplete verifies all binding components are included.
 func TestAudit_MessageBindingComplete(t *testing.T) {
-	base := ComputeClaimMessage("qbtc-1", "bc1qaddress", "qbtc1test")
+	base := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test")
 
 	t.Run("address binding", func(t *testing.T) {
-		require.NotEqual(t, base, ComputeClaimMessage("qbtc-1", "bc1qother", "qbtc1test"))
+		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qother", "qbtc1test"))
 	})
 
 	t.Run("destination binding", func(t *testing.T) {
-		require.NotEqual(t, base, ComputeClaimMessage("qbtc-1", "bc1qaddress", "qbtc1different"))
+		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1different"))
 	})
 
 	t.Run("chain binding", func(t *testing.T) {
-		require.NotEqual(t, base, ComputeClaimMessage("other-chain", "bc1qaddress", "qbtc1test"))
+		require.NotEqual(t, base, ClaimMessageDigest("other-chain", "bc1qaddress", "qbtc1test"))
 	})
 
 	t.Run("version binding", func(t *testing.T) {

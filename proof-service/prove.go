@@ -3,13 +3,9 @@ package proofservice
 import (
 	"context"
 	"encoding/hex"
-	"errors"
-	"math/big"
 	"net/http"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
-	"github.com/btcsuite/btcd/btcec/v2"
-	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 )
 
 func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveResponse, int, *ErrorResponse) {
@@ -35,17 +31,9 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 	}
 
 	// 2. Validate required fields
-	walletForm := req.Signature != ""
-	tssForm := req.SignatureR != "" || req.SignatureS != "" || req.PublicKey != ""
-	if walletForm == tssForm {
+	if req.Signature == "" {
 		return nil, http.StatusBadRequest, &ErrorResponse{
-			Error: "exactly one of signature (BIP-137 base64) or signature_r+signature_s+public_key is required",
-			Code:  "INVALID_REQUEST",
-		}
-	}
-	if tssForm && (req.SignatureR == "" || req.SignatureS == "" || req.PublicKey == "") {
-		return nil, http.StatusBadRequest, &ErrorResponse{
-			Error: "signature_r, signature_s and public_key are all required",
+			Error: "signature is required",
 			Code:  "INVALID_REQUEST",
 		}
 	}
@@ -95,32 +83,19 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 	digest := zk.BitcoinSignedMessageDigest(messageText)
 	s.logger.Info().Str("message", messageText).Msg("claim message")
 
-	// 4. Obtain (pubkey, r, s) from whichever signature form was given, and
-	// verify it natively (microseconds) before committing to the ~18s
-	// in-circuit prove. The circuit proves this exact relation, so a signature
-	// that does not verify here can never yield a valid proof.
-	var (
-		pubKey *btcec.PublicKey
-		params zk.ProofParams
-	)
-	if walletForm {
-		pub, r, sScalar, err := zk.ParseBIP137Signature(req.Signature, digest)
-		if err != nil {
-			return nil, http.StatusBadRequest, &ErrorResponse{
-				Error:   "invalid BIP-137 signature",
-				Code:    "INVALID_SIGNATURE",
-				Details: err.Error(),
-			}
-		}
-		pubKey = pub
-		params = zk.ProofParamsFromSignature(pub, r, sScalar, digest)
-	} else {
-		var errResp *ErrorResponse
-		pubKey, params, errResp = s.paramsFromRawSignature(req, digest)
-		if errResp != nil {
-			return nil, http.StatusBadRequest, errResp
+	// 4. Recover the signing key (microseconds) before committing to the ~18s
+	// in-circuit prove. The recovered key verifies (r, s) by construction, and
+	// step 5 ties it to the address, so a signature that fails here can never
+	// yield a valid proof.
+	pubKey, sigR, sigS, err := zk.ParseBIP137Signature(req.Signature, digest)
+	if err != nil {
+		return nil, http.StatusBadRequest, &ErrorResponse{
+			Error:   "invalid BIP-137 signature",
+			Code:    "INVALID_SIGNATURE",
+			Details: err.Error(),
 		}
 	}
+	params := zk.ProofParamsFromSignature(pubKey, sigR, sigS, digest)
 
 	// 5. The signing key must own the address being claimed.
 	if err := zk.CheckPubKeyOwnsAddress(pubKey, req.BitcoinAddress); err != nil {
@@ -179,70 +154,4 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 	}
 
 	return resp, http.StatusOK, nil
-}
-
-// paramsFromRawSignature handles the TSS form: hex r, s and compressed pubkey
-// over the claim digest.
-func (s *Service) paramsFromRawSignature(req ProveRequest, digest [32]byte) (*btcec.PublicKey, zk.ProofParams, *ErrorResponse) {
-	sigRBytes, err := hex.DecodeString(req.SignatureR)
-	if err != nil || len(sigRBytes) != 32 {
-		return nil, zk.ProofParams{}, &ErrorResponse{
-			Error: "signature_r must be 64 hex characters (32 bytes)",
-			Code:  "INVALID_SIGNATURE",
-		}
-	}
-	sigSBytes, err := hex.DecodeString(req.SignatureS)
-	if err != nil || len(sigSBytes) != 32 {
-		return nil, zk.ProofParams{}, &ErrorResponse{
-			Error: "signature_s must be 64 hex characters (32 bytes)",
-			Code:  "INVALID_SIGNATURE",
-		}
-	}
-	pubKeyBytes, err := hex.DecodeString(req.PublicKey)
-	if err != nil || len(pubKeyBytes) != 33 {
-		return nil, zk.ProofParams{}, &ErrorResponse{
-			Error: "public_key must be 66 hex characters (33 bytes compressed)",
-			Code:  "INVALID_PUBLIC_KEY",
-		}
-	}
-	pubKey, err := btcec.ParsePubKey(pubKeyBytes)
-	if err != nil {
-		return nil, zk.ProofParams{}, &ErrorResponse{
-			Error:   "invalid compressed public key",
-			Code:    "INVALID_PUBLIC_KEY",
-			Details: err.Error(),
-		}
-	}
-	if err := verifyECDSASignature(pubKey, digest[:], sigRBytes, sigSBytes); err != nil {
-		return nil, zk.ProofParams{}, &ErrorResponse{
-			Error:   "signature does not verify against the public key and claim message",
-			Code:    "INVALID_SIGNATURE",
-			Details: err.Error(),
-		}
-	}
-	return pubKey, zk.ProofParamsFromSignature(pubKey, new(big.Int).SetBytes(sigRBytes), new(big.Int).SetBytes(sigSBytes), digest), nil
-}
-
-// verifyECDSASignature checks that (r, s) is a valid secp256k1 ECDSA signature
-// of hash under pubKey. rBytes and sBytes must each be 32 bytes. It enforces
-// that r and s are in the valid range [1, n-1] and performs the full native
-// verification, matching what the circuit proves in-circuit.
-func verifyECDSASignature(pubKey *btcec.PublicKey, hash, rBytes, sBytes []byte) error {
-	var r, s btcec.ModNScalar
-	if r.SetByteSlice(rBytes) {
-		return errors.New("signature_r is not less than the curve order")
-	}
-	if s.SetByteSlice(sBytes) {
-		return errors.New("signature_s is not less than the curve order")
-	}
-	if r.IsZero() {
-		return errors.New("signature_r must be non-zero")
-	}
-	if s.IsZero() {
-		return errors.New("signature_s must be non-zero")
-	}
-	if !btcecdsa.NewSignature(&r, &s).Verify(hash, pubKey) {
-		return errors.New("signature verification failed")
-	}
-	return nil
 }

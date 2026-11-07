@@ -18,7 +18,7 @@ import (
 // cannot import it without a cycle.
 func signClaimForTest(t *testing.T, priv *btcec.PrivateKey, chainID, bitcoinAddress, qbtcAddress string) (ProofParams, string, [32]byte) {
 	t.Helper()
-	digest := ComputeClaimMessage(chainID, bitcoinAddress, qbtcAddress)
+	digest := ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress)
 	sigBase64 := base64.StdEncoding.EncodeToString(btcecdsa.SignCompact(priv, digest[:], true))
 
 	pub, r, s, err := ParseBIP137Signature(sigBase64, digest)

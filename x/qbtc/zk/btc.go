@@ -2,7 +2,6 @@ package zk
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -43,28 +42,6 @@ func PublicKeyToAddressHash(compressedPubKey []byte) ([20]byte, error) {
 	addrPubKeyHash := addrPubKey.AddressPubKeyHash()
 	copy(result[:], addrPubKeyHash.Hash160()[:])
 	return result, nil
-}
-
-// AddressHashFromHex parses a hex-encoded address hash
-func AddressHashFromHex(hexStr string) ([20]byte, error) {
-	var result [20]byte
-
-	decoded, err := hex.DecodeString(hexStr)
-	if err != nil {
-		return result, fmt.Errorf("invalid hex: %w", err)
-	}
-
-	if len(decoded) != 20 {
-		return result, fmt.Errorf("invalid address hash length: %d", len(decoded))
-	}
-
-	copy(result[:], decoded)
-	return result, nil
-}
-
-// AddressHashToHex converts an address hash to hex string
-func AddressHashToHex(hash [20]byte) string {
-	return hex.EncodeToString(hash[:])
 }
 
 // Hash160ToP2PKHAddress converts a Hash160 to a P2PKH Bitcoin address (mainnet)

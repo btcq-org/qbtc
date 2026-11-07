@@ -1,7 +1,6 @@
 package keeper
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -59,7 +58,6 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	}
 
 	// Find the first valid UTXO to determine the proven address
-	var provenAddressHash [20]byte
 	var provenBtcAddress string
 	var foundValidUtxo bool
 
@@ -82,13 +80,11 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 			continue // Skip UTXOs that have not reached the minimum confirmation threshold
 		}
 
-		addressHash, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address)
-		if err != nil {
+		if _, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address); err != nil {
 			continue // Skip UTXOs with invalid addresses
 		}
 
 		// Found a valid UTXO - use its address for proof verification
-		provenAddressHash = addressHash
 		provenBtcAddress = utxo.ScriptPubKey.Address
 		foundValidUtxo = true
 		sdkCtx.Logger().Debug("using UTXO for proof verification",
@@ -156,16 +152,9 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 			continue
 		}
 
-		utxoAddressHash, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address)
-		if err != nil {
-			skippedCount++
-			sdkCtx.Logger().Debug("skipping UTXO: invalid address format",
-				"index", i, "txid", utxoRef.Txid, "vout", utxoRef.Vout, "error", err)
-			continue
-		}
-
-		// Check if this UTXO's address matches the proven address
-		if !bytes.Equal(provenAddressHash[:], utxoAddressHash[:]) {
+		// The signature covers this exact address string, so the same key's
+		// UTXOs at its other address type are not part of this claim.
+		if utxo.ScriptPubKey.Address != provenBtcAddress {
 			skippedCount++
 			sdkCtx.Logger().Debug("skipping UTXO: address mismatch",
 				"index", i,

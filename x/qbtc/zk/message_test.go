@@ -65,19 +65,19 @@ func TestBitcoinSignedMessageDigest_MatchesBIP137(t *testing.T) {
 	}
 }
 
-func TestComputeClaimMessage_BindsEveryField(t *testing.T) {
-	base := ComputeClaimMessage(testChainID, "bc1qaddress", testQBTCAddress)
-	require.Equal(t, base, ComputeClaimMessage(testChainID, "bc1qaddress", testQBTCAddress), "deterministic")
-	require.NotEqual(t, base, ComputeClaimMessage("other-chain-1", "bc1qaddress", testQBTCAddress), "chain ID")
-	require.NotEqual(t, base, ComputeClaimMessage(testChainID, "bc1qother", testQBTCAddress), "bitcoin address")
-	require.NotEqual(t, base, ComputeClaimMessage(testChainID, "bc1qaddress", "qbtc1attacker"), "destination")
+func TestClaimMessageDigest_BindsEveryField(t *testing.T) {
+	base := ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress)
+	require.Equal(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress), "deterministic")
+	require.NotEqual(t, base, ClaimMessageDigest("other-chain-1", "bc1qaddress", testQBTCAddress), "chain ID")
+	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qother", testQBTCAddress), "bitcoin address")
+	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", "qbtc1attacker"), "destination")
 	require.NotEqual(t, base, BitcoinSignedMessageDigest(strings.Join([]string{testChainID, "bc1qaddress", testQBTCAddress}, "|")), "version token")
 }
 
 func TestParseBIP137Signature_RecoversSigner(t *testing.T) {
 	priv, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	digest := ComputeClaimMessage(testChainID, p2wpkhAddressForTest(priv.PubKey()), testQBTCAddress)
+	digest := ClaimMessageDigest(testChainID, p2wpkhAddressForTest(priv.PubKey()), testQBTCAddress)
 	compact := btcecdsa.SignCompact(priv, digest[:], true)
 	recID := (compact[0] - 27) & 3
 
@@ -99,7 +99,7 @@ func TestParseBIP137Signature_RecoversSigner(t *testing.T) {
 	require.NoError(t, err)
 
 	// A different digest recovers a different key (or fails outright).
-	other := ComputeClaimMessage(testChainID, p2wpkhAddressForTest(priv.PubKey()), "qbtc1attacker")
+	other := ClaimMessageDigest(testChainID, p2wpkhAddressForTest(priv.PubKey()), "qbtc1attacker")
 	pub, _, _, err := ParseBIP137Signature(base64.StdEncoding.EncodeToString(compact), other)
 	if err == nil {
 		require.False(t, pub.IsEqual(priv.PubKey()))
@@ -109,7 +109,7 @@ func TestParseBIP137Signature_RecoversSigner(t *testing.T) {
 func TestParseBIP137Signature_Rejects(t *testing.T) {
 	priv, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	digest := ComputeClaimMessage(testChainID, p2pkhAddressForTest(priv.PubKey()), testQBTCAddress)
+	digest := ClaimMessageDigest(testChainID, p2pkhAddressForTest(priv.PubKey()), testQBTCAddress)
 	compact := btcecdsa.SignCompact(priv, digest[:], true)
 	withHeader := func(h byte) string {
 		sig := append([]byte(nil), compact...)

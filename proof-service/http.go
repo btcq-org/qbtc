@@ -14,25 +14,11 @@ import (
 )
 
 // ProveRequest is the JSON request body for POST /prove.
-//
-// The signature is given in one of two forms:
-//   - signature: a base64 BIP-137 message signature from a Bitcoin wallet
-//     ("Sign message" over the claim text). The public key is recovered from it.
-//   - signature_r, signature_s and public_key: a raw ECDSA signature over the
-//     32-byte BIP-137 claim digest, for TSS/MPC signers.
 type ProveRequest struct {
-	// Signature is the base64 BIP-137 signature of the claim message.
-	Signature string `json:"signature,omitempty"`
-
-	// SignatureR is the raw ECDSA signature R value (64 hex chars, 32 bytes).
-	SignatureR string `json:"signature_r,omitempty"`
-
-	// SignatureS is the raw ECDSA signature S value (64 hex chars, 32 bytes).
-	SignatureS string `json:"signature_s,omitempty"`
-
-	// PublicKey is the compressed public key (66 hex chars, 33 bytes). Only
-	// used with signature_r/signature_s.
-	PublicKey string `json:"public_key,omitempty"`
+	// Signature is the base64 BIP-137 signature of the claim message, from a
+	// wallet's "Sign message" feature. The public key is recovered from it. A
+	// TSS/MPC signer encodes its (r, s, recovery id) in the same 65-byte form.
+	Signature string `json:"signature"`
 
 	// BitcoinAddress is the P2PKH or P2WPKH address being claimed, exactly as
 	// stored on the UTXOs. It is part of the signed claim message.

@@ -45,9 +45,9 @@ func BitcoinSignedMessageDigest(text string) [32]byte {
 	return digest
 }
 
-// ComputeClaimMessage returns the digest the claim signature must cover. The
+// ClaimMessageDigest returns the digest the claim signature must cover. The
 // verifier recomputes it natively from on-chain data, which binds the proof to
 // the chain, the Bitcoin address being claimed and the destination address.
-func ComputeClaimMessage(chainID, bitcoinAddress, qbtcAddress string) [32]byte {
+func ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress string) [32]byte {
 	return BitcoinSignedMessageDigest(ClaimMessageText(chainID, bitcoinAddress, qbtcAddress))
 }

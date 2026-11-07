@@ -399,6 +399,64 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 			expectedAmount: 100000000, // 40M + 60M
 			expectErr:      false,
 		},
+		{
+			name: "same key at its other address type is skipped",
+			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
+				signed := types.UTXO{
+					Txid:           "abab000000000000000000000000000000000000000000000000000000000001",
+					Vout:           0,
+					Amount:         100000000,
+					EntitledAmount: 40000000,
+					ScriptPubKey:   &types.ScriptPubKeyResult{Address: f.btcAddress},
+				}
+				unsigned := types.UTXO{
+					Txid:           "abab000000000000000000000000000000000000000000000000000000000002",
+					Vout:           0,
+					Amount:         100000000,
+					EntitledAmount: 60000000,
+					ScriptPubKey:   &types.ScriptPubKeyResult{Address: zktest.P2WPKHAddress(f.btcPrivKey.PubKey())},
+				}
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "abab000000000000000000000000000000000000000000000000000000000001-0", signed))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "abab000000000000000000000000000000000000000000000000000000000002-0", unsigned))
+
+				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
+				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			},
+			utxos: []types.UTXORef{
+				{Txid: "abab000000000000000000000000000000000000000000000000000000000001", Vout: 0},
+				{Txid: "abab000000000000000000000000000000000000000000000000000000000002", Vout: 0},
+			},
+			expectedClaim:  1,
+			expectedSkip:   1,
+			expectedAmount: 40000000,
+		},
+		{
+			name: "first listed UTXO at an address the proof does not sign fails",
+			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
+				unsigned := types.UTXO{
+					Txid:           "acac000000000000000000000000000000000000000000000000000000000001",
+					Vout:           0,
+					Amount:         100000000,
+					EntitledAmount: 60000000,
+					ScriptPubKey:   &types.ScriptPubKeyResult{Address: zktest.P2WPKHAddress(f.btcPrivKey.PubKey())},
+				}
+				signed := types.UTXO{
+					Txid:           "acac000000000000000000000000000000000000000000000000000000000002",
+					Vout:           0,
+					Amount:         100000000,
+					EntitledAmount: 40000000,
+					ScriptPubKey:   &types.ScriptPubKeyResult{Address: f.btcAddress},
+				}
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "acac000000000000000000000000000000000000000000000000000000000001-0", unsigned))
+				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "acac000000000000000000000000000000000000000000000000000000000002-0", signed))
+			},
+			utxos: []types.UTXORef{
+				{Txid: "acac000000000000000000000000000000000000000000000000000000000001", Vout: 0},
+				{Txid: "acac000000000000000000000000000000000000000000000000000000000002", Vout: 0},
+			},
+			expectErr:   true,
+			errContains: "proof verification failed",
+		},
 	}
 
 	f := setupClaimTest(t)

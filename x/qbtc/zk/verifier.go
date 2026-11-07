@@ -77,7 +77,7 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 		return fmt.Errorf("address hash mismatch: RIPEMD160(PubKeyHashSHA256) does not match %s", params.BitcoinAddress)
 	}
 
-	messageHash := ComputeClaimMessage(params.ChainID, params.BitcoinAddress, params.QBTCAddress)
+	messageHash := ClaimMessageDigest(params.ChainID, params.BitcoinAddress, params.QBTCAddress)
 
 	// Deserialize the proof
 	plonkProof := plonk.NewProof(ecc.BN254)

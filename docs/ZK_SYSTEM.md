@@ -445,7 +445,7 @@ The handler:
 1. Finds the first valid UTXO to determine the proven Bitcoin address string
 2. Resolves the destination (receiver when set, otherwise claimer)
 3. Calls the global verifier with the chain ID, the address, the destination and the supplied `pub_key_hash_sha256`
-4. On success, claims all matching UTXOs by minting tokens and zeroing EntitledAmount
+4. On success, claims the listed UTXOs whose stored address equals that string by minting tokens and zeroing EntitledAmount. UTXOs of the same key at its other address type are skipped, because the signature does not name them
 
 ---
 

@@ -20,7 +20,7 @@ import (
 // callers exercise the production parser. It returns the prover input and the
 // base64 signature.
 func SignClaim(priv *btcec.PrivateKey, chainID, bitcoinAddress, qbtcAddress string) (zk.ProofParams, string, error) {
-	digest := zk.ComputeClaimMessage(chainID, bitcoinAddress, qbtcAddress)
+	digest := zk.ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress)
 	sigBase64 := base64.StdEncoding.EncodeToString(btcecdsa.SignCompact(priv, digest[:], true))
 
 	pub, r, s, err := zk.ParseBIP137Signature(sigBase64, digest)

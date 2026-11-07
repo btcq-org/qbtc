@@ -178,7 +178,7 @@ func BenchmarkProofGeneration(b *testing.B) {
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
 
 	// signClaimForTest needs a *testing.T; do the equivalent inline.
-	digest := ComputeClaimMessage("qbtc-bench-1", p2wpkhAddressForTest(pubKey), "qbtc1benchaddress")
+	digest := ClaimMessageDigest("qbtc-bench-1", p2wpkhAddressForTest(pubKey), "qbtc1benchaddress")
 	pub, r, sScalar, err := ParseBIP137Signature(signCompactBase64(privKey, digest), digest)
 	if err != nil {
 		b.Fatalf("signature: %v", err)
