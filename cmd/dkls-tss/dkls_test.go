@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/stretchr/testify/require"
 	session "github.com/vultisig/go-wrappers/go-dkls/sessions"
@@ -136,10 +138,10 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// ========================================
 	t.Log("Step 3: Computing claim parameters...")
 
-	// Compute address hash from TSS public key
-	addressHash, err := zk.PublicKeyToAddressHash(pubKeyBytes)
-	require.NoError(t, err, "should compute address hash")
-	t.Logf("  Bitcoin address hash: %x", addressHash)
+	tssPubKey, err := btcec.ParsePubKey(pubKeyBytes)
+	require.NoError(t, err)
+	bitcoinAddress := zktest.P2WPKHAddress(tssPubKey)
+	t.Logf("  Bitcoin address: %s", bitcoinAddress)
 
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKeyBytes)
 	require.NoError(t, err, "should compute pubkey SHA256")
@@ -147,11 +149,9 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// Claim parameters
 	claimerAddress := "qbtc1dkls_integration_test_address"
 	chainID := "qbtc-mainnet-1"
-	qbtcAddressHash := zk.HashQBTCAddress(claimerAddress)
-	chainIDHash := zk.ComputeChainIDHash(chainID)
 
-	// Compute the claim message (this is what TSS signs)
-	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
+	// The TSS signs the BIP-137 digest of the claim message
+	messageHash := zk.ClaimMessageDigest(chainID, bitcoinAddress, claimerAddress)
 	t.Logf("  Message hash: %x", messageHash)
 
 	// ========================================
@@ -170,21 +170,11 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	sigR := new(big.Int).SetBytes(sig[:32])
 	sigS := new(big.Int).SetBytes(sig[32:64])
 
-	// Decompress public key to get X, Y coordinates
-	pubKeyX, pubKeyY := secp256k1.DecompressPubkey(pubKeyBytes)
-	require.NotNil(t, pubKeyX, "should decompress public key")
-
 	// ========================================
 	// Step 5: Generate ZK Proof
 	// ========================================
 	t.Log("Step 5: Generating ZK proof...")
-	proof, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:  sigR,
-		SignatureS:  sigS,
-		PublicKeyX:  pubKeyX,
-		PublicKeyY:  pubKeyY,
-		MessageHash: messageHash,
-	})
+	proof, err := prover.GenerateProof(zk.ProofParamsFromSignature(tssPubKey, sigR, sigS, messageHash))
 	require.NoError(t, err, "proof generation should succeed")
 	require.NotEmpty(t, proof)
 	t.Logf("  Proof size: %d bytes", len(proof))
@@ -193,13 +183,13 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// Step 6: Verify Proof
 	// ========================================
 	t.Log("Step 6: Verifying ZK proof...")
-	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
-		MessageHash:      messageHash,
-		AddressHash:      addressHash,
+	valid := zk.VerificationParams{
+		ChainID:          chainID,
+		BitcoinAddress:   bitcoinAddress,
+		QBTCAddress:      claimerAddress,
 		PubKeyHashSHA256: pubKeyHashSHA256,
-		QBTCAddressHash:  qbtcAddressHash,
-		ChainID:          chainIDHash,
-	})
+	}
+	err = zk.VerifyProofGlobal(proof, valid)
 	require.NoError(t, err, "valid proof should verify")
 	t.Log("  ✓ Proof verified successfully!")
 
@@ -209,50 +199,23 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	t.Log("Step 7: Testing attack scenarios...")
 
 	t.Run("front-running attack fails", func(t *testing.T) {
-		// Attacker tries to claim to their address using our proof
-		attackerAddress := "qbtc1attacker_evil"
-		attackerAddressHash := zk.HashQBTCAddress(attackerAddress)
-		attackerMessageHash := zk.ComputeClaimMessage(addressHash, attackerAddressHash, chainIDHash)
-
-		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
-			MessageHash:      attackerMessageHash,
-			AddressHash:      addressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  attackerAddressHash,
-			ChainID:          chainIDHash,
-		})
-		require.Error(t, err, "front-running attack should fail")
+		p := valid
+		p.QBTCAddress = "qbtc1attacker_evil"
+		require.Error(t, zk.VerifyProofGlobal(proof, p), "front-running attack should fail")
 	})
 
 	t.Run("cross-chain replay attack fails", func(t *testing.T) {
-		// Attacker tries to replay proof on different chain
-		differentChainHash := zk.ComputeChainIDHash("evil-chain-1")
-		differentMessageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainHash)
-
-		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
-			MessageHash:      differentMessageHash,
-			AddressHash:      addressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  qbtcAddressHash,
-			ChainID:          differentChainHash,
-		})
-		require.Error(t, err, "cross-chain replay should fail")
+		p := valid
+		p.ChainID = "evil-chain-1"
+		require.Error(t, zk.VerifyProofGlobal(proof, p), "cross-chain replay should fail")
 	})
 
 	t.Run("claiming different BTC address fails", func(t *testing.T) {
-		// Attacker tries to claim a different BTC address
-		differentAddressHash := addressHash
-		differentAddressHash[0] ^= 0xFF // Flip some bits
-		differentMessageHash := zk.ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
-
-		err := zk.VerifyProofGlobal(proof, zk.VerificationParams{
-			MessageHash:      differentMessageHash,
-			AddressHash:      differentAddressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  qbtcAddressHash,
-			ChainID:          chainIDHash,
-		})
-		require.Error(t, err, "claiming different BTC address should fail")
+		other, err := btcec.NewPrivateKey()
+		require.NoError(t, err)
+		p := valid
+		p.BitcoinAddress = zktest.P2WPKHAddress(other.PubKey())
+		require.Error(t, zk.VerifyProofGlobal(proof, p), "claiming different BTC address should fail")
 	})
 
 	t.Log("All tests passed!")
@@ -295,17 +258,22 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 	require.NoError(t, err)
 
 	// Compute claim parameters
-	addressHash, err := zk.PublicKeyToAddressHash(pubKeyBytes)
+	tssPubKey, err := btcec.ParsePubKey(pubKeyBytes)
 	require.NoError(t, err)
+	bitcoinAddress := zktest.P2PKHAddress(tssPubKey)
 
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKeyBytes)
 	require.NoError(t, err)
 
 	claimerAddress := "qbtc1tss_2of3_test"
 	chainID := "qbtc-mainnet-1"
-	qbtcAddressHash := zk.HashQBTCAddress(claimerAddress)
-	chainIDHash := zk.ComputeChainIDHash(chainID)
-	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
+	messageHash := zk.ClaimMessageDigest(chainID, bitcoinAddress, claimerAddress)
+	valid := zk.VerificationParams{
+		ChainID:          chainID,
+		BitcoinAddress:   bitcoinAddress,
+		QBTCAddress:      claimerAddress,
+		PubKeyHashSHA256: pubKeyHashSHA256,
+	}
 
 	// Sign with only 2 of 3 parties (parties 1 and 2)
 	t.Log("Signing with parties 1 and 2 (2-of-3)...")
@@ -316,27 +284,12 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 	sigR := new(big.Int).SetBytes(sig[:32])
 	sigS := new(big.Int).SetBytes(sig[32:64])
 
-	pubKeyX, pubKeyY := secp256k1.DecompressPubkey(pubKeyBytes)
-	require.NotNil(t, pubKeyX)
-
 	// Generate and verify proof
 	t.Log("Generating and verifying ZK proof...")
-	proof, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:  sigR,
-		SignatureS:  sigS,
-		PublicKeyX:  pubKeyX,
-		PublicKeyY:  pubKeyY,
-		MessageHash: messageHash,
-	})
+	proof, err := prover.GenerateProof(zk.ProofParamsFromSignature(tssPubKey, sigR, sigS, messageHash))
 	require.NoError(t, err)
 
-	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
-		MessageHash:      messageHash,
-		AddressHash:      addressHash,
-		PubKeyHashSHA256: pubKeyHashSHA256,
-		QBTCAddressHash:  qbtcAddressHash,
-		ChainID:          chainIDHash,
-	})
+	err = zk.VerifyProofGlobal(proof, valid)
 	require.NoError(t, err, "2-of-3 TSS proof should verify")
 
 	// Sign with different parties (parties 2 and 3)
@@ -348,22 +301,10 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 	sigR2 := new(big.Int).SetBytes(sig2[:32])
 	sigS2 := new(big.Int).SetBytes(sig2[32:64])
 
-	proof2, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:  sigR2,
-		SignatureS:  sigS2,
-		PublicKeyX:  pubKeyX,
-		PublicKeyY:  pubKeyY,
-		MessageHash: messageHash,
-	})
+	proof2, err := prover.GenerateProof(zk.ProofParamsFromSignature(tssPubKey, sigR2, sigS2, messageHash))
 	require.NoError(t, err)
 
-	err = zk.VerifyProofGlobal(proof2, zk.VerificationParams{
-		MessageHash:      messageHash,
-		AddressHash:      addressHash,
-		PubKeyHashSHA256: pubKeyHashSHA256,
-		QBTCAddressHash:  qbtcAddressHash,
-		ChainID:          chainIDHash,
-	})
+	err = zk.VerifyProofGlobal(proof2, valid)
 	require.NoError(t, err, "different 2-of-3 combination should also verify")
 
 	t.Log("2-of-3 TSS + ZK proof test passed!")

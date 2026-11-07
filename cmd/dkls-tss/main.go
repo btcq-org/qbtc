@@ -11,7 +11,8 @@ import (
 	"strings"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
+	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
+	"github.com/btcsuite/btcd/btcec/v2"
 	session "github.com/vultisig/go-wrappers/go-dkls/sessions"
 )
 
@@ -209,26 +210,27 @@ func main() {
 	}
 	fmt.Printf("  ✓ Shared public key (compressed): %x\n", pubKeyBytes)
 
-	// Step 2: Compute address hash from TSS public key
-	fmt.Println("\nStep 2: Computing Bitcoin address hash from TSS public key...")
-	addressHash, err := zk.PublicKeyToAddressHash(pubKeyBytes)
+	// Step 2: Derive the Bitcoin address from the TSS public key
+	fmt.Println("\nStep 2: Deriving Bitcoin address from TSS public key...")
+	tssPubKey, err := btcec.ParsePubKey(pubKeyBytes)
 	if err != nil {
-		log.Fatalf("Failed to compute address hash: %v", err)
+		log.Fatalf("Failed to parse public key: %v", err)
 	}
-	fmt.Printf("  ✓ Bitcoin address hash (Hash160): %x\n", addressHash)
+	bitcoinAddress := zktest.P2WPKHAddress(tssPubKey)
+	fmt.Printf("  ✓ Bitcoin address: %s\n", bitcoinAddress)
 
 	// Step 3: Prepare claim parameters
 	fmt.Println("\nStep 3: Preparing claim parameters...")
 	claimerAddress := "qbtc1dklstss_demo_claimer"
 	chainID := "qbtc-mainnet-1"
-	qbtcAddressHash := zk.HashQBTCAddress(claimerAddress)
-	chainIDHash := zk.ComputeChainIDHash(chainID)
 	fmt.Printf("  ✓ Claimer address: %s\n", claimerAddress)
 	fmt.Printf("  ✓ Chain ID: %s\n", chainID)
 
-	// Compute the claim message (this is what TSS signs)
-	messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-	fmt.Printf("  ✓ Message hash to sign: %x\n", messageHash)
+	// The claim message a wallet user would sign; the TSS signs its BIP-137 digest
+	messageText := zk.ClaimMessageText(chainID, bitcoinAddress, claimerAddress)
+	messageHash := zk.BitcoinSignedMessageDigest(messageText)
+	fmt.Printf("  ✓ Claim message: %s\n", messageText)
+	fmt.Printf("  ✓ Digest to sign: %x\n", messageHash)
 
 	// Step 4: Sign with TSS
 	fmt.Println("\nStep 4: Signing claim message with 2-of-2 TSS...")
@@ -249,13 +251,10 @@ func main() {
 	fmt.Printf("  ✓ R: %s\n", sigR.Text(16))
 	fmt.Printf("  ✓ S: %s\n", sigS.Text(16))
 
-	// Decompress public key to get X, Y coordinates
-	pubKeyX, pubKeyY := secp256k1.DecompressPubkey(pubKeyBytes)
-	if pubKeyX == nil {
-		log.Fatal("Failed to decompress public key")
+	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKeyBytes)
+	if err != nil {
+		log.Fatalf("Failed to hash public key: %v", err)
 	}
-	fmt.Printf("  ✓ Public key X: %s\n", pubKeyX.Text(16))
-	fmt.Printf("  ✓ Public key Y: %s\n", pubKeyY.Text(16))
 
 	// Step 5: Generate ZK proof
 	fmt.Println("\nStep 5: Setting up ZK prover and generating proof...")
@@ -280,13 +279,7 @@ func main() {
 
 	// Create prover and generate proof
 	prover := zk.ProverFromSetup(setup)
-	proof, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:  sigR,
-		SignatureS:  sigS,
-		PublicKeyX:  pubKeyX,
-		PublicKeyY:  pubKeyY,
-		MessageHash: messageHash,
-	})
+	proof, err := prover.GenerateProof(zk.ProofParamsFromSignature(tssPubKey, sigR, sigS, messageHash))
 	if err != nil {
 		log.Fatalf("Proof generation failed: %v", err)
 	}
@@ -295,10 +288,10 @@ func main() {
 	// Step 6: Verify proof
 	fmt.Println("\nStep 6: Verifying ZK proof...")
 	err = zk.VerifyProofGlobal(proof, zk.VerificationParams{
-		MessageHash:     messageHash,
-		AddressHash:     addressHash,
-		QBTCAddressHash: qbtcAddressHash,
-		ChainID:         chainIDHash,
+		ChainID:          chainID,
+		BitcoinAddress:   bitcoinAddress,
+		QBTCAddress:      claimerAddress,
+		PubKeyHashSHA256: pubKeyHashSHA256,
 	})
 	if err != nil {
 		log.Fatalf("Proof verification failed: %v", err)

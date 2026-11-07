@@ -1,11 +1,15 @@
 package proofservice
 
 import (
-	"crypto/sha256"
+	"context"
+	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
 	"github.com/btcsuite/btcd/btcec/v2"
-	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
+	"github.com/rs/zerolog"
 )
 
 // fixed, non-secret test key
@@ -16,74 +20,74 @@ var testPrivKeyBytes = []byte{
 	0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
 }
 
-// signFixture signs hash with the fixed test key and returns the pubkey and the
-// 32-byte big-endian r and s components.
-func signFixture(t *testing.T, hash []byte) (*btcec.PublicKey, []byte, []byte) {
-	t.Helper()
+func TestGenerateProof_RejectsNonCanonicalBitcoinAddress(t *testing.T) {
+	svc := &Service{logger: zerolog.Nop()}
+	req := ProveRequest{
+		Signature:      "H0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000=",
+		BitcoinAddress: strings.ToUpper("bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc"),
+		ClaimerAddress: "qbtc1claimer",
+		UTXOs:          []types.UTXORef{{Txid: "00", Vout: 0}},
+	}
+
+	resp, status, errResp := svc.generateProof(context.Background(), req)
+	if resp != nil || status != http.StatusBadRequest || errResp == nil {
+		t.Fatalf("expected 400 with error, got resp=%v status=%d err=%v", resp, status, errResp)
+	}
+	if errResp.Code != "INVALID_REQUEST" || !strings.Contains(errResp.Details, "exactly as stored") {
+		t.Fatalf("unexpected error response: %+v", errResp)
+	}
+}
+
+// TestGenerateProof_RejectsBadSignatures covers the checks that run before the
+// expensive prove step. The service has no proving key, so a request that got
+// past them would panic instead of returning one of these errors.
+func TestGenerateProof_RejectsBadSignatures(t *testing.T) {
+	const (
+		chainID = "qbtc-1"
+		claimer = "qbtc1claimer"
+	)
 	priv, pub := btcec.PrivKeyFromBytes(testPrivKeyBytes)
-	sig := btcecdsa.Sign(priv, hash)
-	r := sig.R()
-	s := sig.S()
-	rb := r.Bytes()
-	sb := s.Bytes()
-	return pub, rb[:], sb[:]
-}
+	address := zktest.P2WPKHAddress(pub)
 
-func TestVerifyECDSASignature_Valid(t *testing.T) {
-	hash := sha256.Sum256([]byte("claim message"))
-	pub, rb, sb := signFixture(t, hash[:])
-
-	if err := verifyECDSASignature(pub, hash[:], rb, sb); err != nil {
-		t.Fatalf("valid signature rejected: %v", err)
+	sign := func(key *btcec.PrivateKey, destination string) string {
+		t.Helper()
+		_, signature, err := zktest.SignClaim(key, chainID, address, destination)
+		if err != nil {
+			t.Fatalf("sign claim: %v", err)
+		}
+		return signature
 	}
-}
+	otherKeyBytes := append([]byte(nil), testPrivKeyBytes...)
+	otherKeyBytes[31] ^= 0x01
+	otherPriv, _ := btcec.PrivKeyFromBytes(otherKeyBytes)
 
-func TestVerifyECDSASignature_WrongMessage(t *testing.T) {
-	hash := sha256.Sum256([]byte("claim message"))
-	pub, rb, sb := signFixture(t, hash[:])
-
-	other := sha256.Sum256([]byte("different message"))
-	if err := verifyECDSASignature(pub, other[:], rb, sb); err == nil {
-		t.Fatal("expected verification to fail for a different message")
+	tests := []struct {
+		name      string
+		signature string
+		wantCode  string
+	}{
+		{"missing signature", "", "INVALID_REQUEST"},
+		{"not base64", "not-base64!", "INVALID_SIGNATURE"},
+		{"wrong length", "AAAA", "INVALID_SIGNATURE"},
+		{"signed for another destination", sign(priv, "qbtc1attacker"), "ADDRESS_MISMATCH"},
+		{"signed by another key", sign(otherPriv, claimer), "ADDRESS_MISMATCH"},
 	}
-}
-
-func TestVerifyECDSASignature_WrongPubKey(t *testing.T) {
-	hash := sha256.Sum256([]byte("claim message"))
-	_, rb, sb := signFixture(t, hash[:])
-
-	// A different key that did not produce the signature.
-	otherBytes := make([]byte, 32)
-	copy(otherBytes, testPrivKeyBytes)
-	otherBytes[31] ^= 0x01
-	_, otherPub := btcec.PrivKeyFromBytes(otherBytes)
-
-	if err := verifyECDSASignature(otherPub, hash[:], rb, sb); err == nil {
-		t.Fatal("expected verification to fail for the wrong public key")
-	}
-}
-
-func TestVerifyECDSASignature_TamperedS(t *testing.T) {
-	hash := sha256.Sum256([]byte("claim message"))
-	pub, rb, sb := signFixture(t, hash[:])
-
-	tampered := make([]byte, len(sb))
-	copy(tampered, sb)
-	tampered[31] ^= 0x01
-	if err := verifyECDSASignature(pub, hash[:], rb, tampered); err == nil {
-		t.Fatal("expected verification to fail for a tampered s value")
-	}
-}
-
-func TestVerifyECDSASignature_ZeroComponents(t *testing.T) {
-	hash := sha256.Sum256([]byte("claim message"))
-	pub, rb, sb := signFixture(t, hash[:])
-	zero := make([]byte, 32)
-
-	if err := verifyECDSASignature(pub, hash[:], zero, sb); err == nil {
-		t.Fatal("expected error for zero r")
-	}
-	if err := verifyECDSASignature(pub, hash[:], rb, zero); err == nil {
-		t.Fatal("expected error for zero s")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{logger: zerolog.Nop()}
+			resp, status, errResp := svc.generateProof(context.Background(), ProveRequest{
+				Signature:      tc.signature,
+				BitcoinAddress: address,
+				ClaimerAddress: claimer,
+				ChainID:        chainID,
+				UTXOs:          []types.UTXORef{{Txid: "00", Vout: 0}},
+			})
+			if resp != nil || status != http.StatusBadRequest || errResp == nil {
+				t.Fatalf("expected 400 with error, got resp=%v status=%d err=%v", resp, status, errResp)
+			}
+			if errResp.Code != tc.wantCode {
+				t.Fatalf("expected code %s, got %+v", tc.wantCode, errResp)
+			}
+		})
 	}
 }

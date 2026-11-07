@@ -37,26 +37,6 @@ func FuzzBitcoinAddressToHash160(f *testing.F) {
 	})
 }
 
-// FuzzAddressHashFromHex tests address hash hex parsing.
-func FuzzAddressHashFromHex(f *testing.F) {
-	// Add seed corpus
-	f.Add("")
-	f.Add("00")
-	f.Add("0000000000000000000000000000000000000001")  // Valid
-	f.Add("000000000000000000000000000000000000000")   // 19 bytes
-	f.Add("00000000000000000000000000000000000000001") // 21 bytes
-	f.Add("gg")                                        // Invalid hex
-
-	f.Fuzz(func(t *testing.T, hexStr string) {
-		// Should never panic
-		_, err := AddressHashFromHex(hexStr)
-		if err != nil {
-			// If error, just return
-			return
-		}
-	})
-}
-
 // FuzzDeserializeVerifyingKey tests VK deserialization with random inputs.
 func FuzzDeserializeVerifyingKey(f *testing.F) {
 	// Add seed corpus

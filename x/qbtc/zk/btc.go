@@ -2,7 +2,6 @@ package zk
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -45,28 +44,6 @@ func PublicKeyToAddressHash(compressedPubKey []byte) ([20]byte, error) {
 	return result, nil
 }
 
-// AddressHashFromHex parses a hex-encoded address hash
-func AddressHashFromHex(hexStr string) ([20]byte, error) {
-	var result [20]byte
-
-	decoded, err := hex.DecodeString(hexStr)
-	if err != nil {
-		return result, fmt.Errorf("invalid hex: %w", err)
-	}
-
-	if len(decoded) != 20 {
-		return result, fmt.Errorf("invalid address hash length: %d", len(decoded))
-	}
-
-	copy(result[:], decoded)
-	return result, nil
-}
-
-// AddressHashToHex converts an address hash to hex string
-func AddressHashToHex(hash [20]byte) string {
-	return hex.EncodeToString(hash[:])
-}
-
 // Hash160ToP2PKHAddress converts a Hash160 to a P2PKH Bitcoin address (mainnet)
 func Hash160ToP2PKHAddress(hash [20]byte) (string, error) {
 	addr, err := btcutil.NewAddressPubKeyHash(hash[:], &chaincfg.MainNetParams)
@@ -74,6 +51,21 @@ func Hash160ToP2PKHAddress(hash [20]byte) (string, error) {
 		return "", fmt.Errorf("failed to create address: %w", err)
 	}
 	return addr.EncodeAddress(), nil
+}
+
+// CheckBitcoinAddressCanonical returns an error unless address is spelled
+// exactly as the chain stores it, which is the encoding btcutil produces.
+// Bech32 decodes case-insensitively, so "BC1Q..." is a valid address whose
+// claim text would never match the lowercase string on the UTXO.
+func CheckBitcoinAddressCanonical(address string) error {
+	addr, err := btcutil.DecodeAddress(address, &chaincfg.MainNetParams)
+	if err != nil {
+		return fmt.Errorf("invalid Bitcoin address: %w", err)
+	}
+	if canonical := addr.EncodeAddress(); canonical != address {
+		return fmt.Errorf("address must be written as %q, exactly as stored on the UTXO", canonical)
+	}
+	return nil
 }
 
 // BitcoinAddressToHash160 extracts the Hash160 from P2PKH or P2WPKH Bitcoin addresses.

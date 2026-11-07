@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"math/big"
 
 	sdkmath "cosmossdk.io/math"
 
-	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	clitestutil "github.com/cosmos/cosmos-sdk/testutil/cli"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -17,6 +15,7 @@ import (
 	qbtcclitestutil "github.com/btcq-org/qbtc/x/qbtc/client/testutil"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
+	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
 )
 
 // TestClaimWithProofCmd drives the `tx qbtc claim-with-proof` command through
@@ -81,34 +80,18 @@ func (s *E2ETestSuite) TestClaimWithProofCmd() {
 	}
 }
 
-// buildClaimMsg signs the binding message with the test BTC key, generates a
-// PLONK proof, and assembles the MsgClaimWithProof for the given claimer.
+// buildClaimMsg signs the claim message with the test BTC key the way a wallet
+// would, generates a PLONK proof, and assembles the MsgClaimWithProof for the
+// given claimer.
 func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *types.MsgClaimWithProof {
-	qbtcAddressHash := zk.HashQBTCAddress(claimer)
-	chainIDHash := zk.ComputeChainIDHash(s.cfg.ChainID)
-	messageHash := zk.ComputeClaimMessage(s.addressHash, qbtcAddressHash, chainIDHash)
+	params, _, err := zktest.SignClaim(s.btcPrivKey, s.cfg.ChainID, s.btcAddress, claimer)
+	s.Require().NoError(err)
 
-	// TSS-equivalent ECDSA signature over the binding message. Read the
-	// scalars straight off the signature object — going through Serialize +
-	// hand-rolled DER parsing would risk a panic on malformed input.
-	sig := ecdsa.Sign(s.btcPrivKey, messageHash[:])
-	rScalar, sScalar := sig.R(), sig.S()
-	rBytes, sBytes := rScalar.Bytes(), sScalar.Bytes()
-	sigR := new(big.Int).SetBytes(rBytes[:])
-	sigS := new(big.Int).SetBytes(sBytes[:])
-
-	pubKey := s.btcPrivKey.PubKey()
-	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKey.SerializeCompressed())
+	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(s.btcPrivKey.PubKey().SerializeCompressed())
 	s.Require().NoError(err)
 
 	prover := zk.ProverFromSetup(s.setup)
-	proofBytes, err := prover.GenerateProof(zk.ProofParams{
-		SignatureR:  sigR,
-		SignatureS:  sigS,
-		PublicKeyX:  pubKey.X(),
-		PublicKeyY:  pubKey.Y(),
-		MessageHash: messageHash,
-	})
+	proofBytes, err := prover.GenerateProof(params)
 	s.Require().NoError(err)
 
 	return &types.MsgClaimWithProof{
@@ -116,10 +99,7 @@ func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *typ
 		Broadcaster:      claimer,
 		Utxos:            utxos,
 		Proof:            hex.EncodeToString(proofBytes),
-		MessageHash:      hex.EncodeToString(messageHash[:]),
-		AddressHash:      hex.EncodeToString(s.addressHash[:]),
 		PubKeyHashSha256: hex.EncodeToString(pubKeyHashSHA256[:]),
-		QbtcAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
 	}
 }
 
@@ -164,4 +144,3 @@ func (s *E2ETestSuite) queryBalance(addr, denom string) sdkmath.Int {
 	}
 	return res.Balance.Amount
 }
-

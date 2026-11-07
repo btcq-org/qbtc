@@ -23,8 +23,8 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                         USER DOMAIN                              │
 ├─────────────────────────────────────────────────────────────────┤
-│  TSS/MPC Signer  ──▶  zkprover CLI  ──▶  PLONK Proof            │
-│                       (hides signature)                          │
+│  Wallet / TSS    ──▶  zkprover CLI  ──▶  PLONK Proof            │
+│  (BIP-137 sig)        (hides signature)                          │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │
                                 ▼ Submit MsgClaimWithProof

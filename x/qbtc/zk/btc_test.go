@@ -1,22 +1,23 @@
 package zk
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestHashQBTCAddress(t *testing.T) {
-	// Hash should be deterministic
-	addr := "qbtc1abc123"
-	hash1 := HashQBTCAddress(addr)
-	hash2 := HashQBTCAddress(addr)
-	require.Equal(t, hash1, hash2)
+func TestCheckBitcoinAddressCanonical(t *testing.T) {
+	const p2wpkh = "bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc"
+	const p2pkh = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
 
-	// Different addresses should produce different hashes
-	hash3 := HashQBTCAddress("qbtc1xyz789")
-	require.NotEqual(t, hash1, hash3)
+	require.NoError(t, CheckBitcoinAddressCanonical(p2wpkh))
+	require.NoError(t, CheckBitcoinAddressCanonical(p2pkh))
 
-	// Hash should be 32 bytes (SHA256)
-	require.Len(t, hash1, 32)
+	err := CheckBitcoinAddressCanonical(strings.ToUpper(p2wpkh))
+	require.Error(t, err, "uppercase bech32 decodes but is not what the chain stores")
+	require.Contains(t, err.Error(), p2wpkh)
+
+	require.Error(t, CheckBitcoinAddressCanonical("bc1qnotanaddress"))
+	require.Error(t, CheckBitcoinAddressCanonical(""))
 }

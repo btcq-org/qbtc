@@ -1,51 +1,53 @@
 package zk
 
 import (
-	"crypto/sha256"
+	"bytes"
+	"strings"
+
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
 )
 
-// ClaimMessageVersion is the version string included in the claim message
-// to ensure forward compatibility and prevent cross-version replay attacks.
+// ClaimMessageVersion is the first field of the claim message text. Bumping it
+// invalidates every signature made under the previous text layout.
 const ClaimMessageVersion = "qbtc-claim-v1"
 
-// ClaimTagECDSAHash160 is the domain-separation prefix for claims proved by
-// the BTCPubKeyOwnershipCircuit: ECDSA signature over a Hash160 pubkey
-// commitment (covers P2PKH and P2WPKH). A future circuit over a different
-// pubkey commitment shape — e.g. Schnorr + x-only for Taproot, or ECDSA over
-// a script hash for P2SH/P2WSH — must use a distinct tag to prevent
-// cross-circuit replay.
-const ClaimTagECDSAHash160 = "ecdsa-hash160:"
+// bitcoinSignedMessageMagic is the prefix every Bitcoin wallet prepends when
+// signing a text message (BIP-137). It guarantees the signed digest can never
+// be a valid transaction hash.
+const bitcoinSignedMessageMagic = "Bitcoin Signed Message:\n"
 
-// ComputeClaimMessage computes the deterministic message hash for a claim.
-// This message is what needs to be signed by the TSS signer.
+// ClaimMessageText is the exact text a user signs in their Bitcoin wallet:
 //
-// The message format is:
+//	qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>
 //
-//	SHA256("ecdsa-hash160:" || AddressHash || QBTCAddressHash || ChainID || "qbtc-claim-v1")
-//
-// This binds the signature to:
-//   - The circuit family (prevents cross-circuit replay)
-//   - The Bitcoin address being claimed (AddressHash)
-//   - The destination qbtc address (QBTCAddressHash)
-//   - The chain ID (prevents cross-chain replay)
-//   - A version string (prevents cross-version replay)
-func ComputeClaimMessage(addressHash [20]byte, qbtcAddressHash [32]byte, chainID [8]byte) [32]byte {
-	prefix := []byte(ClaimTagECDSAHash160)
-	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
-	data = append(data, prefix...)
-	data = append(data, addressHash[:]...)
-	data = append(data, qbtcAddressHash[:]...)
-	data = append(data, chainID[:]...)
-	data = append(data, []byte(ClaimMessageVersion)...)
-
-	// Hash the concatenation
-	return sha256.Sum256(data)
+// The Bitcoin address must be the string stored on the UTXO being claimed,
+// byte for byte. The destination is the receiver when set, else the claimer.
+// Neither address alphabet (base58, bech32) contains '|', so the text parses
+// unambiguously even if the chain ID contains one.
+func ClaimMessageText(chainID, bitcoinAddress, qbtcAddress string) string {
+	return strings.Join([]string{ClaimMessageVersion, chainID, bitcoinAddress, qbtcAddress}, "|")
 }
 
-// VerifyClaimMessage checks that a message hash matches the expected claim message.
-// This is used by the verifier to ensure the proof is bound to the correct parameters.
-func VerifyClaimMessage(messageHash [32]byte, addressHash [20]byte, qbtcAddressHash [32]byte, chainID [8]byte) bool {
-	expected := ComputeClaimMessage(addressHash, qbtcAddressHash, chainID)
-	return messageHash == expected
+// BitcoinSignedMessageDigest returns the BIP-137 digest of text:
+//
+//	SHA256d(varstr("Bitcoin Signed Message:\n") || varstr(text))
+//
+// This is the value Bitcoin Core, Electrum, Sparrow, Ledger and Trezor sign
+// for a message, and the ECDSA message scalar the claim circuit verifies.
+func BitcoinSignedMessageDigest(text string) [32]byte {
+	var buf bytes.Buffer
+	// bytes.Buffer writes never fail.
+	_ = wire.WriteVarString(&buf, 0, bitcoinSignedMessageMagic)
+	_ = wire.WriteVarString(&buf, 0, text)
+	var digest [32]byte
+	copy(digest[:], chainhash.DoubleHashB(buf.Bytes()))
+	return digest
 }
 
+// ClaimMessageDigest returns the digest the claim signature must cover. The
+// verifier recomputes it natively from on-chain data, which binds the proof to
+// the chain, the Bitcoin address being claimed and the destination address.
+func ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress string) [32]byte {
+	return BitcoinSignedMessageDigest(ClaimMessageText(chainID, bitcoinAddress, qbtcAddress))
+}

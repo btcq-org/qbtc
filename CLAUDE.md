@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**qbtc** is a Cosmos SDK blockchain that lets Bitcoin holders claim tokens by proving ownership of their Bitcoin addresses using zero-knowledge proofs (PLONK). It supports P2PKH and P2WPKH Bitcoin addresses. The ZK approach is TSS/MPC-compatible — users only need a signature (r, s, pubkey), not direct private key access.
+**qbtc** is a Cosmos SDK blockchain that lets Bitcoin holders claim tokens by proving ownership of their Bitcoin addresses using zero-knowledge proofs (PLONK). It supports P2PKH and P2WPKH Bitcoin addresses. The user signs a BIP-137 "Bitcoin Signed Message" in any wallet (or a TSS/MPC signer signs its digest); the proof hides the signature and public key.
 
 ## Commands
 
@@ -140,8 +140,8 @@ make release
 
 ```
 Off-chain:
-  TSS/MPC Signer → ECDSA signature
-  zkprover CLI   → PLONK proof (hides sig & pubkey)
+  Wallet or TSS  → BIP-137 signature of "qbtc-claim-v1|<chain-id>|<btc addr>|<qbtc dest>"
+  zkprover CLI   → recovers pubkey, PLONK proof (hides sig & pubkey), MsgClaimWithProof JSON
                           ↓
 On-chain (x/qbtc module):
   MsgClaimWithProof → ZK Verifier → BankKeeper.MintCoins
@@ -156,7 +156,7 @@ Background:
 |---|---|
 | `app/` | Cosmos SDK app wiring; all module keepers connected here |
 | `x/qbtc/keeper/` | Core state: UTXOs, claims, ZK verifying key; handles `MsgClaimWithProof` |
-| `x/qbtc/zk/` | ZK proof system: five circuits, PLONK verifier, trusted setup |
+| `x/qbtc/zk/` | ZK proof system: ownership circuit, BIP-137 claim message, PLONK verifier, trusted setup |
 | `x/qbtc/btcreader/` | In-process Bitcoin reader and vote-extension handling inside the validator node |
 | `bitcoin/` | Bitcoin RPC client for UTXO indexing |
 | `cmd/zkprover/` | CLI tool users run to generate proofs locally |
@@ -164,7 +164,7 @@ Background:
 
 ### ZK Circuit Design
 
-`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). Proofs are bound to `(destination address, chain ID, version)` to prevent replay and front-running.
+`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). The signed message is the BIP-137 digest of `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination>`, derived natively by both prover and verifier, so proofs are bound to the chain, the address and the destination without the circuit knowing the format.
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 
@@ -176,8 +176,8 @@ Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-p
 
 `MsgClaimWithProof` →
 1. `ValidateBasic()` — syntax checks
-2. `zk.Verifier.VerifyProof()` — PLONK verification against stored VK
-3. `Keeper.Utxoes.Get()` — look up UTXO(s) and check `EntitledAmount > 0`
+2. `Keeper.Utxoes.Get()` — look up the first claimable UTXO for its Bitcoin address string
+3. `zk.Verifier.VerifyProof()` — rebuild the claim digest from (chain ID, address, receiver-or-claimer), check `RIPEMD160(pub_key_hash_sha256)` against the address, PLONK verification against stored VK
 4. `BankKeeper.MintCoins()` — mint to claimer's address
 5. Set `EntitledAmount = 0` on the UTXO (idempotency guard)
 

@@ -21,7 +21,7 @@ import (
 
 // SignRequest is the JSON request body for the /sign endpoint
 type SignRequest struct {
-	MessageHash string `json:"message_hash"` // 32-byte message hash in hex (64 chars)
+	MessageHash string `json:"message_hash"` // 32-byte digest to sign, in hex (64 chars)
 }
 
 // SignatureData contains the ECDSA signature components
@@ -168,7 +168,9 @@ func main() {
 		Short: "TSS Emulator - A threshold signature scheme emulator for testing",
 		Long: `TSS Emulator is an HTTP service that emulates a Threshold Signature Scheme (TSS) signer.
 It exposes only a signing API endpoint while keeping the private key internal.
-This is used for testing and development of the signature-based ZK proof system.
+This is used for testing and development of the signature-based ZK proof system:
+zkprover sends it the 32-byte BIP-137 digest of the claim message and it returns
+the ECDSA signature a wallet would have produced.
 
 The emulator accepts a private key via flag or environment variable (TSS_PRIVATE_KEY)
 and provides a /sign endpoint that returns ECDSA signatures.`,

@@ -1,15 +1,10 @@
-// Package main provides a CLI tool for generating ZK proofs
-// to claim airdrops on the qbtc chain using TSS-compatible signatures.
+// Package main provides a CLI tool for generating ZK proofs to claim UTXOs on
+// the qbtc chain from a Bitcoin wallet's signed message.
 package main
 
 import (
-	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
-	"math/big"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -21,22 +16,28 @@ import (
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "zkprover",
-		Short: "ZK Proof Generator for qbtc airdrop claims (TSS compatible)",
-		Long: `zkprover is a CLI tool for generating zero-knowledge proofs
-that prove ownership of a Bitcoin address using ECDSA signatures.
-These proofs can be used to claim airdrops on the qbtc chain.
+		Short: "ZK proof generator for qbtc claims",
+		Long: `zkprover generates zero-knowledge proofs that prove ownership of a
+Bitcoin address from a signed message, so the UTXOs of that address can be
+claimed on the qbtc chain.
 
-This tool is TSS/MPC compatible - it only requires a signature, not
-direct access to the private key. The proof hides both the signature
-and public key from on-chain observers.
+Flow:
+  1. zkprover message ...      prints the text to sign
+  2. sign that text in your Bitcoin wallet ("Sign message", BIP-137)
+  3. zkprover prove --signature <base64> ...
+  4. qbtcd tx qbtc claim-with-proof <output file> --from <key>
+
+Any wallet that signs messages works (Electrum, Sparrow, Ledger, Trezor,
+Bitcoin Core for legacy addresses). A TSS/MPC signer can be used instead
+with --tss-url. The proof hides both the signature and the public key.
 
 Uses PLONK proof system with Hermez Powers of Tau ceremony SRS.`,
 	}
 
 	rootCmd.AddCommand(
 		setupCmd(),
+		messageCmd(),
 		proveCmd(),
-		addressCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -159,294 +160,187 @@ Use --test flag only for development/testing with an unsafe test SRS.`,
 	return cmd
 }
 
-// proveCmd creates the prove command for TSS-compatible proof generation
+// addTargetFlags adds the flags that identify what is being claimed.
+func addTargetFlags(cmd *cobra.Command, t *claimTarget) {
+	cmd.Flags().StringVar(&t.chainID, "chain-id", "", "Chain ID of the qbtc chain (required, e.g. 'qbtc-1')")
+	cmd.Flags().StringVar(&t.bitcoinAddress, "bitcoin-address", "", "Bitcoin address being claimed, exactly as stored on the UTXO (required, P2PKH or P2WPKH)")
+	cmd.Flags().StringVar(&t.claimer, "claimer", "", "qbtc address that claims the UTXOs (required)")
+	cmd.Flags().StringVar(&t.receiver, "receiver", "", "qbtc address that receives the coins instead of the claimer (optional)")
+}
+
+func (c *claimTarget) validate() error {
+	switch {
+	case c.chainID == "":
+		return fmt.Errorf("--chain-id is required")
+	case c.bitcoinAddress == "":
+		return fmt.Errorf("--bitcoin-address is required")
+	case c.claimer == "":
+		return fmt.Errorf("--claimer is required")
+	}
+	if _, err := zk.BitcoinAddressToHash160(c.bitcoinAddress); err != nil {
+		return fmt.Errorf("--bitcoin-address: %w", err)
+	}
+	if err := zk.CheckBitcoinAddressCanonical(c.bitcoinAddress); err != nil {
+		return fmt.Errorf("--bitcoin-address: %w", err)
+	}
+	return nil
+}
+
+// messageCmd prints the exact text the user must sign in their wallet.
+func messageCmd() *cobra.Command {
+	var target claimTarget
+
+	cmd := &cobra.Command{
+		Use:   "message",
+		Short: "Print the claim message to sign in your Bitcoin wallet",
+		Long: `Print the exact text to sign with your Bitcoin wallet's "Sign message"
+feature (BIP-137). Sign it with the key of --bitcoin-address, then pass the
+base64 signature to 'zkprover prove --signature'.
+
+The text is printed on stdout; the BIP-137 digest a TSS signer would sign is
+printed on stderr.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := target.validate(); err != nil {
+				return err
+			}
+			digest := target.digest()
+			fmt.Fprintf(os.Stderr, "Digest (for TSS signers): %s\n", hex.EncodeToString(digest[:]))
+			fmt.Println(target.messageText())
+			return nil
+		},
+	}
+	addTargetFlags(cmd, &target)
+	return cmd
+}
+
+// proveCmd generates the proof and writes a ready-to-submit MsgClaimWithProof.
 func proveCmd() *cobra.Command {
 	var (
-		tssURL         string
-		qbtcAddress    string
-		chainID        string
-		addressHashHex string
-		setupDir       string
-		outputFile     string
+		target     claimTarget
+		utxoFlags  []string
+		signature  string
+		tssURL     string
+		setupDir   string
+		outputFile string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "prove",
-		Short: "Generate a ZK proof using TSS signer (no private key required)",
-		Long: `Generate a zero-knowledge proof using a TSS (Threshold Signature Scheme) signer.
-This command is compatible with MPC/TSS systems that cannot reveal private keys.
+		Short: "Generate a ZK proof from a signed claim message",
+		Long: `Generate a zero-knowledge proof of Bitcoin address ownership from a signed
+claim message, and write the MsgClaimWithProof JSON that
+'qbtcd tx qbtc claim-with-proof' submits.
 
-The command will:
-1. Compute the claim message hash
-2. Request a signature from the TSS signer API
-3. Generate a ZK proof that the signature is valid for the claimed address
+The signature comes from one of:
+  --signature <base64>   a BIP-137 signature of 'zkprover message' output,
+                         made by your Bitcoin wallet
+  --tss-url <url>        a TSS/MPC signer exposing POST /sign; it signs the
+                         32-byte BIP-137 digest of the claim message
 
-The proof proves ownership without revealing the signature or public key.`,
+The proof hides the signature and public key; only SHA256 of the compressed
+public key is revealed, which the chain checks against the address.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if tssURL == "" {
-				return fmt.Errorf("--tss-url is required")
+			if err := target.validate(); err != nil {
+				return err
 			}
-			if qbtcAddress == "" {
-				return fmt.Errorf("--qbtc-address is required")
+			if len(utxoFlags) == 0 {
+				return fmt.Errorf("at least one --utxo txid:vout is required")
 			}
-			if chainID == "" {
-				return fmt.Errorf("--chain-id is required")
+			for _, u := range utxoFlags {
+				ref, err := parseUTXORef(u)
+				if err != nil {
+					return err
+				}
+				target.utxos = append(target.utxos, ref)
 			}
-			if addressHashHex == "" {
-				return fmt.Errorf("--address-hash is required (Hash160 of your Bitcoin address)")
-			}
-
-			// Parse address hash
-			addressHash, err := zk.AddressHashFromHex(addressHashHex)
-			if err != nil {
-				return fmt.Errorf("invalid address hash: %w", err)
+			if (signature == "") == (tssURL == "") {
+				return fmt.Errorf("exactly one of --signature or --tss-url is required; run 'zkprover message' to get the text to sign")
 			}
 
-			// Compute btcq address hash for binding
-			qbtcAddressHash := zk.HashQBTCAddress(qbtcAddress)
+			fmt.Fprintf(os.Stderr, "Claim message: %s\n", target.messageText())
 
-			// Compute chain ID hash
-			chainIDHash := zk.ComputeChainIDHash(chainID)
+			var (
+				params zk.ProofParams
+				pubKey *btcec.PublicKey
+				err    error
+			)
+			if signature != "" {
+				params, pubKey, err = signatureFromWallet(target, signature)
+				if err != nil {
+					return fmt.Errorf("invalid wallet signature: %w", err)
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "Requesting signature from TSS at %s...\n", tssURL)
+				params, pubKey, err = signatureFromTSS(target, tssURL)
+				if err != nil {
+					return err
+				}
+			}
+			if err := zk.CheckPubKeyOwnsAddress(pubKey, target.bitcoinAddress); err != nil {
+				return fmt.Errorf("signature was not made by the key of %s: %w", target.bitcoinAddress, err)
+			}
+			fmt.Fprintln(os.Stderr, "Signature verified against the Bitcoin address")
 
-			// Compute the claim message that TSS needs to sign
-			messageHash := zk.ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-			fmt.Printf("Message to sign: %s\n", hex.EncodeToString(messageHash[:]))
-
-			// Request signature from TSS
-			fmt.Printf("Requesting signature from TSS at %s...\n", tssURL)
-			signResp, err := requestTSSSignature(tssURL, messageHash)
-			if err != nil {
-				return fmt.Errorf("failed to get TSS signature: %w", err)
-			}
-			fmt.Println("Received signature from TSS")
-
-			// Parse the signature components
-			rBytes, err := hex.DecodeString(signResp.Signature.R)
-			if err != nil {
-				return fmt.Errorf("invalid signature R: %w", err)
-			}
-			sBytes, err := hex.DecodeString(signResp.Signature.S)
-			if err != nil {
-				return fmt.Errorf("invalid signature S: %w", err)
-			}
-			pubKeyBytes, err := hex.DecodeString(signResp.PublicKey)
-			if err != nil {
-				return fmt.Errorf("invalid public key: %w", err)
-			}
-
-			// Parse public key to get X, Y coordinates
-			pubKey, err := btcec.ParsePubKey(pubKeyBytes)
-			if err != nil {
-				return fmt.Errorf("failed to parse public key: %w", err)
-			}
-
-			// Verify the public key matches the claimed address hash
-			computedHash, err := zk.PublicKeyToAddressHash(pubKey.SerializeCompressed())
-			if err != nil {
-				return fmt.Errorf("failed to compute address hash from public key: %w", err)
-			}
-			if !bytes.Equal(computedHash[:], addressHash[:]) {
-				return fmt.Errorf("public key from TSS does not match claimed address hash")
-			}
-			fmt.Println("Public key verified against address hash")
-
-			// Convert to big.Int for the prover
-			sigR := new(big.Int).SetBytes(padTo32Bytes(rBytes))
-			sigS := new(big.Int).SetBytes(padTo32Bytes(sBytes))
-			pubKeyX := pubKey.X()
-			pubKeyY := pubKey.Y()
-
-			// Load the setup files
-			csPath := filepath.Join(setupDir, "circuit.cs")
-			csBytes, err := os.ReadFile(csPath)
-			if err != nil {
-				return fmt.Errorf("failed to read constraint system: %w", err)
-			}
-			cs, err := zk.DeserializeConstraintSystem(csBytes)
-			if err != nil {
-				return fmt.Errorf("failed to deserialize constraint system: %w", err)
-			}
-
-			pkPath := filepath.Join(setupDir, "proving.key")
-			pkBytes, err := os.ReadFile(pkPath)
-			if err != nil {
-				return fmt.Errorf("failed to read proving key: %w", err)
-			}
-			pk, err := zk.DeserializeProvingKey(pkBytes)
-			if err != nil {
-				return fmt.Errorf("failed to deserialize proving key: %w", err)
-			}
-
-			// Create prover
-			prover := zk.NewProver(cs, pk)
-
-			// SHA256(SEC-compressed pubkey) — the claim message on-chain must
-			// carry this so the verifier can natively apply RIPEMD160 to it.
 			pubKeyHashSHA256, err := zk.PubKeyHashSHA256(pubKey.SerializeCompressed())
 			if err != nil {
-				return fmt.Errorf("failed to compute pubkey SHA256: %w", err)
+				return err
 			}
 
-			// Generate the proof
-			fmt.Println("Generating PLONK proof...")
-			proof, err := prover.GenerateProof(zk.ProofParams{
-				SignatureR:  sigR,
-				SignatureS:  sigS,
-				PublicKeyX:  pubKeyX,
-				PublicKeyY:  pubKeyY,
-				MessageHash: messageHash,
-			})
+			prover, err := loadProver(setupDir)
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintln(os.Stderr, "Generating PLONK proof...")
+			proof, err := prover.GenerateProof(params)
 			if err != nil {
 				return fmt.Errorf("failed to generate proof: %w", err)
 			}
 
-			// Create the output
-			output := ProofOutput{
-				AddressHash:      hex.EncodeToString(addressHash[:]),
-				QBTCAddressHash:  hex.EncodeToString(qbtcAddressHash[:]),
-				QBTCAddress:      qbtcAddress,
-				ChainID:          chainID,
-				MessageHash:      hex.EncodeToString(messageHash[:]),
-				PubKeyHashSHA256: hex.EncodeToString(pubKeyHashSHA256[:]),
-				ProofData:        hex.EncodeToString(proof),
-			}
-
-			// Serialize to JSON
-			outputBytes, err := json.MarshalIndent(output, "", "  ")
+			out, err := claimMsgJSON(buildClaimMsg(target, proof, pubKeyHashSHA256))
 			if err != nil {
-				return fmt.Errorf("failed to serialize output: %w", err)
+				return fmt.Errorf("failed to serialize claim message: %w", err)
 			}
-
-			// Write to file or stdout
-			if outputFile != "" {
-				if err := os.WriteFile(outputFile, outputBytes, 0644); err != nil {
+			if outputFile == "" {
+				fmt.Println(string(out))
+			} else {
+				if err := os.WriteFile(outputFile, out, 0o644); err != nil {
 					return fmt.Errorf("failed to write output: %w", err)
 				}
-				fmt.Printf("Proof saved to: %s\n", outputFile)
-			} else {
-				fmt.Println(string(outputBytes))
+				fmt.Fprintf(os.Stderr, "Claim message saved to: %s\n", outputFile)
 			}
-
-			fmt.Println("\nProof generation complete!")
-			fmt.Println("Submit this proof to the qbtc chain to claim your airdrop.")
-
+			fmt.Fprintln(os.Stderr, "Submit it with: qbtcd tx qbtc claim-with-proof <file> --from <key>")
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&tssURL, "tss-url", "", "URL of the TSS signer API (required, e.g., http://localhost:8080)")
-	cmd.Flags().StringVar(&qbtcAddress, "qbtc-address", "", "Your qbtc chain address (required)")
-	cmd.Flags().StringVar(&chainID, "chain-id", "", "Chain ID for the proof (required, e.g., 'qbtc-1')")
-	cmd.Flags().StringVar(&addressHashHex, "address-hash", "", "Hash160 of your Bitcoin address in hex (required)")
+	addTargetFlags(cmd, &target)
+	cmd.Flags().StringArrayVar(&utxoFlags, "utxo", nil, "UTXO to claim as txid:vout (repeatable, at least one)")
+	cmd.Flags().StringVar(&signature, "signature", "", "Base64 BIP-137 signature of the claim message from your Bitcoin wallet")
+	cmd.Flags().StringVar(&tssURL, "tss-url", "", "URL of a TSS signer API that signs the claim digest (e.g. http://localhost:8080)")
 	cmd.Flags().StringVar(&setupDir, "setup-dir", "./zk-setup", "Directory containing setup files")
-	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the proof (defaults to stdout)")
+	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for the MsgClaimWithProof JSON (defaults to stdout)")
 
 	return cmd
 }
 
-// addressCmd creates the address utility command
-func addressCmd() *cobra.Command {
-	var btcAddress string
-
-	cmd := &cobra.Command{
-		Use:   "address",
-		Short: "Extract address hash from Bitcoin address (P2PKH/P2WPKH only)",
-		Long:  "Extract the Hash160 address hash from a Bitcoin address for use with --address-hash",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if btcAddress == "" {
-				return fmt.Errorf("--address is required")
-			}
-
-			addressHash, err := zk.BitcoinAddressToHash160(btcAddress)
-			if err != nil {
-				return fmt.Errorf("failed to extract address hash: %w", err)
-			}
-
-			fmt.Printf("Address Hash (Hash160): %s\n", hex.EncodeToString(addressHash[:]))
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&btcAddress, "address", "", "Bitcoin address (P2PKH or P2WPKH)")
-	return cmd
-}
-
-// ProofOutput is the JSON output structure for a generated proof. Fields map
-// 1:1 to MsgClaimWithProof so the caller can wire them in directly.
-type ProofOutput struct {
-	// AddressHash is the 20-byte Bitcoin Hash160 (hex). Populates
-	// MsgClaimWithProof.address_hash.
-	AddressHash string `json:"address_hash"`
-	// QBTCAddressHash is SHA256 of the destination qbtc address string (hex).
-	QBTCAddressHash  string `json:"qbtc_address_hash"`
-	QBTCAddress      string `json:"qbtc_address"`
-	ChainID          string `json:"chain_id"`
-	MessageHash      string `json:"message_hash"`
-	PubKeyHashSHA256 string `json:"pub_key_hash_sha256"`
-	ProofData        string `json:"proof_data"`
-}
-
-// TSSSignRequest is the request body for the TSS /sign endpoint
-type TSSSignRequest struct {
-	MessageHash string `json:"message_hash"`
-}
-
-// TSSSignatureData contains the ECDSA signature components from TSS
-type TSSSignatureData struct {
-	R string `json:"r"`
-	S string `json:"s"`
-	V int    `json:"v"`
-}
-
-// TSSSignResponse is the response from the TSS /sign endpoint
-type TSSSignResponse struct {
-	Signature TSSSignatureData `json:"signature"`
-	PublicKey string           `json:"public_key"`
-}
-
-// requestTSSSignature requests a signature from the TSS emulator
-func requestTSSSignature(tssURL string, messageHash [32]byte) (*TSSSignResponse, error) {
-	// Prepare request
-	reqBody := TSSSignRequest{
-		MessageHash: hex.EncodeToString(messageHash[:]),
-	}
-	reqBytes, err := json.Marshal(reqBody)
+// loadProver reads the constraint system and proving key written by 'setup'.
+func loadProver(setupDir string) (*zk.Prover, error) {
+	csBytes, err := os.ReadFile(filepath.Join(setupDir, "circuit.cs"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("failed to read constraint system: %w", err)
 	}
-
-	// Make HTTP request
-	resp, err := http.Post(tssURL+"/sign", "application/json", bytes.NewReader(reqBytes))
+	cs, err := zk.DeserializeConstraintSystem(csBytes)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, fmt.Errorf("failed to deserialize constraint system: %w", err)
 	}
-	defer resp.Body.Close()
-
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
+	pkBytes, err := os.ReadFile(filepath.Join(setupDir, "proving.key"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("failed to read proving key: %w", err)
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TSS returned error: %s", string(respBody))
+	pk, err := zk.DeserializeProvingKey(pkBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deserialize proving key: %w", err)
 	}
-
-	// Parse response
-	var signResp TSSSignResponse
-	if err := json.Unmarshal(respBody, &signResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return &signResp, nil
-}
-
-// padTo32Bytes pads a byte slice to 32 bytes (left-padded with zeros)
-func padTo32Bytes(b []byte) []byte {
-	if len(b) >= 32 {
-		return b
-	}
-	padded := make([]byte, 32)
-	copy(padded[32-len(b):], b)
-	return padded
+	return zk.NewProver(cs, pk), nil
 }

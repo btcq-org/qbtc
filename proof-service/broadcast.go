@@ -16,10 +16,10 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/mldsa"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	txsigning "github.com/cosmos/cosmos-sdk/types/tx/signing"
-	"github.com/cosmos/cosmos-sdk/std"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -135,10 +135,8 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 		Broadcaster:      key.fromAddr,
 		Utxos:            resp.UTXOs,
 		Proof:            resp.Proof,
-		MessageHash:      resp.MessageHash,
-		AddressHash:      resp.AddressHash,
-		QbtcAddressHash:  resp.QBTCAddressHash,
 		PubKeyHashSha256: resp.PubKeyHashSHA256,
+		Receiver:         resp.ReceiverAddress,
 	}
 
 	// Fetch account number and sequence from chain

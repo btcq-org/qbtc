@@ -160,7 +160,10 @@ if [ -n "$SPK" ]; then
     *) die "UTXO $TXID:$VOUT is locked to a different key (script $SPK); this key's hash is $HASH160" ;;
   esac
 fi
-say "UTXO $TXID:$VOUT found, entitled amount $ENT"
+# the signed claim message names the address exactly as the chain stores it
+BTC_ADDR=$(printf '%s' "$UTXO_JSON" | jget - utxo.script_pub_key.address "")
+[ -n "$BTC_ADDR" ] || die "UTXO $TXID:$VOUT has no address in chain state; it cannot be claimed"
+say "UTXO $TXID:$VOUT found ($BTC_ADDR), entitled amount $ENT"
 
 # ------------------------------------------------------------ destination, claimer
 if [ -z "$DEST" ]; then
@@ -180,13 +183,12 @@ say "destination $DEST (balance before: $BAL_BEFORE), claimer key $FROM ($CLAIME
 # ------------------------------------------------------------------ proof, message
 say "generating the PLONK proof (about half a minute, several GB of RAM)..."
 t0=$SECONDS
-"$ZKPROVER" prove --tss-url "http://127.0.0.1:$PORT" --qbtc-address "$DEST" --chain-id "$CHAIN_ID" \
-  --address-hash "$HASH160" --setup-dir "$SETUP" -o "$WORK/proof.json" > "$WORK/prove.log" 2>&1 \
+MSG_NAME="claim_msg_${TXID:0:12}_${VOUT}.json"
+"$ZKPROVER" prove --tss-url "http://127.0.0.1:$PORT" --chain-id "$CHAIN_ID" \
+  --bitcoin-address "$BTC_ADDR" --claimer "$CLAIMER" --receiver "$DEST" --utxo "$TXID:$VOUT" \
+  --setup-dir "$SETUP" -o "$NET/validator0/$MSG_NAME" > "$WORK/prove.log" 2>&1 \
   || die "zkprover prove failed, see $WORK/prove.log"
 say "proof generated in $((SECONDS - t0))s"
-MSG_NAME="claim_msg_${TXID:0:12}_${VOUT}.json"
-python3 "$LIB" claim-msg --proof "$WORK/proof.json" --claimer "$CLAIMER" --receiver "$DEST" \
-  --txid "$TXID" --vout "$VOUT" --out "$NET/validator0/$MSG_NAME"
 
 # ------------------------------------------------------------------ submit, wait
 out=$(docker exec "$NODE" qbtcd tx qbtc claim-with-proof "$HOME_DIR/$MSG_NAME" \

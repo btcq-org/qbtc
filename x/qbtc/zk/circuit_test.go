@@ -3,13 +3,10 @@
 package zk
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
-	"math/big"
 	"testing"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -30,233 +27,86 @@ func (s *CircuitSignatureTestSuite) SetupSuite() {
 	s.setup = setup
 }
 
-// TestSignatureCircuit_EndToEnd tests the complete signature-based proof flow.
-// This is the primary test for TSS/MPC compatibility.
-//
-// Note: SignatureR is now correctly typed as a scalar in Fr (not a point coordinate).
-// The circuit verifies: R'.x mod n == r where R' = u1*G + u2*P
+// TestSignatureCircuit_EndToEnd runs the full wallet flow: the user signs the
+// claim text with a BIP-137 compact signature, the prover recovers the pubkey
+// from it and builds a proof, and the verifier re-derives everything from
+// on-chain data.
 func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 	if testing.Short() {
 		s.T().Skip("skipping end-to-end signature circuit test in short mode")
 	}
 
-	// Setup with test SRS
-	s.T().Log("Running PLONK setup for signature circuit...")
-
-	// Create prover and verifier
 	prover := ProverFromSetup(s.setup)
 	verifier := NewVerifier(s.setup.VerifyingKey)
 
-	// Test parameters - simulate a TSS signer
 	privateKeyBytes, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000003039") // 12345 padded
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
 
 	qbtcAddress := "qbtc1testaddress123"
 	chainID := "qbtc-test-1"
+	bitcoinAddress := p2wpkhAddressForTest(pubKey)
 
-	// Compute address hash from public key
-	compressedPubKey := pubKey.SerializeCompressed()
-	addressHash, err := PublicKeyToAddressHash(compressedPubKey)
-	s.Require().NoError(err, "should compute address hash")
-	pubKeyHashSHA256, err := PubKeyHashSHA256(compressedPubKey)
-	s.Require().NoError(err, "should compute pubkey SHA256")
+	params, sigBase64, pubKeyHashSHA256 := signClaimForTest(s.T(), privKey, chainID, bitcoinAddress, qbtcAddress)
+	s.T().Logf("Message: %q\nSignature: %s", ClaimMessageText(chainID, bitcoinAddress, qbtcAddress), sigBase64)
 
-	// Compute binding values
-	qbtcAddressHash := HashQBTCAddress(qbtcAddress)
-	chainIDHash := ComputeChainIDHash(chainID)
+	proof, err := prover.GenerateProof(params)
+	s.Require().NoError(err, "proof generation should succeed")
+	s.Require().NotEmpty(proof, "proof data should not be empty")
 
-	// Compute the claim message (this is what TSS would sign)
-	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-	s.T().Logf("Message to sign: %s", hex.EncodeToString(messageHash[:]))
-
-	// Sign the message (simulating TSS output)
-	sig := btcecdsa.Sign(privKey, messageHash[:])
-	sigBytes := sig.Serialize()
-
-	// Parse R and S from DER
-	rLen := int(sigBytes[3])
-	rBytes := sigBytes[4 : 4+rLen]
-	sLen := int(sigBytes[4+rLen+1])
-	sBytes := sigBytes[4+rLen+2 : 4+rLen+2+sLen]
-
-	// Remove leading zeros
-	if len(rBytes) > 0 && rBytes[0] == 0 {
-		rBytes = rBytes[1:]
+	valid := VerificationParams{
+		ChainID:          chainID,
+		BitcoinAddress:   bitcoinAddress,
+		QBTCAddress:      qbtcAddress,
+		PubKeyHashSHA256: pubKeyHashSHA256,
 	}
-	if len(sBytes) > 0 && sBytes[0] == 0 {
-		sBytes = sBytes[1:]
-	}
-
-	sigR := new(big.Int).SetBytes(rBytes)
-	sigS := new(big.Int).SetBytes(sBytes)
 
 	s.T().Run("valid signature proof should verify", func(t *testing.T) {
-		// Generate proof
-		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:  sigR,
-			SignatureS:  sigS,
-			PublicKeyX:  pubKey.X(),
-			PublicKeyY:  pubKey.Y(),
-			MessageHash: messageHash,
-		})
-		require.NoError(t, err, "proof generation should succeed")
-		require.NotEmpty(t, proof, "proof data should not be empty")
-
-		// Verify proof
-		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:      messageHash,
-			AddressHash:      addressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  qbtcAddressHash,
-			ChainID:          chainIDHash,
-		})
-		require.NoError(t, err, "valid proof should verify")
+		require.NoError(t, verifier.VerifyProof(proof, valid))
 	})
 
-	s.T().Run("proof with wrong message hash should fail", func(t *testing.T) {
-		// Generate valid proof
-		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:  sigR,
-			SignatureS:  sigS,
-			PublicKeyX:  pubKey.X(),
-			PublicKeyY:  pubKey.Y(),
-			MessageHash: messageHash,
-		})
-		require.NoError(t, err)
-
-		// Try to verify with different message hash
-		wrongMessageHash := messageHash
-		wrongMessageHash[0] ^= 0xFF
-
-		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:      wrongMessageHash,
-			AddressHash:      addressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  qbtcAddressHash,
-			ChainID:          chainIDHash,
-		})
-		require.Error(t, err, "proof with wrong message hash should fail")
+	s.T().Run("same key, other address form of it should fail", func(t *testing.T) {
+		// The P2PKH address of the same key hashes to the same Hash160, but the
+		// signed text names the P2WPKH address, so the digest differs.
+		p := valid
+		p.BitcoinAddress = p2pkhAddressForTest(pubKey)
+		require.Error(t, verifier.VerifyProof(proof, p))
 	})
 
-	s.T().Run("proof with wrong address hash should fail", func(t *testing.T) {
-		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:  sigR,
-			SignatureS:  sigS,
-			PublicKeyX:  pubKey.X(),
-			PublicKeyY:  pubKey.Y(),
-			MessageHash: messageHash,
-		})
+	s.T().Run("proof with wrong pubkey hash should fail", func(t *testing.T) {
+		p := valid
+		p.PubKeyHashSHA256[0] ^= 0xFF
+		require.ErrorContains(t, verifier.VerifyProof(proof, p), "address hash mismatch")
+	})
+
+	s.T().Run("proof for another bitcoin address should fail", func(t *testing.T) {
+		other, err := btcec.NewPrivateKey()
 		require.NoError(t, err)
-
-		wrongAddressHash := addressHash
-		wrongAddressHash[0] ^= 0xFF
-
-		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:      messageHash,
-			AddressHash:      wrongAddressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  qbtcAddressHash,
-			ChainID:          chainIDHash,
-		})
-		require.Error(t, err, "proof with wrong address hash should fail")
+		p := valid
+		p.BitcoinAddress = p2wpkhAddressForTest(other.PubKey())
+		require.Error(t, verifier.VerifyProof(proof, p))
 	})
 
 	s.T().Run("front-running attack should fail", func(t *testing.T) {
-		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:  sigR,
-			SignatureS:  sigS,
-			PublicKeyX:  pubKey.X(),
-			PublicKeyY:  pubKey.Y(),
-			MessageHash: messageHash,
-		})
-		require.NoError(t, err)
-
-		// Attacker tries to redirect to their address
-		attackerHash := HashQBTCAddress("qbtc1attacker")
-
-		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:      messageHash,
-			AddressHash:      addressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  attackerHash,
-			ChainID:          chainIDHash,
-		})
-		require.Error(t, err, "front-running attack should fail")
+		p := valid
+		p.QBTCAddress = "qbtc1attacker"
+		require.Error(t, verifier.VerifyProof(proof, p))
 	})
 
 	s.T().Run("cross-chain replay should fail", func(t *testing.T) {
-		proof, err := prover.GenerateProof(ProofParams{
-			SignatureR:  sigR,
-			SignatureS:  sigS,
-			PublicKeyX:  pubKey.X(),
-			PublicKeyY:  pubKey.Y(),
-			MessageHash: messageHash,
-		})
-		require.NoError(t, err)
+		p := valid
+		p.ChainID = "other-chain-1"
+		require.Error(t, verifier.VerifyProof(proof, p))
+	})
 
-		wrongChainIDHash := ComputeChainIDHash("other-chain-1")
-
-		err = verifier.VerifyProof(proof, VerificationParams{
-			MessageHash:      messageHash,
-			AddressHash:      addressHash,
-			PubKeyHashSHA256: pubKeyHashSHA256,
-			QBTCAddressHash:  qbtcAddressHash,
-			ChainID:          wrongChainIDHash,
-		})
-		require.Error(t, err, "cross-chain replay should fail")
+	s.T().Run("invalid bitcoin address string is rejected", func(t *testing.T) {
+		p := valid
+		p.BitcoinAddress = "not-an-address"
+		require.ErrorContains(t, verifier.VerifyProof(proof, p), "invalid Bitcoin address")
 	})
 }
 
-// TestComputeClaimMessage tests the deterministic message format.
-func (s *CircuitSignatureTestSuite) TestComputeClaimMessage() {
-	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	qbtcAddressHash := sha256.Sum256([]byte("qbtc1test"))
-	chainIDHash := ComputeChainIDHash("qbtc-1")
-
-	// Compute message
-	msg1 := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	// Should be deterministic
-	msg2 := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-	s.Require().Equal(msg1, msg2, "message should be deterministic")
-
-	// Different inputs should produce different messages
-	differentAddressHash := addressHash
-	differentAddressHash[0] = 0xFF
-	msg3 := ComputeClaimMessage(differentAddressHash, qbtcAddressHash, chainIDHash)
-	s.Require().NotEqual(msg1, msg3, "different address should produce different message")
-
-	differentQBTCAddressHash := HashQBTCAddress("qbtc1different")
-	msg4 := ComputeClaimMessage(addressHash, differentQBTCAddressHash, chainIDHash)
-	s.Require().NotEqual(msg1, msg4, "different qbtc address should produce different message")
-	differentChainID := ComputeChainIDHash("other-chain")
-	msg5 := ComputeClaimMessage(addressHash, qbtcAddressHash, differentChainID)
-	s.Require().NotEqual(msg1, msg5, "different chain ID should produce different message")
-}
-
-// TestVerifyClaimMessage tests message verification.
-func (s *CircuitSignatureTestSuite) TestVerifyClaimMessage() {
-	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	qbtcAddressHash := HashQBTCAddress("qbtc1test")
-	chainIDHash := ComputeChainIDHash("qbtc-1")
-
-	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	// Valid verification
-	s.Require().True(VerifyClaimMessage(messageHash, addressHash, qbtcAddressHash, chainIDHash))
-
-	// Wrong message hash
-	wrongMessageHash := messageHash
-	wrongMessageHash[0] ^= 0xFF
-	s.Require().False(VerifyClaimMessage(wrongMessageHash, addressHash, qbtcAddressHash, chainIDHash))
-
-	// Wrong parameters
-	wrongAddressHash := addressHash
-	wrongAddressHash[0] ^= 0xFF
-	s.Require().False(VerifyClaimMessage(messageHash, wrongAddressHash, qbtcAddressHash, chainIDHash))
-}
-
-// TestSignatureProofSerialization tests proof serialization round-trip.
+// TestSignatureProofSerialization checks that a proof can be generated from a
+// typical key and is non-empty.
 func (s *CircuitSignatureTestSuite) TestSignatureProofSerialization() {
 	if testing.Short() {
 		s.T().Skip("skipping in short mode")
@@ -264,38 +114,11 @@ func (s *CircuitSignatureTestSuite) TestSignatureProofSerialization() {
 
 	prover := ProverFromSetup(s.setup)
 
-	// Create test signature - use a typical private key (not edge case like 1)
 	privateKeyBytes, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000004567")
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
 
-	compressedPubKey := pubKey.SerializeCompressed()
-	addressHash, err := PublicKeyToAddressHash(compressedPubKey)
-	s.Require().NoError(err)
-
-	qbtcAddressHash := HashQBTCAddress("qbtc1test")
-	chainIDHash := ComputeChainIDHash("test-chain")
-	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	sig := btcecdsa.Sign(privKey, messageHash[:])
-	sigBytes := sig.Serialize()
-	rLen := int(sigBytes[3])
-	rBytes := sigBytes[4 : 4+rLen]
-	sLen := int(sigBytes[4+rLen+1])
-	sBytes := sigBytes[4+rLen+2 : 4+rLen+2+sLen]
-	if len(rBytes) > 0 && rBytes[0] == 0 {
-		rBytes = rBytes[1:]
-	}
-	if len(sBytes) > 0 && sBytes[0] == 0 {
-		sBytes = sBytes[1:]
-	}
-
-	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:  new(big.Int).SetBytes(rBytes),
-		SignatureS:  new(big.Int).SetBytes(sBytes),
-		PublicKeyX:  pubKey.X(),
-		PublicKeyY:  pubKey.Y(),
-		MessageHash: messageHash,
-	})
+	params, _, _ := signClaimForTest(s.T(), privKey, "test-chain", p2pkhAddressForTest(pubKey), "qbtc1test")
+	proof, err := prover.GenerateProof(params)
 	s.Require().NoError(err)
 	s.Require().NotEmpty(proof)
 }
@@ -309,81 +132,26 @@ func (s *CircuitSignatureTestSuite) TestSignatureVerifierGlobalFlow() {
 	vkBytes, err := SerializeVerifyingKey(s.setup.VerifyingKey)
 	s.Require().NoError(err)
 
-	// Register global verifier
 	err = InitializeVerifier(vkBytes)
 	s.Require().NoError(err)
 
-	// Create prover
 	prover := ProverFromSetup(s.setup)
 
-	// Test data
 	privateKeyBytes, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000000042")
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
+	bitcoinAddress := p2wpkhAddressForTest(pubKey)
 
-	compressedPubKey := pubKey.SerializeCompressed()
-	addressHash, _ := PublicKeyToAddressHash(compressedPubKey)
-	pubKeyHashSHA256, err := PubKeyHashSHA256(compressedPubKey)
-	s.Require().NoError(err)
-	qbtcAddressHash := HashQBTCAddress("qbtc1global_test")
-	chainIDHash := ComputeChainIDHash("qbtc-1")
-	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	sig := btcecdsa.Sign(privKey, messageHash[:])
-	sigBytes := sig.Serialize()
-	rLen := int(sigBytes[3])
-	rBytes := sigBytes[4 : 4+rLen]
-	sLen := int(sigBytes[4+rLen+1])
-	sBytes := sigBytes[4+rLen+2 : 4+rLen+2+sLen]
-	if len(rBytes) > 0 && rBytes[0] == 0 {
-		rBytes = rBytes[1:]
-	}
-	if len(sBytes) > 0 && sBytes[0] == 0 {
-		sBytes = sBytes[1:]
-	}
-
-	proof, err := prover.GenerateProof(ProofParams{
-		SignatureR:  new(big.Int).SetBytes(rBytes),
-		SignatureS:  new(big.Int).SetBytes(sBytes),
-		PublicKeyX:  pubKey.X(),
-		PublicKeyY:  pubKey.Y(),
-		MessageHash: messageHash,
-	})
+	params, _, pubKeyHashSHA256 := signClaimForTest(s.T(), privKey, "qbtc-1", bitcoinAddress, "qbtc1global_test")
+	proof, err := prover.GenerateProof(params)
 	s.Require().NoError(err)
 
-	// Verify using global verifier
 	err = VerifyProofGlobal(proof, VerificationParams{
-		MessageHash:      messageHash,
-		AddressHash:      addressHash,
+		ChainID:          "qbtc-1",
+		BitcoinAddress:   bitcoinAddress,
+		QBTCAddress:      "qbtc1global_test",
 		PubKeyHashSHA256: pubKeyHashSHA256,
-		QBTCAddressHash:  qbtcAddressHash,
-		ChainID:          chainIDHash,
 	})
 	s.Require().NoError(err, "global verification should succeed")
-}
-
-// TestMessageVersioning ensures the version string is included in the message.
-func (s *CircuitSignatureTestSuite) TestMessageVersioning() {
-	addressHash := [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-	qbtcAddressHash := HashQBTCAddress("qbtc1test")
-	chainIDHash := ComputeChainIDHash("qbtc-1")
-
-	// The current version
-	s.Require().Equal("qbtc-claim-v1", ClaimMessageVersion)
-
-	// Message should include the version and type prefix
-	msg := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	// Manually compute expected hash (including type prefix)
-	prefix := []byte(ClaimTagECDSAHash160)
-	data := make([]byte, 0, len(prefix)+20+32+8+len(ClaimMessageVersion))
-	data = append(data, prefix...)
-	data = append(data, addressHash[:]...)
-	data = append(data, qbtcAddressHash[:]...)
-	data = append(data, chainIDHash[:]...)
-	data = append(data, []byte(ClaimMessageVersion)...)
-	expected := sha256.Sum256(data)
-
-	s.Require().Equal(expected, msg, "message should match expected format")
 }
 
 // BenchmarkProofGeneration measures end-to-end PLONK proof generation time
@@ -409,34 +177,13 @@ func BenchmarkProofGeneration(b *testing.B) {
 	privateKeyBytes, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000003039")
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
 
-	addressHash, err := PublicKeyToAddressHash(pubKey.SerializeCompressed())
+	// signClaimForTest needs a *testing.T; do the equivalent inline.
+	digest := ClaimMessageDigest("qbtc-bench-1", p2wpkhAddressForTest(pubKey), "qbtc1benchaddress")
+	pub, r, sScalar, err := ParseBIP137Signature(signCompactBase64(privKey, digest), digest)
 	if err != nil {
-		b.Fatalf("address hash: %v", err)
+		b.Fatalf("signature: %v", err)
 	}
-	qbtcAddressHash := HashQBTCAddress("qbtc1benchaddress")
-	chainIDHash := ComputeChainIDHash("qbtc-bench-1")
-	messageHash := ComputeClaimMessage(addressHash, qbtcAddressHash, chainIDHash)
-
-	sig := btcecdsa.Sign(privKey, messageHash[:])
-	sigBytes := sig.Serialize()
-	rLen := int(sigBytes[3])
-	rBytes := sigBytes[4 : 4+rLen]
-	sLen := int(sigBytes[4+rLen+1])
-	sBytes := sigBytes[4+rLen+2 : 4+rLen+2+sLen]
-	if len(rBytes) > 0 && rBytes[0] == 0 {
-		rBytes = rBytes[1:]
-	}
-	if len(sBytes) > 0 && sBytes[0] == 0 {
-		sBytes = sBytes[1:]
-	}
-
-	params := ProofParams{
-		SignatureR:  new(big.Int).SetBytes(rBytes),
-		SignatureS:  new(big.Int).SetBytes(sBytes),
-		PublicKeyX:  pubKey.X(),
-		PublicKeyY:  pubKey.Y(),
-		MessageHash: messageHash,
-	}
+	params := ProofParamsFromSignature(pub, r, sScalar, digest)
 
 	// Warm-up proof so one-time allocations don't skew the first sample,
 	// and capture the proof size for reporting.
