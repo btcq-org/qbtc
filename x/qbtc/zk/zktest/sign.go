@@ -14,13 +14,13 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 )
 
-// SignClaim signs the claim message for (chainID, bitcoinAddress, qbtcAddress)
-// the way a wallet would: a BIP-137 compact signature over the message digest,
+// SignClaim signs the claim message for (chainID, bitcoinAddress, qbtcAddress,
+// referrer) the way a wallet would: a BIP-137 compact signature over the message digest,
 // base64 encoded. The signature is then run through zk.ParseBIP137Signature so
 // callers exercise the production parser. It returns the prover input and the
 // base64 signature.
-func SignClaim(priv *btcec.PrivateKey, chainID, bitcoinAddress, qbtcAddress string) (zk.ProofParams, string, error) {
-	digest := zk.ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress)
+func SignClaim(priv *btcec.PrivateKey, chainID, bitcoinAddress, qbtcAddress, referrer string) (zk.ProofParams, string, error) {
+	digest := zk.ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress, referrer)
 	sigBase64 := base64.StdEncoding.EncodeToString(btcecdsa.SignCompact(priv, digest[:], true))
 
 	pub, r, s, err := zk.ParseBIP137Signature(sigBase64, digest)

@@ -25,4 +25,7 @@ message UTXO {
   ScriptPubKeyResult script_pub_key = 5;
   // The Bitcoin block height at which this UTXO was created
   uint64 block_height = 6;
+  // The qbtc address that referred the claim of this UTXO. Empty when the
+  // claim named no referrer, and for memo and governance claims.
+  string referrer = 7;
 }

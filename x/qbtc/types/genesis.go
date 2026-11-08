@@ -10,6 +10,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/backend/plonk"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 // MinVerifyingKeySize is the minimum valid verifying key size.
@@ -41,6 +42,26 @@ func (gs GenesisState) Validate() error {
 		return err
 	}
 
+	if err := gs.validateReferralStats(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateReferralStats checks every entry names a distinct valid address.
+func (gs GenesisState) validateReferralStats() error {
+	seen := make(map[string]bool, len(gs.ReferralStats))
+	for i, stats := range gs.ReferralStats {
+		addr, err := sdk.AccAddressFromBech32(stats.Address)
+		if err != nil {
+			return fmt.Errorf("referral_stats[%d]: invalid address %q: %w", i, stats.Address, err)
+		}
+		if seen[string(addr)] {
+			return fmt.Errorf("referral_stats[%d]: duplicate address %s", i, stats.Address)
+		}
+		seen[string(addr)] = true
+	}
 	return nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/spf13/cobra"
@@ -166,6 +167,7 @@ func addTargetFlags(cmd *cobra.Command, t *claimTarget) {
 	cmd.Flags().StringVar(&t.bitcoinAddress, "bitcoin-address", "", "Bitcoin address being claimed, exactly as stored on the UTXO (required, P2PKH or P2WPKH)")
 	cmd.Flags().StringVar(&t.claimer, "claimer", "", "qbtc address that claims the UTXOs (required)")
 	cmd.Flags().StringVar(&t.receiver, "receiver", "", "qbtc address that receives the coins instead of the claimer (optional)")
+	cmd.Flags().StringVar(&t.referrer, "referrer", "", "qbtc address that referred this claim; signed into the claim message (optional)")
 }
 
 func (c *claimTarget) validate() error {
@@ -182,6 +184,10 @@ func (c *claimTarget) validate() error {
 	}
 	if err := zk.CheckBitcoinAddressCanonical(c.bitcoinAddress); err != nil {
 		return fmt.Errorf("--bitcoin-address: %w", err)
+	}
+	// Check now: the chain rejects a bad referrer only after the user signed.
+	if err := types.ValidateReferrer(c.referrer, c.destination()); err != nil {
+		return fmt.Errorf("--referrer: %w", err)
 	}
 	return nil
 }

@@ -2,7 +2,7 @@
 # Claim one UTXO with a ZK proof on a network that run.sh left running (--keep).
 #
 #   claim.sh <txid> <vout> (--wif <WIF> | --key-file <file>) \
-#            [--dest <qbtc address> | --dest-key <keyring name>] \
+#            [--dest <qbtc address> | --dest-key <keyring name>] [--referrer <qbtc address>] \
 #            [--from <keyring name, default validator0>] [--tss-port <port>]
 #   claim.sh --show-address (--wif <WIF> | --key-file <file>)   # print the key's addresses and exit
 #
@@ -24,7 +24,7 @@ usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 say() { printf '%s\n' "$*" >&2; }
 
-TXID=""; VOUT=""; WIF=""; KEY_FILE=""; DEST=""; DEST_KEY=""; FROM="validator0"; TSS_PORT_ARG=""; SHOW=0
+TXID=""; VOUT=""; WIF=""; KEY_FILE=""; DEST=""; DEST_KEY=""; REFERRER=""; FROM="validator0"; TSS_PORT_ARG=""; SHOW=0
 POS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,6 +32,7 @@ while [ $# -gt 0 ]; do
     --key-file) KEY_FILE="${2:?--key-file needs a path}"; shift ;;
     --dest) DEST="${2:?--dest needs a qbtc address}"; shift ;;
     --dest-key) DEST_KEY="${2:?--dest-key needs a keyring name}"; shift ;;
+    --referrer) REFERRER="${2:?--referrer needs a qbtc address}"; shift ;;
     --from) FROM="${2:?--from needs a keyring name}"; shift ;;
     --tss-port) TSS_PORT_ARG="${2:?--tss-port needs a port}"; shift ;;
     --show-address) SHOW=1 ;;
@@ -185,7 +186,7 @@ say "generating the PLONK proof (about half a minute, several GB of RAM)..."
 t0=$SECONDS
 MSG_NAME="claim_msg_${TXID:0:12}_${VOUT}.json"
 "$ZKPROVER" prove --tss-url "http://127.0.0.1:$PORT" --chain-id "$CHAIN_ID" \
-  --bitcoin-address "$BTC_ADDR" --claimer "$CLAIMER" --receiver "$DEST" --utxo "$TXID:$VOUT" \
+  --bitcoin-address "$BTC_ADDR" --claimer "$CLAIMER" --receiver "$DEST" --referrer "$REFERRER" --utxo "$TXID:$VOUT" \
   --setup-dir "$SETUP" -o "$NET/validator0/$MSG_NAME" > "$WORK/prove.log" 2>&1 \
   || die "zkprover prove failed, see $WORK/prove.log"
 say "proof generated in $((SECONDS - t0))s"
@@ -218,3 +219,7 @@ echo "destination:              $DEST"
 echo "balance before:           $BAL_BEFORE"
 echo "balance after:            $BAL_AFTER"
 echo "UTXO entitled amount now: $ENT_AFTER"
+if [ -n "$REFERRER" ]; then
+  echo "referrer:                 $REFERRER"
+  echo "referrer stats:           $(qq qbtc referral-stats "$REFERRER" | tr -d '\n')"
+fi

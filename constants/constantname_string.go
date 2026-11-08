@@ -13,11 +13,13 @@ func _() {
 	_ = x[ClaimWithProofDisabled-2]
 	_ = x[MinUtxoConfirmationBlocks-3]
 	_ = x[MemoClaimDisabled-4]
+	_ = x[ReferrerRewardBps-5]
+	_ = x[RefereeRewardBps-6]
 }
 
-const _ConstantName_name = "EmissionCurveBlocksPerYearClaimWithProofDisabledMinUtxoConfirmationBlocksMemoClaimDisabled"
+const _ConstantName_name = "EmissionCurveBlocksPerYearClaimWithProofDisabledMinUtxoConfirmationBlocksMemoClaimDisabledReferrerRewardBpsRefereeRewardBps"
 
-var _ConstantName_index = [...]uint8{0, 13, 26, 48, 73, 90}
+var _ConstantName_index = [...]uint8{0, 13, 26, 48, 73, 90, 107, 123}
 
 func (i ConstantName) String() string {
 	idx := int(i) - 0

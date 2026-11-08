@@ -47,7 +47,7 @@ func (s *CircuitSignatureTestSuite) TestSignatureCircuit_EndToEnd() {
 	bitcoinAddress := p2wpkhAddressForTest(pubKey)
 
 	params, sigBase64, pubKeyHashSHA256 := signClaimForTest(s.T(), privKey, chainID, bitcoinAddress, qbtcAddress)
-	s.T().Logf("Message: %q\nSignature: %s", ClaimMessageText(chainID, bitcoinAddress, qbtcAddress), sigBase64)
+	s.T().Logf("Message: %q\nSignature: %s", ClaimMessageText(chainID, bitcoinAddress, qbtcAddress, ""), sigBase64)
 
 	proof, err := prover.GenerateProof(params)
 	s.Require().NoError(err, "proof generation should succeed")
@@ -178,7 +178,7 @@ func BenchmarkProofGeneration(b *testing.B) {
 	privKey, pubKey := btcec.PrivKeyFromBytes(privateKeyBytes)
 
 	// signClaimForTest needs a *testing.T; do the equivalent inline.
-	digest := ClaimMessageDigest("qbtc-bench-1", p2wpkhAddressForTest(pubKey), "qbtc1benchaddress")
+	digest := ClaimMessageDigest("qbtc-bench-1", p2wpkhAddressForTest(pubKey), "qbtc1benchaddress", "")
 	pub, r, sScalar, err := ParseBIP137Signature(signCompactBase64(privKey, digest), digest)
 	if err != nil {
 		b.Fatalf("signature: %v", err)

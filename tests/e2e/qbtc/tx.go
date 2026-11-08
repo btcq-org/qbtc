@@ -84,7 +84,7 @@ func (s *E2ETestSuite) TestClaimWithProofCmd() {
 // would, generates a PLONK proof, and assembles the MsgClaimWithProof for the
 // given claimer.
 func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *types.MsgClaimWithProof {
-	params, _, err := zktest.SignClaim(s.btcPrivKey, s.cfg.ChainID, s.btcAddress, claimer)
+	params, _, err := zktest.SignClaim(s.btcPrivKey, s.cfg.ChainID, s.btcAddress, claimer, "")
 	s.Require().NoError(err)
 
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(s.btcPrivKey.PubKey().SerializeCompressed())

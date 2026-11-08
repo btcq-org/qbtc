@@ -5,6 +5,7 @@ import "amino/amino.proto";
 import "gogoproto/gogo.proto";
 import "qbtc/qbtc/v1/type_utxo.proto";
 import "qbtc/qbtc/v1/query_params.proto";
+import "qbtc/qbtc/v1/type_referral.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
@@ -36,4 +37,6 @@ message GenesisState {
   // block at a height that is a multiple of 2016). Needed to check the
   // difficulty retarget at the next period boundary.
   uint32 btc_anchor_period_start_time = 8;
+  // Referral totals per qbtc address.
+  repeated ReferralStats referral_stats = 9 [ (gogoproto.nullable) = false ];
 }

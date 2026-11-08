@@ -8,8 +8,9 @@ import (
 )
 
 // ClaimUTXO claims a UTXO.
-// It mints the coins to the recipient (or reserve module account if recipient is nil) and resets the entitled amount to 0.
-func (k Keeper) ClaimUTXO(ctx context.Context, txid string, vout uint32, recipient sdk.AccAddress) error {
+// It mints the coins to the recipient (or reserve module account if recipient is nil), resets the entitled amount to 0
+// and records the referrer of the claim ("" for none).
+func (k Keeper) ClaimUTXO(ctx context.Context, txid string, vout uint32, recipient sdk.AccAddress, referrer string) error {
 	key := getUTXOKey(txid, vout)
 	utxo, err := k.Utxoes.Get(ctx, key)
 	if err != nil {
@@ -41,6 +42,7 @@ func (k Keeper) ClaimUTXO(ctx context.Context, txid string, vout uint32, recipie
 
 	// reset the entitled amount to 0
 	utxo.EntitledAmount = 0
+	utxo.Referrer = referrer
 	if err := k.Utxoes.Set(ctx, key, utxo); err != nil {
 		return err
 	}

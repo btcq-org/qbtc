@@ -101,7 +101,7 @@ func (s *SecurityAuditTestSuite) TestSoundness_InvalidSignature() {
 
 	privateKey, _ := btcec.NewPrivateKey()
 	pubKey := privateKey.PubKey()
-	messageHash := ClaimMessageDigest("qbtc-1", p2pkhAddressForTest(pubKey), "qbtc1test")
+	messageHash := ClaimMessageDigest("qbtc-1", p2pkhAddressForTest(pubKey), "qbtc1test", "")
 
 	invalidR := new(big.Int).SetBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32})
@@ -150,6 +150,47 @@ func (s *SecurityAuditTestSuite) TestBinding_FrontRunningProtection() {
 		PubKeyHashSHA256: pubKeyHashSHA256,
 	})
 	require.NoError(s.T(), err, "legitimate verification should succeed")
+}
+
+// TestBinding_ReferrerSwapProtection verifies that whoever relays a proof (the
+// proof service, a validator, a mempool watcher) cannot replace, add or drop
+// the referrer the Bitcoin key signed.
+func (s *SecurityAuditTestSuite) TestBinding_ReferrerSwapProtection() {
+	if testing.Short() {
+		s.T().Skip("skipping binding test in short mode")
+	}
+
+	prover := ProverFromSetup(s.setup)
+	verifier := NewVerifier(s.setup.VerifyingKey)
+
+	privateKey, _ := btcec.NewPrivateKey()
+	bitcoinAddress := p2wpkhAddressForTest(privateKey.PubKey())
+	destination := "qbtc1legitimate_user"
+	referrer := "qbtc1honest_referrer"
+
+	params, _, pubKeyHashSHA256 := signReferredClaimForTest(s.T(), privateKey, "qbtc-1", bitcoinAddress, destination, referrer)
+	proof, err := prover.GenerateProof(params)
+	require.NoError(s.T(), err)
+
+	verify := func(referrer string) error {
+		return verifier.VerifyProof(proof, VerificationParams{
+			ChainID:          "qbtc-1",
+			BitcoinAddress:   bitcoinAddress,
+			QBTCAddress:      destination,
+			Referrer:         referrer,
+			PubKeyHashSHA256: pubKeyHashSHA256,
+		})
+	}
+	require.NoError(s.T(), verify(referrer), "signed referrer verifies")
+	require.Error(s.T(), verify("qbtc1attacker"), "swapped referrer must fail")
+	require.Error(s.T(), verify(""), "dropped referrer must fail")
+
+	// A proof signed without a referrer cannot gain one.
+	params, _, _ = signClaimForTest(s.T(), privateKey, "qbtc-1", bitcoinAddress, destination)
+	proof, err = prover.GenerateProof(params)
+	require.NoError(s.T(), err)
+	require.NoError(s.T(), verify(""))
+	require.Error(s.T(), verify("qbtc1attacker"), "added referrer must fail")
 }
 
 // TestBinding_Hash160NativeCheck verifies the native RIPEMD160 binding: a proof
@@ -252,7 +293,7 @@ func (s *SecurityAuditTestSuite) TestVerifier_ImmutabilityAfterInit() {
 // TestEdgeCase_ZeroValues tests handling of edge case inputs.
 func (s *SecurityAuditTestSuite) TestEdgeCase_ZeroValues() {
 	s.T().Run("empty fields still produce a digest", func(t *testing.T) {
-		require.NotEqual(t, [32]byte{}, ClaimMessageDigest("", "", ""))
+		require.NotEqual(t, [32]byte{}, ClaimMessageDigest("", "", "", ""))
 	})
 
 	s.T().Run("nil proof rejection", func(t *testing.T) {
@@ -281,8 +322,8 @@ func (s *SecurityAuditTestSuite) TestEdgeCase_LargeInputs() {
 
 // TestDeterminism_SameInputsSameOutput verifies message derivation is deterministic.
 func (s *SecurityAuditTestSuite) TestDeterminism_SameInputsSameOutput() {
-	msg1 := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test")
-	msg2 := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test")
+	msg1 := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test", "")
+	msg2 := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test", "")
 	s.Require().Equal(msg1, msg2, "message computation should be deterministic")
 }
 
@@ -372,23 +413,27 @@ func TestAudit_NoSecretInputLeakage(t *testing.T) {
 
 // TestAudit_MessageBindingComplete verifies all binding components are included.
 func TestAudit_MessageBindingComplete(t *testing.T) {
-	base := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test")
+	base := ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test", "")
 
 	t.Run("address binding", func(t *testing.T) {
-		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qother", "qbtc1test"))
+		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qother", "qbtc1test", ""))
 	})
 
 	t.Run("destination binding", func(t *testing.T) {
-		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1different"))
+		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1different", ""))
 	})
 
 	t.Run("chain binding", func(t *testing.T) {
-		require.NotEqual(t, base, ClaimMessageDigest("other-chain", "bc1qaddress", "qbtc1test"))
+		require.NotEqual(t, base, ClaimMessageDigest("other-chain", "bc1qaddress", "qbtc1test", ""))
+	})
+
+	t.Run("referrer binding", func(t *testing.T) {
+		require.NotEqual(t, base, ClaimMessageDigest("qbtc-1", "bc1qaddress", "qbtc1test", "qbtc1referrer"))
 	})
 
 	t.Run("version binding", func(t *testing.T) {
 		require.Equal(t, "qbtc-claim-v1", ClaimMessageVersion, "version should be set")
-		require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddress|qbtc1test", ClaimMessageText("qbtc-1", "bc1qaddress", "qbtc1test"))
+		require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddress|qbtc1test|", ClaimMessageText("qbtc-1", "bc1qaddress", "qbtc1test", ""))
 	})
 }
 

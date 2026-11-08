@@ -259,7 +259,7 @@ func (s *msgServer) processClaimTx(ctx sdk.Context, tx *wire.MsgTx, txid string)
 			continue
 		}
 		// Use the unified ClaimUTXO function
-		if err := s.k.ClaimUTXO(cacheCtx, txid, uint32(n), memoAddr); err != nil {
+		if err := s.k.ClaimUTXO(cacheCtx, txid, uint32(n), memoAddr, ""); err != nil {
 			// ClaimUTXO returns nil if already claimed (EntitledAmount == 0)
 			// Only fail on actual errors
 			ctx.Logger().Error("failed to claim UTXO", "txid", txid, "vout", n, "error", err)

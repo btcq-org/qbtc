@@ -8,4 +8,6 @@ var DefaultValues = map[ConstantName]int64{
 	ClaimWithProofDisabled:    0,
 	MinUtxoConfirmationBlocks: 144, // ~1 day at ~10 min/block
 	MemoClaimDisabled:         0,
+	ReferrerRewardBps:         500, // 5% of the referred claim
+	RefereeRewardBps:          0,
 }

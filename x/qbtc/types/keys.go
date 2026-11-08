@@ -15,6 +15,10 @@ const (
 	GovModuleName = "gov"
 
 	ReserveModuleName = "reserve"
+
+	// ReferralModuleName is the module account that pays referral rewards.
+	// Governance funds it from the reserve; it can neither mint nor burn.
+	ReferralModuleName = "referral"
 )
 
 var (
@@ -40,6 +44,9 @@ var (
 	// BtcPeriodStartTimeKey stores the timestamp of the first block of the
 	// tip's difficulty period.
 	BtcPeriodStartTimeKey = collections.NewPrefix("btc_period_start_time")
+
+	// ReferralStatsKeys is the prefix for referral totals per qbtc address
+	ReferralStatsKeys = collections.NewPrefix("referral_stats")
 )
 
 const (
@@ -61,4 +68,15 @@ const (
 	AttributeKeyDevFundAmount       = "dev_fund_amount"
 	AttributeKeyMarketingFundAmount = "marketing_fund_amount"
 	AttributeKeyReserveAmount       = "reserve_amount"
+
+	EventTypeReferralReward    = "referral_reward"
+	AttributeKeyReferrer       = "referrer"
+	AttributeKeyReferee        = "referee"
+	AttributeKeyClaimedAmount  = "claimed_amount"
+	AttributeKeyReferrerReward = "referrer_reward"
+	AttributeKeyRefereeReward  = "referee_reward"
+	AttributeKeyPoolBalance    = "pool_balance"
+	EventTypeFundReferralPool  = "fund_referral_pool"
+	EventTypeDrainReferralPool = "drain_referral_pool"
+	AttributeKeyAmount         = "amount"
 )

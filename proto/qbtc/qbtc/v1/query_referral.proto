@@ -1,0 +1,27 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+import "gogoproto/gogo.proto";
+import "qbtc/qbtc/v1/type_referral.proto";
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// QueryReferralStatsRequest asks for the referral totals of a qbtc address.
+message QueryReferralStatsRequest { string address = 1; }
+
+// QueryReferralStatsResponse holds the referral totals. All counters are zero
+// for an address that never took part in a referral.
+message QueryReferralStatsResponse {
+  ReferralStats stats = 1 [ (gogoproto.nullable) = false ];
+}
+
+message QueryReferralPoolRequest {}
+
+// QueryReferralPoolResponse reports the pool balance and the reward rates in
+// basis points of the claimed amount.
+message QueryReferralPoolResponse {
+  // Pool balance in the bond denom.
+  uint64 balance = 1;
+  int64 referrer_reward_bps = 2;
+  int64 referee_reward_bps = 3;
+}

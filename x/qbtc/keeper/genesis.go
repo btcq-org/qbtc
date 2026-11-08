@@ -26,6 +26,15 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set param %s: %w", item.Key, err)
 		}
 	}
+	for _, stats := range genState.ReferralStats {
+		addr, err := sdk.AccAddressFromBech32(stats.Address)
+		if err != nil {
+			return fmt.Errorf("invalid referral stats address %s: %w", stats.Address, err)
+		}
+		if err := k.ReferralStats.Set(ctx, addr, stats); err != nil {
+			return fmt.Errorf("failed to set referral stats %s: %w", stats.Address, err)
+		}
+	}
 
 	// Initialize ZK verifying key from genesis
 	if len(genState.ZkVerifyingKey) > 0 {
@@ -85,6 +94,13 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 		return nil, fmt.Errorf("failed to export params: %w", err)
 	}
 	genesis.Params = params
+
+	if err := k.ReferralStats.Walk(ctx, nil, func(_ sdk.AccAddress, stats types.ReferralStats) (stop bool, err error) {
+		genesis.ReferralStats = append(genesis.ReferralStats, stats)
+		return false, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to export referral stats: %w", err)
+	}
 
 	// Export ZK verifying key
 	zkVK, err := k.ZkVerifyingKey.Get(ctx)

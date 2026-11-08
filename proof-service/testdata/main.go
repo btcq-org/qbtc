@@ -53,10 +53,10 @@ func main() {
 
 	bitcoinAddress := zktest.P2WPKHAddress(pubKey)
 	fmt.Fprintf(os.Stderr, "Bitcoin Address: %s\n", bitcoinAddress)
-	fmt.Fprintf(os.Stderr, "Message: %s\n", zk.ClaimMessageText(chainID, bitcoinAddress, claimerAddress))
+	fmt.Fprintf(os.Stderr, "Message: %s\n", zk.ClaimMessageText(chainID, bitcoinAddress, claimerAddress, ""))
 
 	// Sign the claim message the way a wallet would (BIP-137)
-	_, signature, err := zktest.SignClaim(privKey, chainID, bitcoinAddress, claimerAddress)
+	_, signature, err := zktest.SignClaim(privKey, chainID, bitcoinAddress, claimerAddress, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to sign: %v\n", err)
 		os.Exit(1)

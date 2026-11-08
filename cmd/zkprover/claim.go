@@ -17,13 +17,15 @@ import (
 	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 )
 
-// claimTarget is what the user is claiming and where the coins go. The
-// destination of the signed message is the receiver when set, else the claimer.
+// claimTarget is what the user is claiming, where the coins go and who
+// referred the claim. The destination of the signed message is the receiver
+// when set, else the claimer.
 type claimTarget struct {
 	chainID        string
 	bitcoinAddress string
 	claimer        string
 	receiver       string
+	referrer       string
 	utxos          []types.UTXORef
 }
 
@@ -35,7 +37,7 @@ func (c claimTarget) destination() string {
 }
 
 func (c claimTarget) messageText() string {
-	return zk.ClaimMessageText(c.chainID, c.bitcoinAddress, c.destination())
+	return zk.ClaimMessageText(c.chainID, c.bitcoinAddress, c.destination(), c.referrer)
 }
 
 func (c claimTarget) digest() [32]byte {
@@ -132,6 +134,7 @@ func buildClaimMsg(target claimTarget, proof []byte, pubKeyHashSHA256 [32]byte) 
 	return &types.MsgClaimWithProof{
 		Claimer:          target.claimer,
 		Receiver:         target.receiver,
+		Referrer:         target.referrer,
 		Utxos:            target.utxos,
 		Proof:            hex.EncodeToString(proof),
 		PubKeyHashSha256: hex.EncodeToString(pubKeyHashSHA256[:]),

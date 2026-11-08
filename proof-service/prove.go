@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net/http"
 
+	qbtctypes "github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 )
 
@@ -79,7 +80,14 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 	if req.ReceiverAddress != "" {
 		destination = req.ReceiverAddress
 	}
-	messageText := zk.ClaimMessageText(chainID, req.BitcoinAddress, destination)
+	if err := qbtctypes.ValidateReferrer(req.ReferrerAddress, destination); err != nil {
+		return nil, http.StatusBadRequest, &ErrorResponse{
+			Error:   "referrer_address must be a canonical qbtc address other than the destination",
+			Code:    "INVALID_REFERRER",
+			Details: err.Error(),
+		}
+	}
+	messageText := zk.ClaimMessageText(chainID, req.BitcoinAddress, destination, req.ReferrerAddress)
 	digest := zk.BitcoinSignedMessageDigest(messageText)
 	s.logger.Info().Str("message", messageText).Msg("claim message")
 
@@ -136,6 +144,7 @@ func (s *Service) generateProof(ctx context.Context, req ProveRequest) (*ProveRe
 		UTXOs:            req.UTXOs,
 		ClaimerAddress:   req.ClaimerAddress,
 		ReceiverAddress:  req.ReceiverAddress,
+		ReferrerAddress:  req.ReferrerAddress,
 	}
 
 	// 8. Optionally broadcast the claim to the chain

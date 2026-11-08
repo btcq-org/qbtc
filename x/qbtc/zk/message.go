@@ -19,14 +19,16 @@ const bitcoinSignedMessageMagic = "Bitcoin Signed Message:\n"
 
 // ClaimMessageText is the exact text a user signs in their Bitcoin wallet:
 //
-//	qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>
+//	qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer qbtc address>
 //
 // The Bitcoin address must be the string stored on the UTXO being claimed,
 // byte for byte. The destination is the receiver when set, else the claimer.
-// Neither address alphabet (base58, bech32) contains '|', so the text parses
-// unambiguously even if the chain ID contains one.
-func ClaimMessageText(chainID, bitcoinAddress, qbtcAddress string) string {
-	return strings.Join([]string{ClaimMessageVersion, chainID, bitcoinAddress, qbtcAddress}, "|")
+// The referrer is optional; without one the text ends in a bare '|'. Signing
+// the referrer stops anyone who relays the proof from swapping it. No address
+// alphabet (base58, bech32) contains '|', so the text parses unambiguously
+// even if the chain ID contains one.
+func ClaimMessageText(chainID, bitcoinAddress, qbtcAddress, referrer string) string {
+	return strings.Join([]string{ClaimMessageVersion, chainID, bitcoinAddress, qbtcAddress, referrer}, "|")
 }
 
 // BitcoinSignedMessageDigest returns the BIP-137 digest of text:
@@ -47,7 +49,8 @@ func BitcoinSignedMessageDigest(text string) [32]byte {
 
 // ClaimMessageDigest returns the digest the claim signature must cover. The
 // verifier recomputes it natively from on-chain data, which binds the proof to
-// the chain, the Bitcoin address being claimed and the destination address.
-func ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress string) [32]byte {
-	return BitcoinSignedMessageDigest(ClaimMessageText(chainID, bitcoinAddress, qbtcAddress))
+// the chain, the Bitcoin address being claimed, the destination address and
+// the referrer.
+func ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress, referrer string) [32]byte {
+	return BitcoinSignedMessageDigest(ClaimMessageText(chainID, bitcoinAddress, qbtcAddress, referrer))
 }

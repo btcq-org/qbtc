@@ -9,6 +9,7 @@ import "qbtc/qbtc/v1/msg_report_block.proto";
 import "qbtc/qbtc/v1/msg_gov_claim_utxo.proto";
 import "qbtc/qbtc/v1/msg_update_param.proto";
 import "qbtc/qbtc/v1/msg_claim_with_proof.proto";
+import "qbtc/qbtc/v1/msg_referral_pool.proto";
 
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
@@ -24,6 +25,10 @@ service Msg {
   // ClaimWithProof allows users to claim their airdrop using a ZK proof of
   // Bitcoin address ownership.
   rpc ClaimWithProof(MsgClaimWithProof) returns (MsgClaimWithProofResponse);
+  // FundReferralPool moves coins from the reserve to the referral pool.
+  rpc FundReferralPool(MsgFundReferralPool) returns (MsgEmpty);
+  // DrainReferralPool moves coins from the referral pool back to the reserve.
+  rpc DrainReferralPool(MsgDrainReferralPool) returns (MsgEmpty);
 }
 
 // MsgEmpty is the return type for all current Msg Server messages

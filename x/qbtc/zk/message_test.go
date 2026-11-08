@@ -37,14 +37,16 @@ func p2wpkhAddressForTest(pub *btcec.PublicKey) string {
 
 func TestClaimMessageText_Layout(t *testing.T) {
 	require.Equal(t, "qbtc-claim-v1", ClaimMessageVersion)
-	text := ClaimMessageText("qbtc-1", "bc1qexample", "qbtc1dest")
-	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qexample|qbtc1dest", text)
+	text := ClaimMessageText("qbtc-1", "bc1qexample", "qbtc1dest", "")
+	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qexample|qbtc1dest|", text, "no referrer leaves a trailing empty field")
+	text = ClaimMessageText("qbtc-1", "bc1qexample", "qbtc1dest", "qbtc1referrer")
+	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qexample|qbtc1dest|qbtc1referrer", text)
 }
 
 // TestBitcoinSignedMessageDigest_MatchesBIP137 recomputes the digest by hand:
 // SHA256d(0x18 || "Bitcoin Signed Message:\n" || compactSize(len) || text).
 func TestBitcoinSignedMessageDigest_MatchesBIP137(t *testing.T) {
-	short := ClaimMessageText(testChainID, "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", testQBTCAddress)
+	short := ClaimMessageText(testChainID, "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", testQBTCAddress, "")
 	long := strings.Repeat("x", 300) // needs a 3-byte compactSize (0xfd ll hh)
 
 	for _, text := range []string{short, long} {
@@ -66,18 +68,22 @@ func TestBitcoinSignedMessageDigest_MatchesBIP137(t *testing.T) {
 }
 
 func TestClaimMessageDigest_BindsEveryField(t *testing.T) {
-	base := ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress)
-	require.Equal(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress), "deterministic")
-	require.NotEqual(t, base, ClaimMessageDigest("other-chain-1", "bc1qaddress", testQBTCAddress), "chain ID")
-	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qother", testQBTCAddress), "bitcoin address")
-	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", "qbtc1attacker"), "destination")
+	base := ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, "")
+	require.Equal(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, ""), "deterministic")
+	require.NotEqual(t, base, ClaimMessageDigest("other-chain-1", "bc1qaddress", testQBTCAddress, ""), "chain ID")
+	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qother", testQBTCAddress, ""), "bitcoin address")
+	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", "qbtc1attacker", ""), "destination")
+	require.NotEqual(t, base, ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, "qbtc1referrer"), "referrer")
+	require.NotEqual(t,
+		ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, "qbtc1referrer"),
+		ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, "qbtc1attacker"), "referrer swap")
 	require.NotEqual(t, base, BitcoinSignedMessageDigest(strings.Join([]string{testChainID, "bc1qaddress", testQBTCAddress}, "|")), "version token")
 }
 
 func TestParseBIP137Signature_RecoversSigner(t *testing.T) {
 	priv, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	digest := ClaimMessageDigest(testChainID, p2wpkhAddressForTest(priv.PubKey()), testQBTCAddress)
+	digest := ClaimMessageDigest(testChainID, p2wpkhAddressForTest(priv.PubKey()), testQBTCAddress, "")
 	compact := btcecdsa.SignCompact(priv, digest[:], true)
 	recID := (compact[0] - 27) & 3
 
@@ -99,7 +105,7 @@ func TestParseBIP137Signature_RecoversSigner(t *testing.T) {
 	require.NoError(t, err)
 
 	// A different digest recovers a different key (or fails outright).
-	other := ClaimMessageDigest(testChainID, p2wpkhAddressForTest(priv.PubKey()), "qbtc1attacker")
+	other := ClaimMessageDigest(testChainID, p2wpkhAddressForTest(priv.PubKey()), "qbtc1attacker", "")
 	pub, _, _, err := ParseBIP137Signature(base64.StdEncoding.EncodeToString(compact), other)
 	if err == nil {
 		require.False(t, pub.IsEqual(priv.PubKey()))
@@ -109,7 +115,7 @@ func TestParseBIP137Signature_RecoversSigner(t *testing.T) {
 func TestParseBIP137Signature_Rejects(t *testing.T) {
 	priv, err := btcec.NewPrivateKey()
 	require.NoError(t, err)
-	digest := ClaimMessageDigest(testChainID, p2pkhAddressForTest(priv.PubKey()), testQBTCAddress)
+	digest := ClaimMessageDigest(testChainID, p2pkhAddressForTest(priv.PubKey()), testQBTCAddress, "")
 	compact := btcecdsa.SignCompact(priv, digest[:], true)
 	withHeader := func(h byte) string {
 		sig := append([]byte(nil), compact...)

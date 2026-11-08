@@ -99,6 +99,60 @@
         ]
       }
     },
+    "/qbtc/v1/referral/{address}": {
+      "get": {
+        "summary": "ReferralStats returns the referral totals of a qbtc address.",
+        "operationId": "Query_ReferralStats",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/qbtc.qbtc.v1.QueryReferralStatsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/google.rpc.Status"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Query"
+        ]
+      }
+    },
+    "/qbtc/v1/referral_pool": {
+      "get": {
+        "summary": "ReferralPool returns the referral pool balance and reward rates.",
+        "operationId": "Query_ReferralPool",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/qbtc.qbtc.v1.QueryReferralPoolResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/google.rpc.Status"
+            }
+          }
+        },
+        "tags": [
+          "Query"
+        ]
+      }
+    },
     "/qbtc/v1/utxo/{txid}/{vout}": {
       "get": {
         "summary": "UTXO returns a single UTXO by its transaction ID and output index.",
@@ -171,64 +225,6 @@
         }
       }
     },
-    "qbtc.qbtc.v1.BtcBlock": {
-      "type": "object",
-      "properties": {
-        "height": {
-          "type": "string",
-          "format": "uint64",
-          "title": "The height of the Bitcoin block"
-        },
-        "hash": {
-          "type": "string",
-          "title": "The hash of the Bitcoin block, in the usual (byte-reversed) hex"
-        },
-        "block_content": {
-          "type": "string",
-          "format": "byte",
-          "description": "The gzip-compressed proto encoding of the block's BtcBlockCommit.\nValidators attest to the SHA-256 of the uncompressed encoding."
-        }
-      },
-      "description": "BtcBlock is one Bitcoin block carried in MsgBtcBlock."
-    },
-    "qbtc.qbtc.v1.ClaimUTXO": {
-      "type": "object",
-      "properties": {
-        "txid": {
-          "type": "string"
-        },
-        "vout": {
-          "type": "integer",
-          "format": "int64"
-        }
-      },
-      "description": "ClaimUTXO is the message for claiming a UTXO by the governance module."
-    },
-    "qbtc.qbtc.v1.MsgClaimWithProofResponse": {
-      "type": "object",
-      "properties": {
-        "total_amount_claimed": {
-          "type": "string",
-          "format": "uint64",
-          "title": "The total amount of tokens claimed across all UTXOs"
-        },
-        "utxos_claimed": {
-          "type": "integer",
-          "format": "int64",
-          "title": "The number of UTXOs successfully claimed"
-        },
-        "utxos_skipped": {
-          "type": "integer",
-          "format": "int64",
-          "title": "The number of UTXOs skipped (not matching the proven address)"
-        }
-      },
-      "description": "MsgClaimWithProofResponse is the response for a successful batch claim."
-    },
-    "qbtc.qbtc.v1.MsgEmpty": {
-      "type": "object",
-      "title": "MsgEmpty is the return type for all current Msg Server messages"
-    },
     "qbtc.qbtc.v1.Param": {
       "type": "object",
       "properties": {
@@ -272,6 +268,34 @@
       },
       "description": "QueryParamsResponse is the response type for the Query/Params RPC method."
     },
+    "qbtc.qbtc.v1.QueryReferralPoolResponse": {
+      "type": "object",
+      "properties": {
+        "balance": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Pool balance in the bond denom."
+        },
+        "referrer_reward_bps": {
+          "type": "string",
+          "format": "int64"
+        },
+        "referee_reward_bps": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "description": "QueryReferralPoolResponse reports the pool balance and the reward rates in\nbasis points of the claimed amount."
+    },
+    "qbtc.qbtc.v1.QueryReferralStatsResponse": {
+      "type": "object",
+      "properties": {
+        "stats": {
+          "$ref": "#/definitions/qbtc.qbtc.v1.ReferralStats"
+        }
+      },
+      "description": "QueryReferralStatsResponse holds the referral totals. All counters are zero\nfor an address that never took part in a referral."
+    },
     "qbtc.qbtc.v1.QueryUTXOResponse": {
       "type": "object",
       "properties": {
@@ -281,6 +305,36 @@
         }
       },
       "description": "QueryUTXOResponse contains the requested UTXO."
+    },
+    "qbtc.qbtc.v1.ReferralStats": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "The qbtc address these totals belong to."
+        },
+        "referred_claims": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Number of claims that named this address as referrer."
+        },
+        "referred_amount": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Total amount claimed by claims that named this address as referrer."
+        },
+        "referrer_rewards_paid": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Total reward paid to this address as referrer."
+        },
+        "referee_rewards_paid": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Total reward paid to this address as referee."
+        }
+      },
+      "description": "ReferralStats holds the referral totals of one qbtc address, in both roles:\nas the referrer named in other claims, and as the referee whose own claims\nnamed a referrer."
     },
     "qbtc.qbtc.v1.ScriptPubKeyResult": {
       "type": "object",
@@ -329,23 +383,12 @@
           "type": "string",
           "format": "uint64",
           "title": "The Bitcoin block height at which this UTXO was created"
+        },
+        "referrer": {
+          "type": "string",
+          "description": "The qbtc address that referred the claim of this UTXO. Empty when the\nclaim named no referrer, and for memo and governance claims."
         }
       }
-    },
-    "qbtc.qbtc.v1.UTXORef": {
-      "type": "object",
-      "properties": {
-        "txid": {
-          "type": "string",
-          "title": "The Bitcoin transaction ID where this UTXO originates"
-        },
-        "vout": {
-          "type": "integer",
-          "format": "int64",
-          "title": "The output index in the Bitcoin transaction"
-        }
-      },
-      "description": "UTXORef identifies a specific UTXO by its transaction ID and output index."
     }
   }
 }

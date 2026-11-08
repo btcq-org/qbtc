@@ -227,7 +227,7 @@ func main() {
 	fmt.Printf("  ✓ Chain ID: %s\n", chainID)
 
 	// The claim message a wallet user would sign; the TSS signs its BIP-137 digest
-	messageText := zk.ClaimMessageText(chainID, bitcoinAddress, claimerAddress)
+	messageText := zk.ClaimMessageText(chainID, bitcoinAddress, claimerAddress, "")
 	messageHash := zk.BitcoinSignedMessageDigest(messageText)
 	fmt.Printf("  ✓ Claim message: %s\n", messageText)
 	fmt.Printf("  ✓ Digest to sign: %x\n", messageHash)

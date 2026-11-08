@@ -8,6 +8,7 @@ import "google/api/annotations.proto";
 import "qbtc/qbtc/v1/query_params.proto";
 import "qbtc/qbtc/v1/query_last_processed.proto";
 import "qbtc/qbtc/v1/query_utxo.proto";
+import "qbtc/qbtc/v1/query_referral.proto";
 option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
 
 // Query defines the gRPC querier service.
@@ -27,5 +28,15 @@ service Query {
   // UTXO returns a single UTXO by its transaction ID and output index.
   rpc UTXO(QueryUTXORequest) returns (QueryUTXOResponse) {
     option (google.api.http).get = "/qbtc/v1/utxo/{txid}/{vout}";
+  }
+  // ReferralStats returns the referral totals of a qbtc address.
+  rpc ReferralStats(QueryReferralStatsRequest)
+      returns (QueryReferralStatsResponse) {
+    option (google.api.http).get = "/qbtc/v1/referral/{address}";
+  }
+  // ReferralPool returns the referral pool balance and reward rates.
+  rpc ReferralPool(QueryReferralPoolRequest)
+      returns (QueryReferralPoolResponse) {
+    option (google.api.http).get = "/qbtc/v1/referral_pool";
   }
 }

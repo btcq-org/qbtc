@@ -114,15 +114,15 @@ The signed message is an ordinary BIP-137 "Bitcoin Signed Message", so any walle
 
 ### 2.2 Data Flow
 
-1. **Message Construction**: `zkprover message` prints the claim text `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>` (see Section 5)
+1. **Message Construction**: `zkprover message` prints the claim text `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer qbtc address>` (see Section 5)
 
 2. **Signature**: The user signs that text in their Bitcoin wallet ("Sign message", BIP-137), or a TSS/MPC signer signs its 32-byte BIP-137 digest with ECDSA on secp256k1
 
 3. **Proof Generation**: zkprover recovers the public key from the signature and creates a PLONK proof with private inputs (signature, public key) and only two public inputs: `MessageHash` (the BIP-137 digest) and `PubKeyHashSHA256` (SHA256 of the SEC-compressed pubkey). The chain ID, Bitcoin address and destination are *not* circuit public inputs — they bind to the proof via `MessageHash`, which the verifier re-derives.
 
-4. **On-chain Verification**: Handler rebuilds the claim text from the chain ID, the UTXO's stored Bitcoin address and the destination (receiver or claimer), computes its BIP-137 digest as `MessageHash`, natively checks `RIPEMD160(PubKeyHashSHA256) == Hash160(address)`, and verifies the PLONK proof against the two public inputs.
+4. **On-chain Verification**: Handler rebuilds the claim text from the chain ID, the UTXO's stored Bitcoin address, the destination (receiver or claimer) and the optional referrer, computes its BIP-137 digest as `MessageHash`, natively checks `RIPEMD160(PubKeyHashSHA256) == Hash160(address)`, and verifies the PLONK proof against the two public inputs.
 
-5. **Claim Execution**: Tokens minted to claimer, UTXO marked as claimed
+5. **Claim Execution**: Tokens minted to claimer, UTXO marked as claimed, and the referrer (if any) paid from the referral pool (see Section 5.5)
 
 ---
 
@@ -210,7 +210,7 @@ The ZK system uses a single circuit, `BTCPubKeyOwnershipCircuit`, covering P2PKH
 
 The chain ID, the Bitcoin address and the destination qbtc address are *not* circuit public inputs. The verifier takes them from chain state and the message, and binds them natively:
 
-- `MessageHash == BIP137Digest("qbtc-claim-v1|chainID|bitcoinAddress|destination")` ties the chain, the address and the destination to the proof.
+- `MessageHash == BIP137Digest("qbtc-claim-v1|chainID|bitcoinAddress|destination|referrer")` ties the chain, the address, the destination and the referrer to the proof.
 - `RIPEMD160(PubKeyHashSHA256) == Hash160(bitcoinAddress)` closes the Hash160 binding to the Bitcoin address.
 
 Keeping RIPEMD160 and the message derivation out of the circuit roughly halves prover time, and lets the message format change without touching the circuit or the verifying key.
@@ -237,7 +237,7 @@ The public key is a finite point on secp256k1, and `SHA256(SEC-compressed pubkey
 
 The verifier independently computes the BIP-137 digest of the claim text and uses it as the `MessageHash` public input. A proof made for any other text fails PLONK verification.
 
-**What this proves**: The signature was created for the specific claim parameters (chain, address, destination).
+**What this proves**: The signature was created for the specific claim parameters (chain, address, destination, referrer).
 
 ### 4.4 Public Key Compression (In-Circuit)
 
@@ -281,7 +281,7 @@ The conversion handles big-endian to little-endian limb ordering and proper bit 
 The user signs a single line of ASCII text:
 
 ```
-qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>
+qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer qbtc address>
 ```
 
 | Field           | Example                                      | Source                                          |
@@ -290,8 +290,9 @@ qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>
 | Chain ID        | `qbtc-1`                                     | `sdk.Context.ChainID()`                         |
 | Bitcoin address | `bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc` | `UTXO.ScriptPubKey.Address`, byte for byte      |
 | Destination     | `qbtc1...`                                   | `MsgClaimWithProof.receiver`, else `.claimer`   |
+| Referrer        | `qbtc1...` or empty                          | `MsgClaimWithProof.referrer`                    |
 
-Neither address alphabet (base58, bech32) contains `|`, so the text parses unambiguously even if the chain ID contains one. The text is one line with no trailing newline, which survives every wallet's message dialog unchanged.
+The referrer is optional. Without one the text ends in a bare `|`, for example `qbtc-claim-v1|qbtc-1|bc1q...|qbtc1...|`. No address alphabet (base58, bech32) contains `|`, so the text parses unambiguously even if the chain ID contains one. The text is one line with no trailing newline, which survives every wallet's message dialog unchanged.
 
 ### 5.2 BIP-137 Digest
 
@@ -324,8 +325,23 @@ Headers 27 to 30 are rejected: the circuit commits to the 33-byte compressed pub
 | --------------- | ------------------------------------------------------- |
 | Bitcoin address | Claiming someone else's Bitcoin (together with Hash160) |
 | Destination     | Front-running (proof only works for intended recipient) |
+| Referrer        | Referrer swap by whoever relays the proof               |
 | Chain ID        | Cross-chain replay attacks                              |
 | Version string  | Cross-version replay attacks                            |
+
+### 5.5 Referral Rewards
+
+**Files**: `x/qbtc/keeper/keeper_referral.go`, `x/qbtc/types/msg_claim_with_proof.go`
+
+The referrer is a plain qbtc address; there are no registered codes. Because the Bitcoin key signs it as part of the claim text, the proof service, a validator or a mempool watcher cannot replace, add or drop it, and no second transaction is needed. Memo (OP_RETURN) claims carry no referrer.
+
+- `ValidateBasic` (and `types.ValidateReferrer`, which `zkprover` and the proof service call before anyone signs) requires the referrer to be canonical lowercase bech32 and different from the destination.
+- After the UTXOs are minted, the referrer receives `ReferrerRewardBps` and the destination `RefereeRewardBps` basis points of the claimed amount, rounded down, so splitting a claim never earns more. Defaults: 500 (5%) and 0.
+- Rewards are paid from the `referral` module account, which can neither mint nor burn. Governance funds it from the reserve with `MsgFundReferralPool` and returns funds with `MsgDrainReferralPool`. The referrer is paid first; a reward the pool cannot cover is cut to the balance and nothing is owed afterwards.
+- A claim never fails because of its referral: the payout runs in its own cache context and a failure only drops the referral.
+- Totals per address (`ReferralStats`: referred claims and amount, rewards paid as referrer and as referee) are tracked from genesis, also while the pool is empty, and each claimed UTXO stores its referrer. Query them with `qbtcd q qbtc referral-stats <address>` and `qbtcd q qbtc referral-pool`; each payout emits a `referral_reward` event.
+
+Self-referral through a second address cannot be detected on chain. The pool cap bounds the loss, and keeping `RefereeRewardBps` at 0 halves what it earns.
 
 ---
 
@@ -434,7 +450,7 @@ The verifier is a thread-safe singleton initialized once from genesis. After ini
 ### 8.2 Verification Flow
 
 1. **Address binding check**: Decode the Bitcoin address to its Hash160; reject unless `RIPEMD160(PubKeyHashSHA256)` equals it
-2. **Message derivation**: Compute the BIP-137 digest of the claim text from `(ChainID, BitcoinAddress, QBTCAddress)`
+2. **Message derivation**: Compute the BIP-137 digest of the claim text from `(ChainID, BitcoinAddress, QBTCAddress, Referrer)`
 3. **Proof deserialization**: Check the proof layout against the verifying key, then parse the PLONK proof from bytes
 4. **Public witness construction**: Create witness with the derived `MessageHash` and the supplied `PubKeyHashSHA256`
 5. **PLONK verification**: Call gnark's PLONK verifier with proof, VK, and witness
@@ -447,8 +463,9 @@ The handler:
 
 1. Finds the first valid UTXO to determine the proven Bitcoin address string
 2. Resolves the destination (receiver when set, otherwise claimer)
-3. Calls the global verifier with the chain ID, the address, the destination and the supplied `pub_key_hash_sha256`
-4. On success, claims the listed UTXOs whose stored address equals that string by minting tokens and zeroing EntitledAmount. UTXOs of the same key at its other address type are skipped, because the signature does not name them
+3. Calls the global verifier with the chain ID, the address, the destination, the referrer and the supplied `pub_key_hash_sha256`
+4. On success, claims the listed UTXOs whose stored address equals that string by minting tokens, zeroing EntitledAmount and recording the referrer on each UTXO. UTXOs of the same key at its other address type are skipped, because the signature does not name them
+5. If the claim names a referrer, pays the referral rewards (Section 5.5)
 
 ---
 
@@ -497,7 +514,7 @@ All three are computationally infeasible.
 **Argument**:
 
 1. Proof commits to `MessageHash`, which the verifier re-derives from the claim text naming the destination address
-2. If an attacker submits with a different claimer or receiver, the re-derived `MessageHash` won't match the one committed in the proof
+2. If an attacker submits with a different claimer, receiver or referrer, the re-derived `MessageHash` won't match the one committed in the proof
 3. Proof verification fails
 
 #### 9.2.4 Replay Resistance
@@ -644,7 +661,7 @@ zkprover prove --chain-id qbtc-1 --bitcoin-address bc1q... --claimer qbtc1... \
 qbtcd tx qbtc claim-with-proof claim.json --from <key>
 ```
 
-Add `--receiver qbtc1...` to both commands to send the coins elsewhere. The address must be given exactly as the chain stores it on the UTXO (`qbtcd q qbtc utxo`).
+Add `--receiver qbtc1...` to both commands to send the coins elsewhere, and `--referrer qbtc1...` to both to name who referred the claim. The address must be given exactly as the chain stores it on the UTXO (`qbtcd q qbtc utxo`).
 
 ### A.2 With a TSS/MPC Signer
 
