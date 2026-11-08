@@ -140,7 +140,7 @@ make release
 
 ```
 Off-chain:
-  Wallet or TSS  → BIP-137 signature of "qbtc-claim-v1|<chain-id>|<btc addr>|<qbtc dest>|<referrer or empty>"
+  Wallet or TSS  → BIP-137 signature of "qbtc-claim-v1|<chain-id>|<btc addr>|<qbtc dest>[|<referrer>]"
   zkprover CLI   → recovers pubkey, PLONK proof (hides sig & pubkey), MsgClaimWithProof JSON
                           ↓
 On-chain (x/qbtc module):
@@ -165,7 +165,7 @@ Background:
 
 ### ZK Circuit Design
 
-`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). The signed message is the BIP-137 digest of `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination>|<referrer or empty>`, derived natively by both prover and verifier, so proofs are bound to the chain, the address, the destination and the referrer without the circuit knowing the format.
+`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). The signed message is the BIP-137 digest of `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination>[|<referrer>]` (the referrer field is left out when there is none), derived natively by both prover and verifier, so proofs are bound to the chain, the address, the destination and the referrer without the circuit knowing the format.
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 

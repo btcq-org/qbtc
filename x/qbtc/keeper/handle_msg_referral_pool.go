@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	errorsmod "cosmossdk.io/errors"
 	sdkmath "cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -39,7 +40,7 @@ func (s *msgServer) moveReferralPoolFunds(ctx context.Context, authority, from, 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, sdkmath.NewIntFromUint64(amount)))
 	if err := s.k.bankKeeper.SendCoinsFromModuleToModule(sdkCtx, from, to, coins); err != nil {
-		return sdkerrors.ErrInsufficientFunds.Wrapf("failed to move %s from %s to %s: %v", coins, from, to, err)
+		return errorsmod.Wrapf(err, "failed to move %s from %s to %s", coins, from, to)
 	}
 	sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
 		eventType,

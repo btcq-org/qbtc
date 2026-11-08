@@ -433,7 +433,7 @@ func TestAudit_MessageBindingComplete(t *testing.T) {
 
 	t.Run("version binding", func(t *testing.T) {
 		require.Equal(t, "qbtc-claim-v1", ClaimMessageVersion, "version should be set")
-		require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddress|qbtc1test|", ClaimMessageText("qbtc-1", "bc1qaddress", "qbtc1test", ""))
+		require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddress|qbtc1test", ClaimMessageText("qbtc-1", "bc1qaddress", "qbtc1test", ""))
 	})
 }
 

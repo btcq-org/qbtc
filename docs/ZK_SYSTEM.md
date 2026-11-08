@@ -114,7 +114,7 @@ The signed message is an ordinary BIP-137 "Bitcoin Signed Message", so any walle
 
 ### 2.2 Data Flow
 
-1. **Message Construction**: `zkprover message` prints the claim text `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer qbtc address>` (see Section 5)
+1. **Message Construction**: `zkprover message` prints the claim text `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>[|<referrer qbtc address>]` (see Section 5)
 
 2. **Signature**: The user signs that text in their Bitcoin wallet ("Sign message", BIP-137), or a TSS/MPC signer signs its 32-byte BIP-137 digest with ECDSA on secp256k1
 
@@ -210,7 +210,7 @@ The ZK system uses a single circuit, `BTCPubKeyOwnershipCircuit`, covering P2PKH
 
 The chain ID, the Bitcoin address and the destination qbtc address are *not* circuit public inputs. The verifier takes them from chain state and the message, and binds them natively:
 
-- `MessageHash == BIP137Digest("qbtc-claim-v1|chainID|bitcoinAddress|destination|referrer")` ties the chain, the address, the destination and the referrer to the proof.
+- `MessageHash == BIP137Digest("qbtc-claim-v1|chainID|bitcoinAddress|destination[|referrer]")` ties the chain, the address, the destination and the referrer to the proof.
 - `RIPEMD160(PubKeyHashSHA256) == Hash160(bitcoinAddress)` closes the Hash160 binding to the Bitcoin address.
 
 Keeping RIPEMD160 and the message derivation out of the circuit roughly halves prover time, and lets the message format change without touching the circuit or the verifying key.
@@ -281,7 +281,7 @@ The conversion handles big-endian to little-endian limb ordering and proper bit 
 The user signs a single line of ASCII text:
 
 ```
-qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer qbtc address>
+qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>[|<referrer qbtc address>]
 ```
 
 | Field           | Example                                      | Source                                          |
@@ -290,9 +290,9 @@ qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer 
 | Chain ID        | `qbtc-1`                                     | `sdk.Context.ChainID()`                         |
 | Bitcoin address | `bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc` | `UTXO.ScriptPubKey.Address`, byte for byte      |
 | Destination     | `qbtc1...`                                   | `MsgClaimWithProof.receiver`, else `.claimer`   |
-| Referrer        | `qbtc1...` or empty                          | `MsgClaimWithProof.referrer`                    |
+| Referrer        | `qbtc1...`, optional                         | `MsgClaimWithProof.referrer`                    |
 
-The referrer is optional. Without one the text ends in a bare `|`, for example `qbtc-claim-v1|qbtc-1|bc1q...|qbtc1...|`. No address alphabet (base58, bech32) contains `|`, so the text parses unambiguously even if the chain ID contains one. The text is one line with no trailing newline, which survives every wallet's message dialog unchanged.
+The referrer is optional. Without one its field is left out entirely, so the text is the four-field `qbtc-claim-v1|qbtc-1|bc1q...|qbtc1...` that signers used before referrals existed; with one it is `qbtc-claim-v1|qbtc-1|bc1q...|qbtc1...|qbtc1...`. No address alphabet (base58, bech32) contains `|`, and a Bitcoin address never starts with the qbtc bech32 prefix, so the text parses unambiguously even if the chain ID contains `|`: it ends in a referrer exactly when its last two fields are both qbtc addresses.
 
 ### 5.2 BIP-137 Digest
 

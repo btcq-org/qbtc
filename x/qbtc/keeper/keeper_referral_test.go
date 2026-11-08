@@ -6,11 +6,13 @@ import (
 	"math"
 	"testing"
 
+	errorsmod "cosmossdk.io/errors"
 	sdkmath "cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
@@ -234,11 +236,13 @@ func TestReferralPoolMsgs(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("insufficient balance", func(t *testing.T) {
-		f := initFixture(t)
-		f.bankKeeper.EXPECT().SendCoinsFromModuleToModule(gomock.Any(), types.ReferralModuleName, types.ReserveModuleName, coins).Return(errors.New("insufficient funds"))
-		_, err := keeper.NewMsgServerImpl(f.keeper).DrainReferralPool(f.ctx, &types.MsgDrainReferralPool{Authority: f.keeper.GetAuthority(), Amount: 1_000})
-		require.ErrorContains(t, err, "insufficient funds")
+	t.Run("bank errors keep their code", func(t *testing.T) {
+		for _, bankErr := range []*errorsmod.Error{sdkerrors.ErrInsufficientFunds, sdkerrors.ErrInvalidCoins} {
+			f := initFixture(t)
+			f.bankKeeper.EXPECT().SendCoinsFromModuleToModule(gomock.Any(), types.ReferralModuleName, types.ReserveModuleName, coins).Return(bankErr.Wrap("bank"))
+			_, err := keeper.NewMsgServerImpl(f.keeper).DrainReferralPool(f.ctx, &types.MsgDrainReferralPool{Authority: f.keeper.GetAuthority(), Amount: 1_000})
+			require.ErrorIs(t, err, bankErr)
+		}
 	})
 }
 

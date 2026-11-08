@@ -19,16 +19,25 @@ const bitcoinSignedMessageMagic = "Bitcoin Signed Message:\n"
 
 // ClaimMessageText is the exact text a user signs in their Bitcoin wallet:
 //
-//	qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>|<referrer qbtc address>
+//	qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>[|<referrer qbtc address>]
 //
 // The Bitcoin address must be the string stored on the UTXO being claimed,
 // byte for byte. The destination is the receiver when set, else the claimer.
-// The referrer is optional; without one the text ends in a bare '|'. Signing
-// the referrer stops anyone who relays the proof from swapping it. No address
-// alphabet (base58, bech32) contains '|', so the text parses unambiguously
-// even if the chain ID contains one.
+// The referrer is optional and its field is left out entirely when there is
+// none, so a claim without a referrer signs the same four-field text as
+// signers that predate referrals. Signing the referrer stops anyone who relays
+// the proof from swapping it.
+//
+// The text parses unambiguously: no address alphabet (base58, bech32)
+// contains '|', and a Bitcoin address never starts with the qbtc bech32
+// prefix, so a text ends in a referrer exactly when its last two fields are
+// both qbtc addresses, even if the chain ID contains '|'.
 func ClaimMessageText(chainID, bitcoinAddress, qbtcAddress, referrer string) string {
-	return strings.Join([]string{ClaimMessageVersion, chainID, bitcoinAddress, qbtcAddress, referrer}, "|")
+	fields := []string{ClaimMessageVersion, chainID, bitcoinAddress, qbtcAddress}
+	if referrer != "" {
+		fields = append(fields, referrer)
+	}
+	return strings.Join(fields, "|")
 }
 
 // BitcoinSignedMessageDigest returns the BIP-137 digest of text:

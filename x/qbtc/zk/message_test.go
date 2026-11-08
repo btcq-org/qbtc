@@ -38,7 +38,7 @@ func p2wpkhAddressForTest(pub *btcec.PublicKey) string {
 func TestClaimMessageText_Layout(t *testing.T) {
 	require.Equal(t, "qbtc-claim-v1", ClaimMessageVersion)
 	text := ClaimMessageText("qbtc-1", "bc1qexample", "qbtc1dest", "")
-	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qexample|qbtc1dest|", text, "no referrer leaves a trailing empty field")
+	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qexample|qbtc1dest", text, "no referrer leaves the field out")
 	text = ClaimMessageText("qbtc-1", "bc1qexample", "qbtc1dest", "qbtc1referrer")
 	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qexample|qbtc1dest|qbtc1referrer", text)
 }
@@ -65,6 +65,16 @@ func TestBitcoinSignedMessageDigest_MatchesBIP137(t *testing.T) {
 
 		require.Equal(t, want, BitcoinSignedMessageDigest(text))
 	}
+}
+
+// TestClaimMessageText_UnreferredMatchesLegacyText pins that a claim without a
+// referrer signs the four-field text signers used before referrals existed.
+func TestClaimMessageText_UnreferredMatchesLegacyText(t *testing.T) {
+	legacy := strings.Join([]string{ClaimMessageVersion, testChainID, "bc1qaddress", testQBTCAddress}, "|")
+	require.Equal(t, legacy, ClaimMessageText(testChainID, "bc1qaddress", testQBTCAddress, ""))
+	require.Equal(t, BitcoinSignedMessageDigest(legacy), ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, ""))
+	require.NotEqual(t, BitcoinSignedMessageDigest(legacy+"|"), ClaimMessageDigest(testChainID, "bc1qaddress", testQBTCAddress, ""),
+		"an empty referrer adds no field")
 }
 
 func TestClaimMessageDigest_BindsEveryField(t *testing.T) {

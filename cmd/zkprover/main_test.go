@@ -48,9 +48,9 @@ func TestClaimMsgJSON_RoundTripsThroughChainCodec(t *testing.T) {
 
 func TestClaimTarget_Message(t *testing.T) {
 	target := claimTarget{chainID: "qbtc-1", bitcoinAddress: "bc1qaddr", claimer: "qbtc1claimer"}
-	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1claimer|", target.messageText())
+	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1claimer", target.messageText())
 	target.receiver = "qbtc1receiver"
-	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1receiver|", target.messageText())
+	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1receiver", target.messageText())
 	target.referrer = "qbtc1referrer"
 	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1receiver|qbtc1referrer", target.messageText())
 }
