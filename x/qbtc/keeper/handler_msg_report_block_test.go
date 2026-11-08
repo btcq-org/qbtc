@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"cosmossdk.io/collections"
@@ -279,6 +280,97 @@ func TestSetMsgReportBlock_UnclaimedInputsKeepFullEntitlement(t *testing.T) {
 	require.Equal(t, uint64(33_333_333), getTestEntitlement(t, f, txid, 0))
 	require.Equal(t, uint64(66_666_667), getTestEntitlement(t, f, txid, 1))
 	require.Equal(t, uint64(1), getTestEntitlement(t, f, txid, 2))
+}
+
+// The block's fees come out of the coinbase's entitlement once in total, split
+// across its outputs in proportion to their value, however the miner splits
+// the reward.
+func TestSetMsgReportBlock_CoinbaseFeeSubtractedOnce(t *testing.T) {
+	const (
+		inTxid  = "1111111111111111111111111111111111111111111111111111111111111111"
+		inSats  = 100_000_000
+		feeSats = 30_000_000
+	)
+	tests := []struct {
+		name     string
+		coinbase []int64
+		entitled []uint64
+	}{
+		{
+			name:     "one output",
+			coinbase: []int64{300_000_000},
+			entitled: []uint64{270_000_000},
+		},
+		{
+			name:     "equal outputs above the fee",
+			coinbase: []int64{100_000_000, 100_000_000, 100_000_000},
+			entitled: []uint64{90_000_000, 90_000_000, 90_000_000},
+		},
+		{
+			name:     "uneven outputs",
+			coinbase: []int64{240_000_000, 60_000_000},
+			entitled: []uint64{216_000_000, 54_000_000},
+		},
+		{
+			// A pool paying its miners directly in the coinbase.
+			name:     "outputs at or below the fee",
+			coinbase: slices.Repeat([]int64{30_000_000}, 10),
+			entitled: slices.Repeat([]uint64{27_000_000}, 10),
+		},
+		{
+			name:     "outputs below and above the fee",
+			coinbase: []int64{6_000_000, 294_000_000},
+			entitled: []uint64{5_400_000, 264_600_000},
+		},
+		{
+			name:     "zero-value output, such as the witness commitment",
+			coinbase: []int64{300_000_000, 0},
+			entitled: []uint64{270_000_000},
+		},
+		{
+			name:     "coinbase pays less than the fees",
+			coinbase: []int64{10_000_000, 10_000_000},
+			entitled: []uint64{0, 0},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := initFixture(t)
+			c := newRegtestChain(t, f, 800000)
+			setTestUtxo(t, f, c.params, inTxid, 0, inSats, inSats)
+
+			spend := spendTx([]wire.OutPoint{outpoint(t, inTxid, 0)}, p2pkhOut(t, inSats-feeSats))
+			cb := c.coinbase(tc.coinbase...)
+			c.mustSubmit(c.nextBlock(cb, spend))
+
+			require.Equal(t, uint64(inSats-feeSats), getTestEntitlement(t, f, spend.TxHash().String(), 0))
+			for n, want := range tc.entitled {
+				require.Equal(t, want, getTestEntitlement(t, f, cb.TxHash().String(), uint32(n)), "coinbase output %d", n)
+			}
+		})
+	}
+}
+
+// Bitcoin caps a transaction's output total at 21 million BTC; a block that
+// breaks the cap is rejected, so the output sums cannot overflow.
+func TestSetMsgReportBlock_OutputTotalAboveMaxSatoshi(t *testing.T) {
+	const inTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+	t.Run("coinbase", func(t *testing.T) {
+		f := initFixture(t)
+		c := newRegtestChain(t, f, 800000)
+		err := c.submit(c.nextBlock(c.coinbase(btcutil.MaxSatoshi, 1)))
+		require.ErrorContains(t, err, "output total exceeds")
+		require.Equal(t, uint64(800000), getLastProcessed(t, f))
+	})
+	t.Run("transaction", func(t *testing.T) {
+		f := initFixture(t)
+		c := newRegtestChain(t, f, 800000)
+		setTestUtxo(t, f, c.params, inTxid, 0, 100_000_000, 100_000_000)
+		spend := spendTx([]wire.OutPoint{outpoint(t, inTxid, 0)}, p2pkhOut(t, btcutil.MaxSatoshi+1))
+		err := c.submit(c.nextBlock(c.coinbase(), spend))
+		require.ErrorContains(t, err, "output total exceeds")
+		require.Equal(t, uint64(800000), getLastProcessed(t, f))
+	})
 }
 
 // An input that is not in the store contributes nothing to the claimable or
