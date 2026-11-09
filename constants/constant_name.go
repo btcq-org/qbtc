@@ -10,6 +10,7 @@ const (
 	BlocksPerYear
 	ClaimWithProofDisabled
 	MinUtxoConfirmationBlocks
+	MemoClaimDisabled
 )
 
 func FromString(s string) (ConstantName, bool) {
@@ -22,6 +23,8 @@ func FromString(s string) (ConstantName, bool) {
 		return ClaimWithProofDisabled, true
 	case "MinUtxoConfirmationBlocks":
 		return MinUtxoConfirmationBlocks, true
+	case "MemoClaimDisabled":
+		return MemoClaimDisabled, true
 	default:
 		return 0, false
 	}
