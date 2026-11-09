@@ -27,15 +27,18 @@ func NewFreeClaimDecorator(ak AccountKeeper) FreeClaimDecorator {
 	return FreeClaimDecorator{ak: ak}
 }
 
-// AnteHandle makes MsgClaimWithProof transactions free by setting an infinite
-// gas meter and zero minimum gas prices. It also pre-creates the signer
-// account when absent, because every claim is by definition a first-time
-// on-chain interaction — without this, downstream DeductFee / SetPubKey /
-// SigVerification decorators reject the tx with "account does not exist".
+// AnteHandle makes MsgClaimWithProof transactions free: zero minimum gas
+// prices, and a gas meter of the declared gas clamped to
+// [types.FreeClaimMinGas, types.FreeClaimMaxGas] (types.FreeClaimMaxGas when
+// simulating). It also pre-creates the signer account when absent, because every
+// claim is by definition a first-time on-chain interaction — without this,
+// downstream DeductFee / SetPubKey / SigVerification decorators reject the tx
+// with "account does not exist". The account is rolled back with the rest of
+// the ante writes if a later decorator, such as the proof check, rejects the tx.
 // Must be placed after SetUpContextDecorator so the gas meter override takes
 // effect for all downstream decorators.
 func (fcd FreeClaimDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (sdk.Context, error) {
-	if !isClaimOnlyTx(tx) {
+	if !types.IsClaimOnlyTx(tx) {
 		return next(ctx, tx, simulate)
 	}
 
@@ -50,8 +53,13 @@ func (fcd FreeClaimDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bo
 			"free-claim tx must contain exactly one MsgClaimWithProof")
 	}
 
+	// Simulation estimates the gas, so it must not run out at the declared value.
+	gasLimit := types.FreeClaimMaxGas
+	if gasTx, ok := tx.(sdk.GasTx); ok && !simulate {
+		gasLimit = types.FreeClaimGasLimit(gasTx.GetGas())
+	}
 	ctx = ctx.
-		WithGasMeter(storetypes.NewInfiniteGasMeter()).
+		WithGasMeter(storetypes.NewGasMeter(gasLimit)).
 		WithMinGasPrices(sdk.DecCoins{})
 
 	if err := fcd.ensureSignerAccounts(ctx, tx); err != nil {
@@ -93,18 +101,4 @@ func (fcd FreeClaimDecorator) createAccountIfMissing(ctx sdk.Context, addr sdk.A
 		return
 	}
 	fcd.ak.SetAccount(ctx, fcd.ak.NewAccountWithAddress(ctx, addr))
-}
-
-// isClaimOnlyTx returns true if the tx contains only MsgClaimWithProof messages.
-func isClaimOnlyTx(tx sdk.Tx) bool {
-	msgs := tx.GetMsgs()
-	if len(msgs) == 0 {
-		return false
-	}
-	for _, msg := range msgs {
-		if _, ok := msg.(*types.MsgClaimWithProof); !ok {
-			return false
-		}
-	}
-	return true
 }

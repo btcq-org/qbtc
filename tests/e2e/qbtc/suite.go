@@ -79,6 +79,13 @@ func (s *E2ETestSuite) SetupSuite() {
 			EntitledAmount: 150_000_000,
 			ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
 		},
+		{
+			Txid:           "aaaa000000000000000000000000000000000000000000000000000000000003",
+			Vout:           0,
+			Amount:         30_000_000,
+			EntitledAmount: 30_000_000,
+			ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+		},
 	}
 
 	// 3. Mutate the qbtc module genesis in place — the SDK pattern for

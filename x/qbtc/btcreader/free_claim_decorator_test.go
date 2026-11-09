@@ -47,6 +47,7 @@ type fakeTx struct {
 	msgs    []sdk.Msg
 	signers [][]byte
 	payer   []byte
+	gas     uint64
 }
 
 func (t fakeTx) GetMsgs() []sdk.Msg                                { return t.msgs }
@@ -54,7 +55,7 @@ func (t fakeTx) GetMsgsV2() ([]proto.Message, error)               { return nil,
 func (t fakeTx) GetSigners() ([][]byte, error)                     { return t.signers, nil }
 func (t fakeTx) GetPubKeys() ([]cryptotypes.PubKey, error)         { return nil, nil }
 func (t fakeTx) GetSignaturesV2() ([]txsigning.SignatureV2, error) { return nil, nil }
-func (t fakeTx) GetGas() uint64                                    { return 0 }
+func (t fakeTx) GetGas() uint64                                    { return t.gas }
 func (t fakeTx) GetFee() sdk.Coins                                 { return sdk.Coins{} }
 func (t fakeTx) FeePayer() []byte                                  { return t.payer }
 func (t fakeTx) FeeGranter() []byte                                { return nil }
@@ -81,6 +82,34 @@ func TestFreeClaimDecorator_CreatesAccountForFirstTimeClaimer(t *testing.T) {
 	require.True(t, nextCalled, "next decorator should run")
 	require.NotNil(t, ak.GetAccount(context.Background(), claimer),
 		"claimer account must be pre-created so downstream decorators can look it up")
+}
+
+// A free claim runs with its declared gas clamped to
+// [FreeClaimMinGas, FreeClaimMaxGas], and simulation with FreeClaimMaxGas. The
+// meter's limit is the gas the tx reports to CometBFT, so it must be finite.
+func TestFreeClaimDecorator_GasLimit(t *testing.T) {
+	claimer := sdk.AccAddress([]byte("gas-limit-claimer-addr-01"))
+	decorator := btcreader.NewFreeClaimDecorator(newFakeAccountKeeper())
+	limit := func(declared uint64, simulate bool) uint64 {
+		t.Helper()
+		tx := fakeTx{
+			msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String()}},
+			signers: [][]byte{claimer},
+			gas:     declared,
+		}
+		var got uint64
+		_, err := decorator.AnteHandle(sdk.Context{}, tx, simulate, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
+			got = ctx.GasMeter().Limit()
+			return ctx, nil
+		})
+		require.NoError(t, err)
+		return got
+	}
+
+	require.Equal(t, types.FreeClaimMinGas, limit(0, false))
+	require.Equal(t, uint64(1_000_000), limit(1_000_000, false))
+	require.Equal(t, types.FreeClaimMaxGas, limit(1<<62, false))
+	require.Equal(t, types.FreeClaimMaxGas, limit(0, true))
 }
 
 func TestFreeClaimDecorator_PreservesExistingAccount(t *testing.T) {

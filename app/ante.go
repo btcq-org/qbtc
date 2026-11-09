@@ -60,6 +60,9 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ante.NewSigGasConsumeDecorator(options.AccountKeeper, options.SigGasConsumer),
 		ante.NewSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewIncrementSequenceDecorator(options.AccountKeeper),
+		// verifies a free claim's proof, after its signature: an invalid
+		// claim never enters the mempool, and its ante writes roll back
+		keeper.NewClaimProofDecorator(options.QbtcKeeper),
 	}
 
 	return sdk.ChainAnteDecorators(anteDecorators...), nil

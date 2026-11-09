@@ -552,6 +552,24 @@ All three are computationally infeasible.
 | Double-spend        | EntitledAmount zeroing        | `handle_msg_claim_with_proof.go:157` |
 | DoS via large proof | Exact proof layout check      | `proof_layout.go`                    |
 | DoS via many UTXOs  | Max 50 UTXOs per batch        | protobuf validation                  |
+| Free-claim spam     | Proof verified in CheckTx; failed claims leave no account | `claim_verification.go` |
+| Claim-filled blocks | `MaxClaimsPerBlock` (200), checked in Prepare/ProcessProposal | `keeper/abci/abci.go` |
+| Unbounded block gas | `block.max_gas` 100,000,000; free claims run with a finite gas limit | `app/consensus_params.go`, `types/claim_tx.go` |
+
+### 9.3.1 Claim Admission
+
+A free claim transaction (only `MsgClaimWithProof`, no fee) is checked by `ClaimProofDecorator` in the ante handler, after its signature:
+
+- **CheckTx, simulation and FinalizeBlock:** claims are enabled, one referenced UTXO exists, is unclaimed, has an address and has `MinUtxoConfirmationBlocks` confirmations, and the PLONK proof verifies (about 3 ms). A claim that fails never enters the mempool, and the account `FreeClaimDecorator` created for its signer is rolled back with the other ante writes. FinalizeBlock verifies again because a proposer can include transactions that never passed an honest mempool; the message handler then skips its own verification.
+- **ReCheckTx:** the state checks only, so a claim whose UTXOs an earlier block claimed leaves the mempool. A proof's validity cannot change, and re-verifying a full mempool after every block would take seconds.
+
+A claim nested in authz `MsgExec` is not a free claim transaction: the message handler verifies it and charges `ClaimProofVerifyGas` (60,000) for it.
+
+A free claim runs with the gas it declares, clamped to [400,000, 3,000,000] (3,000,000 when simulating): one UTXO uses about 250,000 gas and each further UTXO about 35,500. The limit is the gas the transaction reports to CometBFT, which drops a transaction with negative reported gas once `max_gas` is set.
+
+`MaxClaimsPerBlock` (default 200, a governance parameter) caps `MsgClaimWithProof` messages per block, including those nested in `MsgExec`, so one block costs at most about 0.6 s of verification. `PrepareProposal` leaves out claims past the cap (they stay in the mempool), and `ProcessProposal` rejects a proposal past it or past `max_gas`; with qbtc's no-op app mempool the SDK's own `ProcessProposal` checks neither.
+
+CheckTx shares one ABCI lock with block execution, so a flood of claims at a node slows that node. Validators should accept transactions only through sentry or RPC nodes.
 
 ### 9.4 Trust Assumptions
 
