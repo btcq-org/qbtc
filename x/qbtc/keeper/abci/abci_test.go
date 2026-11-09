@@ -583,6 +583,25 @@ func (f *abciFixture) process(ctx sdk.Context, txs ...sdk.Tx) abci.ResponseProce
 	return resp.Status
 }
 
+// While genesis UTXO chunks are left to load, the proposer injects no Bitcoin
+// blocks and a proposal that carries any is rejected.
+func TestProposalsWaitForUtxoSnapshot(t *testing.T) {
+	const accept, reject = abci.ResponseProcessProposal_ACCEPT, abci.ResponseProcessProposal_REJECT
+	f := newFixture(t, 6, 40, 30, 30)
+	valid, ec := f.injectedMsg(101, 102)
+	ctx := f.ctxWith(ec)
+	require.Equal(t, accept, f.process(ctx, f.injectTx(valid)))
+
+	require.NoError(t, f.keeper.UtxoChunkHashes.Set(f.ctx, 0, make([]byte, 32)))
+	msg, _ := f.prepare(ec, 10<<20)
+	require.Nil(t, msg, "no inject tx while the snapshot loads")
+	require.Equal(t, reject, f.process(ctx, f.injectTx(valid)))
+	require.Equal(t, accept, f.process(ctx))
+
+	require.NoError(t, f.keeper.MarkUtxoChunkLoaded(f.ctx, 0))
+	require.Equal(t, accept, f.process(ctx, f.injectTx(valid)))
+}
+
 func TestProcessProposal(t *testing.T) {
 	const accept, reject = abci.ResponseProcessProposal_ACCEPT, abci.ResponseProcessProposal_REJECT
 	f := newFixture(t, 6, 40, 30, 30)

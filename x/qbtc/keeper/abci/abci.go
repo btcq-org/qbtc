@@ -106,6 +106,9 @@ func (h *ProposalHandler) votedInjectTxs(ctx sdk.Context, req *abci.RequestPrepa
 	if !keeper.VoteExtensionsEnabled(ctx) {
 		return nil, 0
 	}
+	if loaded, err := h.keeper.UtxoSnapshotLoaded(ctx); err != nil || !loaded {
+		return nil, 0
+	}
 	lastProcessedBlock, err := h.keeper.GetLastProcessedBlock(ctx)
 	if err != nil {
 		ctx.Logger().Error("failed to get last processed block", "error", err)
@@ -392,6 +395,13 @@ func (h *ProposalHandler) checkInjectedBlocks(ctx sdk.Context, txs []sdk.Tx) err
 	}
 	if msg.Signer != types.BtcBlockSignerAddress {
 		return fmt.Errorf("MsgBtcBlock signer %s is not the injection signer", msg.Signer)
+	}
+	loaded, err := h.keeper.UtxoSnapshotLoaded(ctx)
+	if err != nil {
+		return err
+	}
+	if !loaded {
+		return fmt.Errorf("MsgBtcBlock before the genesis UTXO snapshot is loaded")
 	}
 	if err := msg.ValidateBasic(); err != nil {
 		return err

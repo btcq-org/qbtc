@@ -1,4 +1,6 @@
 ```bash
+## mainnet uses chain-id qbtc-1 (scripts/install.sh); a new network needs its
+## own chain-id so claim proofs and attestations from another chain never apply
 ./qbtcd config set client chain-id qbtc-testnet
 
 ## the chain accepts ML-DSA-65 keys only: `init` writes
@@ -41,8 +43,32 @@ jq --arg start "$START" \
     | .app_state.qbtc.btc_anchor_header = $header
     | .app_state.qbtc.btc_anchor_period_start_time = $period' tmp.json > genesis.json
 
+# genesis UTXO snapshot: with config/genesis.bin in place, write the SHA-256 of
+# each of its chunks into genesis.json. Every node splits its genesis.bin the
+# same way at InitChain, refuses one that does not match, and checks each chunk
+# again before loading it (one chunk per block). Bitcoin blocks apply only
+# after the last chunk. A genesis.bin without these hashes is refused.
+./qbtcd genesis set-utxo-chunk-hashes config/genesis.bin
+# publish genesis.json and genesis.bin, and list both in the release's
+# sha256sum.txt, which scripts/install.sh checks them against
+
+# governance fund addresses (string params), kept by export and import
+jq --arg dev "<dev fund address>" --arg mkt "<marketing fund address>" \
+   '.app_state.qbtc.string_params = [{"key":"DevFundAddress","value":$dev},{"key":"MarketingFundAddress","value":$mkt}]' \
+   genesis.json > tmp.json && mv tmp.json genesis.json
+
+# claims are off by default (ClaimWithProofDisabled = 1); governance enables
+# them with MsgUpdateParam once the chain is ready
+
 ./qbtcd genesis validate-genesis
 ```
+
+Once the snapshot has loaded (the `loaded genesis UTXO chunk` log line for
+the last chunk), `config/genesis.bin` and `utxo_chunks/` in the node home may be
+deleted to free disk; the node does not delete them, so a block executed
+again after a crash still finds its chunk.
+
+`qbtcd export --for-zero-height` is not supported; export at the last height.
 
 ## setup firewall
 ```bash
