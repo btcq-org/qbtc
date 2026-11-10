@@ -244,11 +244,14 @@ func (l *blockLimits) add(tx sdk.Tx) error {
 	if claims > l.maxClaims {
 		return fmt.Errorf("more than %d claim messages in the block", l.maxClaims)
 	}
-	gas := l.gas + txGas(tx)
-	if l.maxGas > 0 && gas > uint64(l.maxGas) {
+	// As in CometBFT, max_gas -1 is the only "no limit". l.gas never exceeds
+	// max_gas, so the subtraction cannot wrap, and a huge declared gas cannot
+	// wrap the sum.
+	gas := txGas(tx)
+	if l.maxGas >= 0 && gas > uint64(l.maxGas)-l.gas {
 		return fmt.Errorf("transactions want more than the block's max gas %d", l.maxGas)
 	}
-	l.claims, l.gas = claims, gas
+	l.claims, l.gas = claims, l.gas+gas
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package abci
 
 import (
+	"math"
 	"testing"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -84,6 +85,20 @@ func TestProcessProposalBlockLimits(t *testing.T) {
 		// and at most types.FreeClaimMaxGas whatever it declares above it.
 		ctx = withMaxGas(ctx, int64(types.FreeClaimMaxGas))
 		require.Equal(t, accept, f.process(ctx, claimTx(1<<62)))
+	})
+
+	t.Run("declared gas that would wrap the sum", func(t *testing.T) {
+		ctx := withMaxGas(ctx, 1_000_000)
+		send := func(gas uint64) sdk.Tx { return gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgEmpty{}}}, gas: gas} }
+		// 600,000 + (2^64 - 599,999) wraps to 1 in uint64
+		require.Equal(t, reject, f.process(ctx, send(600_000), send(math.MaxUint64-599_998)))
+	})
+
+	t.Run("max_gas 0 is a limit, as in CometBFT", func(t *testing.T) {
+		ctx := withMaxGas(ctx, 0)
+		send := func(gas uint64) sdk.Tx { return gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgEmpty{}}}, gas: gas} }
+		require.Equal(t, accept, f.process(ctx, send(0)))
+		require.Equal(t, reject, f.process(ctx, send(1)))
 	})
 
 	t.Run("no max_gas", func(t *testing.T) {

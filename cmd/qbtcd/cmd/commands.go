@@ -93,7 +93,6 @@ func keysCommands() *cobra.Command {
 	return cmd
 }
 
-// setFlagDefault changes the default of an already defined flag.
 // setGenesisBlockGasLimit runs after `qbtcd init` and sets block.max_gas in
 // the genesis file init wrote.
 func setGenesisBlockGasLimit(cmd *cobra.Command, _ []string) error {
@@ -108,6 +107,7 @@ func setGenesisBlockGasLimit(cmd *cobra.Command, _ []string) error {
 	return genutil.ExportGenesisFile(appGenesis, genFile)
 }
 
+// setFlagDefault changes the default of an already defined flag.
 func setFlagDefault(cmd *cobra.Command, name, value string) {
 	f := cmd.Flags().Lookup(name)
 	if f == nil {
