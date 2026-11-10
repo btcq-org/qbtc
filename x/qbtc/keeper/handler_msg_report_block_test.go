@@ -15,6 +15,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
@@ -143,6 +144,41 @@ func TestSetMsgReportBlock_MemoClaim(t *testing.T) {
 
 	require.Equal(t, uint64(0), getTestEntitlement(t, f, claim.TxHash().String(), 0))
 	require.Equal(t, sdkmath.NewInt(amount-fee).String(), minted.String())
+}
+
+// With MemoClaimDisabled set, a claim memo self-send mints nothing and is
+// processed like any other transaction, so its output keeps its entitlement.
+// Once the switch is cleared, the next memo claim mints again.
+func TestSetMsgReportBlock_MemoClaimDisabled(t *testing.T) {
+	const (
+		inputTxid = "dbdd7837a8f7e113f6038b6cf659600538c53b7a742e2b9b1f22de3039e912ba"
+		amount    = 88_109_900_000
+		fee       = 1_000
+	)
+	f := initFixture(t)
+	c := newRegtestChain(t, f, 800000)
+	setTestUtxo(t, f, c.params, inputTxid, 0, amount, amount)
+	memoAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+
+	require.NoError(t, f.keeper.ConstOverrides.Set(f.ctx, constants.MemoClaimDisabled.String(), 1))
+	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	first := spendTx([]wire.OutPoint{outpoint(t, inputTxid, 0)}, p2pkhOut(t, amount-fee), claimMemoOut(t, memoAddr))
+	c.mustSubmit(c.nextBlock(c.coinbase(), first))
+	require.Equal(t, uint64(amount-fee), getTestEntitlement(t, f, first.TxHash().String(), 0))
+
+	require.NoError(t, f.keeper.ConstOverrides.Set(f.ctx, constants.MemoClaimDisabled.String(), 0))
+	minted := sdkmath.ZeroInt()
+	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, coins sdk.Coins) error {
+			minted = minted.Add(coins.AmountOf(sdk.DefaultBondDenom))
+			return nil
+		}).AnyTimes()
+	f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	second := spendTx([]wire.OutPoint{outpoint(t, first.TxHash().String(), 0)}, p2pkhOut(t, amount-2*fee), claimMemoOut(t, memoAddr))
+	c.mustSubmit(c.nextBlock(c.coinbase(), second))
+	require.Equal(t, uint64(0), getTestEntitlement(t, f, second.TxHash().String(), 0))
+	require.Equal(t, sdkmath.NewInt(amount-2*fee).String(), minted.String())
 }
 
 // A claimed UTXO spent together with a small unclaimed one gives a partially entitled output.

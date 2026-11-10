@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cosmossdk.io/collections"
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
@@ -88,6 +89,10 @@ func (s *msgServer) processBtcBlock(ctx sdk.Context, block *types.BtcBlock) erro
 		return sdkerror.ErrInvalidRequest.Wrapf("invalid block %d: %v", block.Height, err)
 	}
 
+	// With memo claims disabled, a claim memo transaction is processed like any
+	// other transaction: its outputs keep their entitlement, which can still be
+	// claimed with a proof.
+	memoClaimsEnabled := s.k.GetConfig(ctx, constants.MemoClaimDisabled) <= 0
 	claimTxs := make([]int, 0)
 	totalFee := uint64(0)
 	// process the reported block; txs[0] is the coinbase, processed last because
@@ -96,7 +101,7 @@ func (s *msgServer) processBtcBlock(ctx sdk.Context, block *types.BtcBlock) erro
 		tx, txid := txs[i], txids[i].String()
 		// check if it is a claim transaction , need to check it before the transaction is processed
 		// because utxo that has been spent will be removed from the store, so we can't check it after processing the transaction
-		if s.isClaimTx(ctx, params, tx) {
+		if memoClaimsEnabled && s.isClaimTx(ctx, params, tx) {
 			claimTxs = append(claimTxs, i)
 		}
 		fee, err := s.processTransaction(ctx, params, tx, txid, block.Height)
