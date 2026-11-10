@@ -6,7 +6,9 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	"github.com/cosmos/cosmos-sdk/baseapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/mempool"
 	"github.com/cosmos/cosmos-sdk/x/authz"
 	"github.com/stretchr/testify/require"
 
@@ -151,4 +153,42 @@ func TestPrepareProposalBlockLimits(t *testing.T) {
 		kept := prepare(ctx, []sdk.Tx{big, big, small})
 		require.Equal(t, [][]byte{{0}, {2}}, kept)
 	})
+}
+
+// fakeVerifier hands the SDK's default proposal handler the transactions of a
+// test, indexed by their one-byte encoding.
+type fakeVerifier struct{ txs []sdk.Tx }
+
+func (v fakeVerifier) TxDecode(bz []byte) (sdk.Tx, error)           { return v.txs[bz[0]], nil }
+func (fakeVerifier) TxEncode(sdk.Tx) ([]byte, error)                { return nil, nil }
+func (fakeVerifier) PrepareProposalVerifyTx(sdk.Tx) ([]byte, error) { return nil, nil }
+func (fakeVerifier) ProcessProposalVerifyTx([]byte) (sdk.Tx, uint64, error) {
+	return nil, 0, nil
+}
+
+// The SDK's default PrepareProposal, which runs before the proposal checks,
+// must count a free claim at its clamped gas too. CheckTx admits a claim
+// declaring up to max_gas.
+func TestDefaultPrepareProposalCountsClaimGas(t *testing.T) {
+	f := newFixture(t, 6, 40, 30, 30)
+	ctx := withMaxGas(f.ctx, 10_000_000)
+	send := gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgEmpty{}}}, gas: 1_000_000}
+	txs := []sdk.Tx{claimTx(10_000_000), send, send}
+	req := &abci.RequestPrepareProposal{MaxTxBytes: 10 << 20, Txs: [][]byte{{0}, {1}, {2}}}
+
+	prepare := func(selector baseapp.TxSelector) [][]byte {
+		t.Helper()
+		h := baseapp.NewDefaultProposalHandler(mempool.NoOpMempool{}, fakeVerifier{txs: txs})
+		if selector != nil {
+			h.SetTxSelector(selector)
+		}
+		resp, err := h.PrepareProposalHandler()(ctx, req)
+		require.NoError(t, err)
+		return resp.Txs
+	}
+
+	// The SDK alone counts the claim's declared 10,000,000 and stops there.
+	require.Equal(t, [][]byte{{0}}, prepare(nil))
+	// Counted at types.FreeClaimMaxGas, the claim leaves room for the rest.
+	require.Equal(t, [][]byte{{0}, {1}, {2}}, prepare(NewTxSelector()))
 }

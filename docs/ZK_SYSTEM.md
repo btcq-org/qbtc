@@ -567,7 +567,7 @@ A claim nested in authz `MsgExec` is not a free claim transaction: the message h
 
 A free claim runs with the gas it declares, clamped to [400,000, 3,000,000] (3,000,000 when simulating): one UTXO uses about 250,000 gas and each further UTXO about 35,500. The limit is the gas the transaction reports to CometBFT, which drops a transaction with negative reported gas once `max_gas` is set.
 
-`MaxClaimsPerBlock` (default 200, a governance parameter) caps `MsgClaimWithProof` messages per block, including those nested in `MsgExec`, so one block costs at most about 0.6 s of verification. `PrepareProposal` leaves out claims past the cap (they stay in the mempool), and `ProcessProposal` rejects a proposal past it or past `max_gas`; with qbtc's no-op app mempool the SDK's own `ProcessProposal` checks neither.
+`MaxClaimsPerBlock` (default 200, a governance parameter) caps `MsgClaimWithProof` messages per block, including those nested in `MsgExec`, so one block costs at most about 0.6 s of verification. `PrepareProposal` leaves out claims past the cap (they stay in the mempool), and `ProcessProposal` rejects a proposal past it or past `max_gas`; with qbtc's no-op app mempool the SDK's own `ProcessProposal` checks neither. A free claim counts against `max_gas` at its clamped gas everywhere, including the SDK's transaction selection in `PrepareProposal`, which would otherwise count its declared gas: a claim declaring the whole `max_gas` would leave every other transaction out of the block.
 
 CheckTx shares one ABCI lock with block execution, so a flood of claims at a node slows that node. Validators should accept transactions only through sentry or RPC nodes.
 

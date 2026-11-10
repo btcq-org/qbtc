@@ -1,6 +1,7 @@
 package abci
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/btcq-org/qbtc/constants"
@@ -9,6 +10,7 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/cosmos/cosmos-sdk/baseapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -267,6 +269,25 @@ func txGas(tx sdk.Tx) uint64 {
 		return types.FreeClaimGasLimit(gasTx.GetGas())
 	}
 	return gasTx.GetGas()
+}
+
+// NewTxSelector returns the SDK's default transaction selector, counting each
+// transaction at txGas, as the proposal checks do. Set it on the SDK's
+// DefaultProposalHandler, whose selection runs before PrepareProposal's own
+// limits. The SDK counts a transaction's declared gas, but a free claim runs
+// with its declared gas clamped to types.FreeClaimMaxGas, and CheckTx admits a
+// claim declaring up to max_gas. Without this, a single such claim would use
+// up the SDK's gas budget and leave every other transaction out of the block.
+func NewTxSelector() baseapp.TxSelector {
+	return txSelector{TxSelector: baseapp.NewDefaultTxSelector()}
+}
+
+type txSelector struct {
+	baseapp.TxSelector
+}
+
+func (s txSelector) SelectTxForProposal(ctx context.Context, maxTxBytes, maxBlockGas uint64, memTx sdk.Tx, txBz []byte, _ uint64) bool {
+	return s.TxSelector.SelectTxForProposal(ctx, maxTxBytes, maxBlockGas, memTx, txBz, txGas(memTx))
 }
 
 // withinBlockLimits drops the transactions that would take the proposal past
