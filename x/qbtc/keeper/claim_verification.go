@@ -48,12 +48,6 @@ func (k Keeper) resolveClaim(ctx sdk.Context, msg *types.MsgClaimWithProof) (*re
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ZK verifier not initialized")
 	}
 
-	minConfirmations := k.GetConfig(ctx, constants.MinUtxoConfirmationBlocks)
-	lastProcessedBlock, err := k.GetLastProcessedBlock(ctx)
-	if err != nil {
-		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
-	}
-
 	claimerAddr, err := sdk.AccAddressFromBech32(msg.Claimer)
 	if err != nil {
 		return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid claimer address: %v", err)
@@ -77,34 +71,9 @@ func (k Keeper) resolveClaim(ctx sdk.Context, msg *types.MsgClaimWithProof) (*re
 		}
 	}
 
-	for i, utxoRef := range msg.Utxos {
-		utxo, err := k.Utxoes.Get(ctx, getUTXOKey(utxoRef.Txid, utxoRef.Vout))
-		if err != nil {
-			continue // Skip non-existent UTXOs
-		}
-		if utxo.EntitledAmount == 0 {
-			continue // Skip already claimed UTXOs
-		}
-		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
-			continue // Skip UTXOs without address
-		}
-		if minConfirmations > 0 && utxo.BlockHeight > 0 && lastProcessedBlock < utxo.BlockHeight+uint64(minConfirmations) {
-			continue // Skip UTXOs that have not reached the minimum confirmation threshold
-		}
-		if _, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address); err != nil {
-			continue // Skip UTXOs with invalid addresses
-		}
-		claim.btcAddress = utxo.ScriptPubKey.Address
-		ctx.Logger().Debug("using UTXO for proof verification",
-			"index", i,
-			"txid", utxoRef.Txid,
-			"vout", utxoRef.Vout,
-			"btc_address", claim.btcAddress,
-		)
-		break
-	}
-	if claim.btcAddress == "" {
-		return nil, sdkerror.ErrInvalidRequest.Wrap("no valid claimable UTXOs found")
+	claim.btcAddress, err = k.ClaimBitcoinAddress(ctx, msg)
+	if err != nil {
+		return nil, err
 	}
 
 	claim.proof, err = hex.DecodeString(msg.Proof)
@@ -132,6 +101,45 @@ func (k Keeper) resolveClaim(ctx sdk.Context, msg *types.MsgClaimWithProof) (*re
 		PubKeyHashSHA256: pubKeyHashSHA256,
 	}
 	return claim, nil
+}
+
+// ClaimBitcoinAddress returns the Bitcoin address a claim's proof must cover:
+// the address of the first referenced UTXO that exists, is unclaimed, has an
+// address and has enough confirmations. It fails if there is none.
+func (k Keeper) ClaimBitcoinAddress(ctx sdk.Context, msg *types.MsgClaimWithProof) (string, error) {
+	minConfirmations := k.GetConfig(ctx, constants.MinUtxoConfirmationBlocks)
+	lastProcessedBlock, err := k.GetLastProcessedBlock(ctx)
+	if err != nil {
+		return "", sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
+	}
+
+	for i, utxoRef := range msg.Utxos {
+		utxo, err := k.Utxoes.Get(ctx, getUTXOKey(utxoRef.Txid, utxoRef.Vout))
+		if err != nil {
+			continue // Skip non-existent UTXOs
+		}
+		if utxo.EntitledAmount == 0 {
+			continue // Skip already claimed UTXOs
+		}
+		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
+			continue // Skip UTXOs without address
+		}
+		if minConfirmations > 0 && utxo.BlockHeight > 0 && lastProcessedBlock < utxo.BlockHeight+uint64(minConfirmations) {
+			continue // Skip UTXOs that have not reached the minimum confirmation threshold
+		}
+		if _, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address); err != nil {
+			continue // Skip UTXOs with invalid addresses
+		}
+		address := utxo.ScriptPubKey.Address
+		ctx.Logger().Debug("using UTXO for proof verification",
+			"index", i,
+			"txid", utxoRef.Txid,
+			"vout", utxoRef.Vout,
+			"btc_address", address,
+		)
+		return address, nil
+	}
+	return "", sdkerror.ErrInvalidRequest.Wrap("no valid claimable UTXOs found")
 }
 
 // verifyClaimProof verifies the claim's PLONK proof.

@@ -292,21 +292,57 @@ func (s txSelector) SelectTxForProposal(ctx context.Context, maxTxBytes, maxBloc
 
 // withinBlockLimits drops the transactions that would take the proposal past
 // the claim cap or max_gas. They stay in the mempool for a later block.
+//
+// It also keeps at most one free claim per Bitcoin address. Anyone can send
+// copies of one valid claim under different broadcaster keys, and the mempool
+// admits every copy, but only the first can succeed: without this, the copies
+// would fill the block's claim cap and push honest claims to a later block.
+// The address is the one the claim's proof covers, so a claim that passed
+// CheckTx cannot take the place of another holder's claim. A free claim that
+// can no longer succeed, because its UTXOs were claimed, is left out too.
+// Proposals are not checked for this: it only decides what the proposer
+// includes.
 func (h *ProposalHandler) withinBlockLimits(ctx sdk.Context, txs [][]byte) [][]byte {
 	limits := h.newBlockLimits(ctx)
+	claimedAddresses := make(map[string]bool)
 	kept := make([][]byte, 0, len(txs))
 	for _, bz := range txs {
 		tx, err := h.decoder(bz)
 		if err != nil {
 			continue
 		}
+		address, err := h.freeClaimAddress(ctx, tx)
+		if err != nil {
+			ctx.Logger().Debug("leaving free claim out of the proposal", "reason", err)
+			continue
+		}
+		if address != "" && claimedAddresses[address] {
+			ctx.Logger().Debug("leaving free claim out of the proposal", "reason", "another claim in the proposal covers its address", "btc_address", address)
+			continue
+		}
 		if err := limits.add(tx); err != nil {
 			ctx.Logger().Debug("leaving transaction out of the proposal", "reason", err)
 			continue
 		}
+		if address != "" {
+			claimedAddresses[address] = true
+		}
 		kept = append(kept, bz)
 	}
 	return kept
+}
+
+// freeClaimAddress returns the Bitcoin address a free claim transaction's
+// proof covers, or "" for any other transaction.
+func (h *ProposalHandler) freeClaimAddress(ctx sdk.Context, tx sdk.Tx) (string, error) {
+	if !types.IsClaimOnlyTx(tx) {
+		return "", nil
+	}
+	msgs := tx.GetMsgs()
+	if len(msgs) != 1 {
+		return "", fmt.Errorf("free claim transaction with %d messages", len(msgs))
+	}
+	return h.keeper.ClaimBitcoinAddress(ctx, msgs[0].(*types.MsgClaimWithProof))
 }
 
 // checkBlockLimits rejects a proposal past the claim cap or max_gas.
