@@ -201,3 +201,44 @@ func (s *E2ETestSuite) TestFirstTimeClaim() {
 		s.Require().Equal(sdkmath.NewIntFromUint64(seed.EntitledAmount).String(), s.queryBalance(claimer, s.cfg.BondDenom).String())
 	})
 }
+
+// TestFreeClaimGasByUTXOCount runs a real free claim of every size from 1 to
+// MaxBatchClaimUTXOs UTXOs with the CLI's default gas. A free claim runs with
+// the gas limit computed from its UTXO count, whatever it declares, and none
+// may run out of it: a claim that runs out of gas in its block leaves its
+// UTXOs unclaimed and could be sent again forever.
+func (s *E2ETestSuite) TestFreeClaimGasByUTXOCount() {
+	val := s.network.Validators[0]
+	destination := sdk.AccAddress([]byte("gas-by-utxo-count-dest")).String()
+	// The proof covers the address and destination, not particular UTXOs.
+	msg := s.buildClaimMsg(destination, nil)
+	msg.Broadcaster = val.Address.String()
+	args := []string{
+		fmt.Sprintf("--%s=%s", flags.FlagFrom, val.Address.String()),
+		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
+		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastSync),
+		fmt.Sprintf("--%s=%s", flags.FlagChainID, s.cfg.ChainID),
+		fmt.Sprintf("--%s=0%s", flags.FlagFees, s.cfg.BondDenom),
+	}
+
+	minHeadroom := 1.0
+	for n := 1; n <= types.MaxBatchClaimUTXOs; n++ {
+		msg.Utxos = s.gasBatches[n]
+		out, err := qbtcclitestutil.MsgClaimWithProofExec(val.ClientCtx, msg, args...)
+		s.Require().NoError(err)
+		var sync sdk.TxResponse
+		s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &sync))
+		s.Require().Zero(sync.Code, "claim of %d UTXOs, CheckTx: %s", n, sync.RawLog)
+
+		resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, sync.TxHash)
+		s.Require().NoError(err)
+		s.Require().Zero(resp.Code, "claim of %d UTXOs: %s", n, resp.RawLog)
+		s.Require().Equal(int64(types.FreeClaimGasLimit(n)), resp.GasWanted, "claim of %d UTXOs", n)
+		s.Require().LessOrEqual(resp.GasUsed, resp.GasWanted, "claim of %d UTXOs", n)
+
+		headroom := 1 - float64(resp.GasUsed)/float64(resp.GasWanted)
+		minHeadroom = min(minHeadroom, headroom)
+		s.T().Logf("claim of %2d UTXOs: %8d of %8d gas, %.0f%% headroom", n, resp.GasUsed, resp.GasWanted, 100*headroom)
+	}
+	s.T().Logf("smallest headroom: %.0f%%", 100*minHeadroom)
+}

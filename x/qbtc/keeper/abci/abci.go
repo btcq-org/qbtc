@@ -257,27 +257,27 @@ func (l *blockLimits) add(tx sdk.Tx) error {
 	return nil
 }
 
-// txGas is the gas tx counts against max_gas: its declared gas limit, clamped
-// with types.FreeClaimGasLimit for a free claim transaction, which runs with
-// that limit.
+// txGas is the gas tx counts against max_gas: the gas it runs with. That is
+// its declared gas limit, except for a free claim transaction, which runs with
+// types.FreeClaimTxGasLimit whatever it declares.
 func txGas(tx sdk.Tx) uint64 {
-	gasTx, ok := tx.(sdk.GasTx)
-	if !ok {
-		return 0
-	}
 	if types.IsClaimOnlyTx(tx) {
-		return types.FreeClaimGasLimit(gasTx.GetGas())
+		return types.FreeClaimTxGasLimit(tx)
 	}
-	return gasTx.GetGas()
+	if gasTx, ok := tx.(sdk.GasTx); ok {
+		return gasTx.GetGas()
+	}
+	return 0
 }
 
 // NewTxSelector returns the SDK's default transaction selector, counting each
 // transaction at txGas, as the proposal checks do. Set it on the SDK's
 // DefaultProposalHandler, whose selection runs before PrepareProposal's own
 // limits. The SDK counts a transaction's declared gas, but a free claim runs
-// with its declared gas clamped to types.FreeClaimMaxGas, and CheckTx admits a
-// claim declaring up to max_gas. Without this, a single such claim would use
-// up the SDK's gas budget and leave every other transaction out of the block.
+// with a limit computed from the claim, at most types.FreeClaimMaxGas, and
+// CheckTx admits a claim declaring up to max_gas. Without this, a single such
+// claim would use up the SDK's gas budget and leave every other transaction
+// out of the block.
 func NewTxSelector() baseapp.TxSelector {
 	return txSelector{TxSelector: baseapp.NewDefaultTxSelector()}
 }

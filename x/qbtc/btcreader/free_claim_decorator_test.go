@@ -9,6 +9,7 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	txsigning "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/stretchr/testify/require"
@@ -34,16 +35,16 @@ func (t fakeTx) GetFee() sdk.Coins                                 { return sdk.
 func (t fakeTx) FeePayer() []byte                                  { return t.payer }
 func (t fakeTx) FeeGranter() []byte                                { return nil }
 
-// A free claim runs with its declared gas clamped to
-// [FreeClaimMinGas, FreeClaimMaxGas], and simulation with FreeClaimMaxGas. The
-// meter's limit is the gas the tx reports to CometBFT, so it must be finite.
+// A free claim runs with a gas limit computed from its UTXO count, whatever it
+// declares, in simulation too. The meter's limit is the gas the tx reports to
+// CometBFT, so it must be finite.
 func TestFreeClaimDecorator_GasLimit(t *testing.T) {
 	claimer := sdk.AccAddress([]byte("gas-limit-claimer-addr-01"))
 	decorator := btcreader.NewFreeClaimDecorator()
-	limit := func(declared uint64, simulate bool) uint64 {
+	limit := func(numUTXOs int, declared uint64, simulate bool) uint64 {
 		t.Helper()
 		tx := fakeTx{
-			msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String()}},
+			msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String(), Utxos: make([]types.UTXORef, numUTXOs)}},
 			signers: [][]byte{claimer},
 			gas:     declared,
 		}
@@ -56,10 +57,33 @@ func TestFreeClaimDecorator_GasLimit(t *testing.T) {
 		return got
 	}
 
-	require.Equal(t, types.FreeClaimMinGas, limit(0, false))
-	require.Equal(t, uint64(1_000_000), limit(1_000_000, false))
-	require.Equal(t, types.FreeClaimMaxGas, limit(1<<62, false))
-	require.Equal(t, types.FreeClaimMaxGas, limit(0, true))
+	for _, declared := range []uint64{0, 200_000, 1 << 62} {
+		for _, simulate := range []bool{false, true} {
+			require.Equal(t, types.FreeClaimBaseGas, limit(1, declared, simulate))
+			require.Equal(t, types.FreeClaimGasLimit(10), limit(10, declared, simulate))
+			require.Equal(t, types.FreeClaimMaxGas, limit(types.MaxBatchClaimUTXOs, declared, simulate))
+		}
+	}
+}
+
+// A free claim padded past FreeClaimMaxTxBytes is rejected: the ante handler
+// charges for every byte, out of the gas its message handler needs.
+func TestFreeClaimDecorator_RejectsOversizedTx(t *testing.T) {
+	claimer := sdk.AccAddress([]byte("oversized-claimer-addr-01"))
+	decorator := btcreader.NewFreeClaimDecorator()
+	tx := fakeTx{
+		msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String(), Utxos: make([]types.UTXORef, 1)}},
+		signers: [][]byte{claimer},
+	}
+	next := func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) { return ctx, nil }
+
+	ctx := sdk.Context{}.WithTxBytes(make([]byte, types.FreeClaimMaxTxBytes))
+	_, err := decorator.AnteHandle(ctx, tx, false, next)
+	require.NoError(t, err)
+
+	ctx = sdk.Context{}.WithTxBytes(make([]byte, types.FreeClaimMaxTxBytes+1))
+	_, err = decorator.AnteHandle(ctx, tx, false, next)
+	require.ErrorIs(t, err, sdkerrors.ErrTxTooLarge)
 }
 
 func TestFreeClaimDecorator_RejectsMultiMsgClaimTx(t *testing.T) {

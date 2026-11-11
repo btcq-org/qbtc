@@ -5,23 +5,42 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/authz"
 )
 
-// A free claim transaction runs with the gas it declares, clamped to
-// [FreeClaimMinGas, FreeClaimMaxGas]. Measured on the e2e network: a one-UTXO
-// claim uses about 250,000 gas and each further UTXO about 35,500, so the
-// floor covers the usual claim of a few UTXOs and the ceiling a full batch of
-// MaxBatchClaimUTXOs.
+// A free claim transaction pays no fee, so it cannot be left to declare its own
+// gas: a claim that runs out of gas in the message handler, which CheckTx does
+// not run, would fail in its block, leave its UTXOs unclaimed, and could be
+// sent again forever. It runs instead with a gas limit computed from the claim:
+// FreeClaimBaseGas for the first UTXO and FreeClaimPerUTXOGas for each further
+// one. Measured on the e2e network, a one-UTXO claim uses about 250,000 gas and
+// each further UTXO about 35,500. The base also covers a transaction padded to
+// FreeClaimMaxTxBytes, since the ante handler charges for every byte: every
+// other field of the claim has a fixed or capped size.
 const (
-	FreeClaimMinGas uint64 = 400_000
-	FreeClaimMaxGas uint64 = 3_000_000
+	FreeClaimBaseGas    uint64 = 450_000
+	FreeClaimPerUTXOGas uint64 = 50_000
+	FreeClaimMaxGas            = FreeClaimBaseGas + FreeClaimPerUTXOGas*(MaxBatchClaimUTXOs-1)
+	FreeClaimMaxTxBytes        = 16 << 10
 )
 
-// FreeClaimGasLimit is the gas limit of a free claim transaction that declares
-// the given gas. It is also the gas the transaction reports to CometBFT and
-// counts against the block's max_gas. It must be finite: once max_gas is set,
-// CometBFT drops a transaction whose reported gas is negative, as an infinite
-// gas meter's is.
-func FreeClaimGasLimit(declared uint64) uint64 {
-	return min(max(declared, FreeClaimMinGas), FreeClaimMaxGas)
+// FreeClaimGasLimit is the gas limit of a free claim of numUTXOs UTXOs.
+func FreeClaimGasLimit(numUTXOs int) uint64 {
+	n := uint64(min(max(numUTXOs, 1), MaxBatchClaimUTXOs))
+	return FreeClaimBaseGas + FreeClaimPerUTXOGas*(n-1)
+}
+
+// FreeClaimTxGasLimit is the gas limit a free claim transaction runs with,
+// whatever gas it declares. It is also the gas the transaction reports to
+// CometBFT and counts against the block's max_gas. A transaction with more
+// than one message, which the ante handler rejects, counts FreeClaimMaxGas.
+func FreeClaimTxGasLimit(tx sdk.Tx) uint64 {
+	msgs := tx.GetMsgs()
+	if len(msgs) != 1 {
+		return FreeClaimMaxGas
+	}
+	claim, ok := msgs[0].(*MsgClaimWithProof)
+	if !ok {
+		return FreeClaimMaxGas
+	}
+	return FreeClaimGasLimit(len(claim.Utxos))
 }
 
 // IsClaimOnlyTx reports whether every message of tx is a MsgClaimWithProof.

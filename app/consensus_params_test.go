@@ -16,9 +16,9 @@ import (
 // block.max_gas. A free claim reports its gas meter's limit.
 func TestFreeClaimGasFitsBlockMaxGas(t *testing.T) {
 	postCheck := mempool.PostCheckMaxGas(DefaultBlockMaxGas)
-	for _, declared := range []uint64{0, 200_000, 1_500_000, math.MaxUint64} {
-		res := &abci.ResponseCheckTx{GasWanted: int64(types.FreeClaimGasLimit(declared))}
-		require.NoError(t, postCheck(nil, res), "declared gas %d", declared)
+	for n := 1; n <= types.MaxBatchClaimUTXOs; n++ {
+		res := &abci.ResponseCheckTx{GasWanted: int64(types.FreeClaimGasLimit(n))}
+		require.NoError(t, postCheck(nil, res), "claim of %d UTXOs", n)
 	}
 
 	// An infinite gas meter's limit reports -1, which CometBFT drops once
@@ -26,7 +26,7 @@ func TestFreeClaimGasFitsBlockMaxGas(t *testing.T) {
 	var infinite uint64 = math.MaxUint64
 	require.Error(t, postCheck(nil, &abci.ResponseCheckTx{GasWanted: int64(infinite)}))
 
-	// A block of MaxClaimsPerBlock ordinary claims fits max_gas.
+	// A block of MaxClaimsPerBlock one-UTXO claims fits max_gas.
 	maxClaims := uint64(constants.DefaultValues[constants.MaxClaimsPerBlock])
-	require.LessOrEqual(t, maxClaims*types.FreeClaimMinGas, uint64(DefaultBlockMaxGas))
+	require.LessOrEqual(t, maxClaims*types.FreeClaimBaseGas, uint64(DefaultBlockMaxGas))
 }

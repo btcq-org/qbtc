@@ -1,6 +1,7 @@
 package qbtc
 
 import (
+	"fmt"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cosmos/cosmos-sdk/testutil/network"
 	"github.com/stretchr/testify/suite"
@@ -31,6 +32,8 @@ type E2ETestSuite struct {
 	addressHash [20]byte
 	btcAddress  string
 	seedUTXOs   []*types.UTXO
+	// gasBatches[n] are n more UTXOs at btcAddress, for a claim of n UTXOs.
+	gasBatches [][]types.UTXORef
 }
 
 // NewE2ETestSuite matches the SDK convention: the entrypoint hands us a fully
@@ -88,11 +91,26 @@ func (s *E2ETestSuite) SetupSuite() {
 		},
 	}
 
+	genesisUTXOs := append([]*types.UTXO(nil), s.seedUTXOs...)
+	s.gasBatches = make([][]types.UTXORef, types.MaxBatchClaimUTXOs+1)
+	for n := 1; n <= types.MaxBatchClaimUTXOs; n++ {
+		for i := range n {
+			utxo := &types.UTXO{
+				Txid:           fmt.Sprintf("bbbb%04x%056x", n, i),
+				Amount:         1_000,
+				EntitledAmount: 1_000,
+				ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+			}
+			genesisUTXOs = append(genesisUTXOs, utxo)
+			s.gasBatches[n] = append(s.gasBatches[n], types.UTXORef{Txid: utxo.Txid, Vout: utxo.Vout})
+		}
+	}
+
 	// 3. Mutate the qbtc module genesis in place — the SDK pattern for
 	// seeding module-specific state before the network starts.
 	qbtcGen := &types.GenesisState{
 		ZkVerifyingKey: vkBytes,
-		Utxos:          s.seedUTXOs,
+		Utxos:          genesisUTXOs,
 	}
 	s.cfg.GenesisState[types.ModuleName] = s.cfg.Codec.MustMarshalJSON(qbtcGen)
 

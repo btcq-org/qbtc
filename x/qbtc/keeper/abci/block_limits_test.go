@@ -29,8 +29,9 @@ type gasTx struct {
 
 func (t gasTx) GetGas() uint64 { return t.gas }
 
+// claimTx is a free claim of one UTXO that declares declaredGas.
 func claimTx(declaredGas uint64) sdk.Tx {
-	return gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgClaimWithProof{}}}, gas: declaredGas}
+	return gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgClaimWithProof{Utxos: make([]types.UTXORef, 1)}}}, gas: declaredGas}
 }
 
 func claimTxs(n int) []sdk.Tx {
@@ -107,14 +108,15 @@ func TestProcessProposalBlockLimits(t *testing.T) {
 		require.Equal(t, reject, f.process(ctx, send(600_000), send(400_001)))
 	})
 
-	t.Run("a free claim counts its clamped gas", func(t *testing.T) {
-		// Each claim counts types.FreeClaimMinGas (400,000) whatever it declares below it.
+	t.Run("a free claim counts the gas computed from its UTXOs", func(t *testing.T) {
+		// types.FreeClaimBaseGas (450,000) for one UTXO, whatever it declares
 		ctx := withMaxGas(ctx, 1_000_000)
-		require.Equal(t, accept, f.process(ctx, claimTx(0), claimTx(1)))
-		require.Equal(t, reject, f.process(ctx, claimTx(0), claimTx(1), claimTx(2)))
-		// and at most types.FreeClaimMaxGas whatever it declares above it.
-		ctx = withMaxGas(ctx, int64(types.FreeClaimMaxGas))
-		require.Equal(t, accept, f.process(ctx, claimTx(1<<62)))
+		require.Equal(t, accept, f.process(ctx, claimTx(0), claimTx(1<<62)))
+		require.Equal(t, reject, f.process(ctx, claimTx(0), claimTx(0), claimTx(0)))
+		// and types.FreeClaimMaxGas for a full batch
+		full := gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgClaimWithProof{Utxos: make([]types.UTXORef, types.MaxBatchClaimUTXOs)}}}}
+		require.Equal(t, accept, f.process(withMaxGas(ctx, int64(types.FreeClaimMaxGas)), full))
+		require.Equal(t, reject, f.process(withMaxGas(ctx, int64(types.FreeClaimMaxGas)-1), full))
 	})
 
 	t.Run("declared gas that would wrap the sum", func(t *testing.T) {
@@ -139,7 +141,7 @@ func TestProcessProposalBlockLimits(t *testing.T) {
 
 	t.Run("injected transactions count against neither limit", func(t *testing.T) {
 		valid, ec := f.injectedMsg(101, 102, 103)
-		ctx := withMaxGas(f.ctxWith(ec), int64(maxClaims)*int64(types.FreeClaimMinGas))
+		ctx := withMaxGas(f.ctxWith(ec), int64(maxClaims)*int64(types.FreeClaimBaseGas))
 		txs := append([]sdk.Tx{f.injectTx(valid)}, claimTxs(maxClaims)...)
 		require.Equal(t, accept, f.process(ctx, txs...))
 	})
@@ -222,7 +224,7 @@ func TestDefaultPrepareProposalCountsClaimGas(t *testing.T) {
 
 	// The SDK alone counts the claim's declared 10,000,000 and stops there.
 	require.Equal(t, [][]byte{{0}}, prepare(nil))
-	// Counted at types.FreeClaimMaxGas, the claim leaves room for the rest.
+	// Counted at the gas computed from its UTXOs, the claim leaves room for the rest.
 	require.Equal(t, [][]byte{{0}, {1}, {2}}, prepare(NewTxSelector()))
 }
 
