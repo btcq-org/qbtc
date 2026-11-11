@@ -197,6 +197,11 @@ download_verified() {
     local dest="$2"
     local expected="$3"
     local tmp="${dest}.download"
+    # refuse before downloading: genesis.bin is large
+    if [[ -z "$expected" ]]; then
+        print_error "No SHA-256 known for $(basename "$dest"); refusing to download it"
+        return 1
+    fi
     if ! curl -fL --progress-bar "$url" -o "$tmp"; then
         print_error "Failed to download $url"
         rm -f "$tmp"
@@ -320,19 +325,41 @@ setup_statesync() {
         return 1
     fi
 
-    local rpcs=()
-    IFS=',' read -r -a rpcs <<< "$STATESYNC_RPCS"
+    # Each entry trimmed, https only, none empty and none twice: two entries
+    # naming the same server would pass for two independent ones.
+    if [[ ",${STATESYNC_RPCS}," == *,,* ]]; then
+        print_error "QBTC_STATESYNC_RPCS has an empty entry: $STATESYNC_RPCS"
+        return 1
+    fi
+    local raw=() rpcs=() rpc seen
+    IFS=',' read -r -a raw <<< "$STATESYNC_RPCS"
+    for rpc in "${raw[@]}"; do
+        rpc="${rpc#"${rpc%%[![:space:]]*}"}"
+        rpc="${rpc%"${rpc##*[![:space:]]}"}"
+        rpc="${rpc%/}"
+        if [[ -z "$rpc" ]]; then
+            print_error "QBTC_STATESYNC_RPCS has an empty entry: $STATESYNC_RPCS"
+            return 1
+        fi
+        if [[ "$rpc" != https://* || "$rpc" =~ [[:space:]] ]]; then
+            print_error "State sync RPC server $rpc must be an https:// URL"
+            return 1
+        fi
+        for seen in "${rpcs[@]}"; do
+            if [[ "$seen" == "$rpc" ]]; then
+                print_error "State sync RPC server $rpc is listed twice"
+                return 1
+            fi
+        done
+        rpcs+=("$rpc")
+    done
     if [[ ${#rpcs[@]} -lt 2 ]]; then
         print_error "State sync needs at least two independent RPC servers: set QBTC_STATESYNC_RPCS=https://rpc-a,https://rpc-b"
         return 1
     fi
-    local rpc
-    for rpc in "${rpcs[@]}"; do
-        if [[ "$rpc" != https://* ]]; then
-            print_error "State sync RPC server $rpc must use https://"
-            return 1
-        fi
-    done
+    # config.toml gets the list that was checked, not the raw input
+    local rpc_servers
+    rpc_servers=$(IFS=','; echo "${rpcs[*]}")
 
     local trust_height="$TRUST_HEIGHT"
     local trust_hash="$TRUST_HASH"
@@ -388,7 +415,7 @@ setup_statesync() {
     print_info "Updating config.toml..."
     sed -i.bak -E \
         "s|^(enable[[:space:]]+=[[:space:]]+).*$|\1true|
-         s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"${STATESYNC_RPCS}\"|
+         s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"${rpc_servers}\"|
          s|^(trust_height[[:space:]]+=[[:space:]]+).*$|\1${trust_height}|
          s|^(trust_hash[[:space:]]+=[[:space:]]+).*$|\1\"${trust_hash}\"|
          s|^(persistent_peers[[:space:]]+=[[:space:]]+).*$|\1\"${peers}\"|" "$config_file"
