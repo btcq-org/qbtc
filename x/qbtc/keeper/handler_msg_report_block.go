@@ -13,6 +13,7 @@ import (
 	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
@@ -453,7 +454,11 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	// The block's fees are already taken out of the spending transactions'
 	// entitlement, so the coinbase is entitled to its value minus the fees,
 	// once in total, split across its outputs in proportion to their value.
-	totalClaimable := totalOutput - min(totalFee, totalOutput)
+	// That is at most the block subsidy: Bitcoin rejects a coinbase that pays
+	// more than the subsidy plus the fees, but the entitlement does not rely on
+	// the attested block being valid in that respect.
+	subsidy := uint64(blockchain.CalcBlockSubsidy(int32(blockHeight), params))
+	totalClaimable := min(totalOutput-min(totalFee, totalOutput), subsidy)
 	for n, out := range outs {
 		if out.Value == 0 {
 			continue
