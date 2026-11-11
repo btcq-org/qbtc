@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cosmos/cosmos-sdk/testutil/network"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 )
@@ -34,6 +38,8 @@ type E2ETestSuite struct {
 	seedUTXOs   []*types.UTXO
 	// gasBatches[n] are n more UTXOs at btcAddress, for a claim of n UTXOs.
 	gasBatches [][]types.UTXORef
+	// referredBatches[n] are n more UTXOs at btcAddress, for a referred claim.
+	referredBatches map[int][]types.UTXORef
 }
 
 // NewE2ETestSuite matches the SDK convention: the entrypoint hands us a fully
@@ -106,11 +112,36 @@ func (s *E2ETestSuite) SetupSuite() {
 		}
 	}
 
+	s.referredBatches = map[int][]types.UTXORef{}
+	for _, n := range []int{1, types.MaxBatchClaimUTXOs} {
+		for i := range n {
+			utxo := &types.UTXO{
+				Txid:           fmt.Sprintf("cccc%04x%056x", n, i),
+				Amount:         1_000,
+				EntitledAmount: 1_000,
+				ScriptPubKey:   &types.ScriptPubKeyResult{Address: btcAddr},
+			}
+			genesisUTXOs = append(genesisUTXOs, utxo)
+			s.referredBatches[n] = append(s.referredBatches[n], types.UTXORef{Txid: utxo.Txid, Vout: utxo.Vout})
+		}
+	}
+
+	// A funded referral pool and a referee reward, so a referred claim pays
+	// both rewards: its most expensive path.
+	var bankGen banktypes.GenesisState
+	s.cfg.Codec.MustUnmarshalJSON(s.cfg.GenesisState[banktypes.ModuleName], &bankGen)
+	bankGen.Balances = append(bankGen.Balances, banktypes.Balance{
+		Address: authtypes.NewModuleAddress(types.ReferralModuleName).String(),
+		Coins:   sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1_000_000_000)),
+	})
+	s.cfg.GenesisState[banktypes.ModuleName] = s.cfg.Codec.MustMarshalJSON(&bankGen)
+
 	// 3. Mutate the qbtc module genesis in place — the SDK pattern for
 	// seeding module-specific state before the network starts.
 	qbtcGen := &types.GenesisState{
 		ZkVerifyingKey: vkBytes,
 		Utxos:          genesisUTXOs,
+		Params:         []*types.Param{{Key: constants.RefereeRewardBps.String(), Value: 100}},
 	}
 	s.cfg.GenesisState[types.ModuleName] = s.cfg.Codec.MustMarshalJSON(qbtcGen)
 
