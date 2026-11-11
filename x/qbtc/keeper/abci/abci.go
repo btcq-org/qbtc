@@ -293,14 +293,15 @@ func (s txSelector) SelectTxForProposal(ctx context.Context, maxTxBytes, maxBloc
 // withinBlockLimits drops the transactions that would take the proposal past
 // the claim cap or max_gas. They stay in the mempool for a later block.
 //
-// It also keeps at most one free claim per Bitcoin address. Anyone can send
-// copies of one valid claim under different broadcaster keys, and the mempool
-// admits every copy, but only the first can succeed: without this, the copies
-// would fill the block's claim cap and push honest claims to a later block.
-// The address is the one the claim's proof covers, so a claim that passed
-// CheckTx cannot take the place of another holder's claim. A free claim that
-// can no longer succeed, because its UTXOs were claimed, is left out too.
-// Proposals are not checked for this: it only decides what the proposer
+// It also keeps at most one free claim per Bitcoin address, the address the
+// claim's proof covers, and leaves out a free claim that can no longer
+// succeed because its UTXOs were claimed. keeper.ClaimProofDecorator already
+// keeps one claim per address in the mempool, but its record is cleared at
+// every commit and rebuilt by ReCheckTx, which a node can turn off
+// (mempool.recheck in config.toml). Copies of one valid claim, sent under
+// different broadcaster keys, could then wait in the mempool together, and
+// only the first can succeed: without this they would fill the block's claim
+// cap. Proposals are not checked for this: it only decides what the proposer
 // includes.
 func (h *ProposalHandler) withinBlockLimits(ctx sdk.Context, txs [][]byte) [][]byte {
 	limits := h.newBlockLimits(ctx)

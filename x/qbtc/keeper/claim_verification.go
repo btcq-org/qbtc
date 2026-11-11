@@ -201,6 +201,18 @@ func (c *resolvedClaim) digest() [sha256.Size]byte {
 //   - ReCheckTx: the state checks only, so a claim whose UTXOs an earlier block
 //     claimed leaves the mempool. The proof's validity cannot change.
 //
+// The mempool holds one free claim per Bitcoin address, the address its proof
+// covers. Copies of one valid claim sent under different broadcaster keys
+// would all pass, but only the first can succeed, and the rest would fill
+// blocks' claim cap. CheckTx and ReCheckTx look the address up in
+// PendingClaimAddresses before verifying anything, so a copy costs a state
+// read, not a proof verification, and record it once the claim passes. Only a
+// claim with a valid proof is recorded, so no one can hold another holder's
+// address. The record lives in the mempool's copy of the state: an ante
+// failure discards it, and every commit clears it. ReCheckTx then rebuilds it
+// in mempool order, keeping the first claim of each address and evicting the
+// rest.
+//
 // A claim nested in authz MsgExec does not reach this decorator; the message
 // handler verifies it and charges ClaimProofVerifyGas.
 type ClaimProofDecorator struct {
@@ -226,11 +238,27 @@ func (d ClaimProofDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate boo
 	if err != nil {
 		return ctx, err
 	}
-	if ctx.IsReCheckTx() {
-		return next(ctx, tx, simulate)
+	// IsCheckTx is true in CheckTx and ReCheckTx, never in FinalizeBlock.
+	mempool := ctx.IsCheckTx() && !simulate
+	if mempool {
+		pending, err := d.k.PendingClaimAddresses.Has(ctx, claim.btcAddress)
+		if err != nil {
+			return ctx, err
+		}
+		if pending {
+			return ctx, sdkerror.ErrInvalidRequest.Wrapf("a claim for Bitcoin address %s is already in the mempool", claim.btcAddress)
+		}
 	}
-	if err := verifyClaimProof(claim); err != nil {
-		return ctx, err
+	if !ctx.IsReCheckTx() {
+		if err := verifyClaimProof(claim); err != nil {
+			return ctx, err
+		}
+		ctx = withVerifiedClaim(ctx, claim)
 	}
-	return next(withVerifiedClaim(ctx, claim), tx, simulate)
+	if mempool {
+		if err := d.k.PendingClaimAddresses.Set(ctx, claim.btcAddress); err != nil {
+			return ctx, err
+		}
+	}
+	return next(ctx, tx, simulate)
 }
