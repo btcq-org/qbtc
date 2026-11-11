@@ -560,7 +560,7 @@ All three are computationally infeasible.
 
 A free claim transaction (only `MsgClaimWithProof`, no fee) is checked by `ClaimProofDecorator` in the ante handler, after its signature:
 
-- **CheckTx, simulation and FinalizeBlock:** claims are enabled, one referenced UTXO exists, is unclaimed, has an address and has `MinUtxoConfirmationBlocks` confirmations, and the PLONK proof verifies (about 3 ms). A claim that fails never enters the mempool, and the account `FreeClaimDecorator` created for its signer is rolled back with the other ante writes. FinalizeBlock verifies again because a proposer can include transactions that never passed an honest mempool; the message handler then skips its own verification.
+- **CheckTx, simulation and FinalizeBlock:** claims are enabled, one referenced UTXO exists, is unclaimed, has an address and has `MinUtxoConfirmationBlocks` confirmations, and the PLONK proof verifies (about 3 ms). A claim that fails never enters the mempool, and none of its ante writes, such as the sequence increment, are kept. The signer (the broadcaster) must already have an account; the claimed coins go to the claimer or receiver, whose account the bank send creates. FinalizeBlock verifies again because a proposer can include transactions that never passed an honest mempool; the message handler then skips its own verification.
 - **ReCheckTx:** the state checks only, so a claim whose UTXOs an earlier block claimed leaves the mempool. A proof's validity cannot change, and re-verifying a full mempool after every block would take seconds.
 
 A claim nested in authz `MsgExec` is not a free claim transaction: the message handler verifies it and charges `ClaimProofVerifyGas` (60,000) for it.

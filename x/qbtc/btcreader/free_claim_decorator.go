@@ -1,53 +1,37 @@
 package btcreader
 
 import (
-	"context"
-
 	errorsmod "cosmossdk.io/errors"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 )
 
-// AccountKeeper is the subset of x/auth's AccountKeeper the decorator needs to
-// pre-create signer accounts for first-time claimers.
-type AccountKeeper interface {
-	GetAccount(ctx context.Context, addr sdk.AccAddress) sdk.AccountI
-	NewAccountWithAddress(ctx context.Context, addr sdk.AccAddress) sdk.AccountI
-	SetAccount(ctx context.Context, acc sdk.AccountI)
-}
+type FreeClaimDecorator struct{}
 
-type FreeClaimDecorator struct {
-	ak AccountKeeper
-}
-
-func NewFreeClaimDecorator(ak AccountKeeper) FreeClaimDecorator {
-	return FreeClaimDecorator{ak: ak}
+func NewFreeClaimDecorator() FreeClaimDecorator {
+	return FreeClaimDecorator{}
 }
 
 // AnteHandle makes MsgClaimWithProof transactions free: zero minimum gas
 // prices, and a gas meter of the declared gas clamped to
 // [types.FreeClaimMinGas, types.FreeClaimMaxGas] (types.FreeClaimMaxGas when
-// simulating). It also pre-creates the signer account when absent, because every
-// claim is by definition a first-time on-chain interaction — without this,
-// downstream DeductFee / SetPubKey / SigVerification decorators reject the tx
-// with "account does not exist". The account is rolled back with the rest of
-// the ante writes if a later decorator, such as the proof check, rejects the tx.
-// Must be placed after SetUpContextDecorator so the gas meter override takes
-// effect for all downstream decorators.
+// simulating). The signer must already have an account: the claimed coins go
+// to the claimer or receiver, whose account the bank send creates, and a
+// first-time claimer's transaction is signed by an existing broadcaster such
+// as the proof service. Must be placed after SetUpContextDecorator so the gas
+// meter override takes effect for all downstream decorators.
 func (fcd FreeClaimDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (sdk.Context, error) {
 	if !types.IsClaimOnlyTx(tx) {
 		return next(ctx, tx, simulate)
 	}
 
-	// A free-claim tx must carry exactly one MsgClaimWithProof. Bundling many
-	// lets an attacker pre-create an account per message at zero cost: each
-	// proof only needs to pass ValidateBasic's structural checks, and ante
-	// writes persist even when the handler later rejects the proofs. Batch
-	// claiming across UTXOs is supported inside a single MsgClaimWithProof
-	// via Utxos, so this limit doesn't block any legitimate flow.
+	// A free-claim tx carries exactly one MsgClaimWithProof, so it costs one
+	// proof verification, the unit MaxClaimsPerBlock and the ante handler's
+	// proof check count in. Batch claiming across UTXOs is supported inside a
+	// single MsgClaimWithProof via Utxos, so this limit doesn't block any
+	// legitimate flow.
 	if len(tx.GetMsgs()) != 1 {
 		return ctx, errorsmod.Wrap(sdkerrors.ErrInvalidRequest,
 			"free-claim tx must contain exactly one MsgClaimWithProof")
@@ -62,43 +46,5 @@ func (fcd FreeClaimDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bo
 		WithGasMeter(storetypes.NewGasMeter(gasLimit)).
 		WithMinGasPrices(sdk.DecCoins{})
 
-	if err := fcd.ensureSignerAccounts(ctx, tx); err != nil {
-		return ctx, err
-	}
-
 	return next(ctx, tx, simulate)
-}
-
-// ensureSignerAccounts creates on-chain accounts for the tx's signers and fee
-// payer when they don't exist yet. Safe because FreeClaimDecorator only fires
-// on claim-only txs, which are gated by the ZK proof and signature verified
-// later in the chain.
-func (fcd FreeClaimDecorator) ensureSignerAccounts(ctx sdk.Context, tx sdk.Tx) error {
-	sigTx, ok := tx.(authsigning.SigVerifiableTx)
-	if !ok {
-		return errorsmod.Wrap(sdkerrors.ErrTxDecode, "claim tx must be a SigVerifiableTx")
-	}
-
-	signers, err := sigTx.GetSigners()
-	if err != nil {
-		return err
-	}
-	for _, signer := range signers {
-		fcd.createAccountIfMissing(ctx, signer)
-	}
-
-	if feeTx, ok := tx.(sdk.FeeTx); ok {
-		if payer := feeTx.FeePayer(); len(payer) > 0 {
-			fcd.createAccountIfMissing(ctx, payer)
-		}
-	}
-
-	return nil
-}
-
-func (fcd FreeClaimDecorator) createAccountIfMissing(ctx sdk.Context, addr sdk.AccAddress) {
-	if fcd.ak.GetAccount(ctx, addr) != nil {
-		return
-	}
-	fcd.ak.SetAccount(ctx, fcd.ak.NewAccountWithAddress(ctx, addr))
 }

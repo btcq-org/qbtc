@@ -15,10 +15,6 @@ import (
 type HandlerOptions struct {
 	ante.HandlerOptions
 	QbtcKeeper *keeper.Keeper
-	// AuthKeeper is a superset of ante.AccountKeeper that also exposes
-	// NewAccountWithAddress, required by FreeClaimDecorator to pre-create
-	// first-time claimers' accounts.
-	AuthKeeper btcreader.AccountKeeper
 }
 
 // NewAnteHandler returns an AnteHandler that checks and increments sequence
@@ -37,9 +33,6 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 	if options.QbtcKeeper == nil {
 		return nil, errors.New("qbtc keeper is required for ante builder")
 	}
-	if options.AuthKeeper == nil {
-		return nil, errors.New("auth keeper is required for ante builder")
-	}
 
 	anteDecorators := []sdk.AnteDecorator{
 		// the injected MsgBtcBlock decorator must be the first decorator to avoid handled messages to be submitted
@@ -47,7 +40,7 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		// outermost AnteDecorator. SetUpContext must be called first
 		ante.NewSetUpContextDecorator(),
 		// free gas for MsgClaimWithProof txs — must be after SetUpContext
-		btcreader.NewFreeClaimDecorator(options.AuthKeeper),
+		btcreader.NewFreeClaimDecorator(),
 		ante.NewExtensionOptionsDecorator(options.ExtensionOptionChecker),
 		ante.NewValidateBasicDecorator(),
 		ante.NewTxTimeoutHeightDecorator(),
@@ -79,7 +72,6 @@ func (app *App) setAnteHandler(txConfig client.TxConfig) {
 				SigGasConsumer:  MlDsa65OnlySigGasConsumer,
 			},
 			QbtcKeeper: app.QbtcKeeper,
-			AuthKeeper: app.AuthKeeper,
 		},
 	)
 	if err != nil {

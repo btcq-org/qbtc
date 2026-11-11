@@ -190,7 +190,8 @@ func (c *resolvedClaim) digest() [sha256.Size]byte {
 
 // ClaimProofDecorator verifies the proof of a free claim transaction in the
 // ante handler, so CheckTx drops an invalid claim before it reaches a block,
-// and a claim that fails rolls back the account FreeClaimDecorator created.
+// and a claim that fails leaves none of the ante handler's writes, such as
+// the sequence increment, behind.
 // It must run after signature verification.
 //
 //   - CheckTx, simulation and FinalizeBlock: the state checks and the proof.
