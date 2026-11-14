@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 
+	"github.com/btcq-org/qbtc/app/signmode"
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -47,6 +48,9 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ante.NewValidateMemoDecorator(options.AccountKeeper),
 		ante.NewConsumeGasForTxSizeDecorator(options.AccountKeeper),
 		ante.NewDeductFeeDecorator(options.AccountKeeper, options.BankKeeper, options.FeegrantKeeper, options.TxFeeChecker),
+		// verifies the signatures of a tx with a vultisig sign mode signer,
+		// which the SDK's decorators do not accept; before SetPubKeyDecorator
+		signmode.NewVultisigSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewSetPubKeyDecorator(options.AccountKeeper), // SetPubKeyDecorator must be called before all signature verification decorators
 		ante.NewValidateSigCountDecorator(options.AccountKeeper),
 		// SigGasConsumer is the account key policy: only ML-DSA-65 keys pass.
