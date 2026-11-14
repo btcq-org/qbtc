@@ -1,13 +1,16 @@
 package abci
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/cosmos/cosmos-sdk/baseapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -55,6 +58,7 @@ func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrep
 	if err != nil {
 		return nil, err
 	}
+	resp.Txs = h.withinBlockLimits(ctx, resp.Txs)
 
 	// Combine the injected MsgBtcBlock txs with the ones selected by default handler, up to tx limit
 	combinedTxs := injectTxs
@@ -204,8 +208,153 @@ func (h *ProposalHandler) ProcessProposal(ctx sdk.Context, req *abci.RequestProc
 		ctx.Logger().Error("rejecting proposal", "error", err)
 		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
+	if err := h.checkBlockLimits(ctx, txs); err != nil {
+		ctx.Logger().Error("rejecting proposal", "error", err)
+		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
+	}
 
 	return h.processProposalHandler(ctx, req)
+}
+
+// blockLimits tracks a proposal against the per-block claim cap
+// (MaxClaimsPerBlock MsgClaimWithProof messages, each a PLONK verification)
+// and the consensus max_gas. With qbtc's no-op app mempool the SDK's
+// ProcessProposal accepts any proposal, so without these checks a proposer
+// could fill a block with claims or exceed max_gas.
+type blockLimits struct {
+	maxClaims int64
+	maxGas    int64
+	claims    int64
+	gas       uint64
+}
+
+func (h *ProposalHandler) newBlockLimits(ctx sdk.Context) *blockLimits {
+	l := &blockLimits{maxClaims: h.keeper.GetConfig(ctx, constants.MaxClaimsPerBlock), maxGas: -1}
+	if b := ctx.ConsensusParams().Block; b != nil {
+		l.maxGas = b.MaxGas
+	}
+	return l
+}
+
+// add counts tx against the limits and reports whether it still fits.
+// Injected transactions count against neither.
+func (l *blockLimits) add(tx sdk.Tx) error {
+	if btcreader.IsInjectTx(tx) {
+		return nil
+	}
+	claims := l.claims + int64(types.CountClaimMsgs(tx.GetMsgs()))
+	if claims > l.maxClaims {
+		return fmt.Errorf("more than %d claim messages in the block", l.maxClaims)
+	}
+	// As in CometBFT, max_gas -1 is the only "no limit". l.gas never exceeds
+	// max_gas, so the subtraction cannot wrap, and a huge declared gas cannot
+	// wrap the sum.
+	gas := txGas(tx)
+	if l.maxGas >= 0 && gas > uint64(l.maxGas)-l.gas {
+		return fmt.Errorf("transactions want more than the block's max gas %d", l.maxGas)
+	}
+	l.claims, l.gas = claims, l.gas+gas
+	return nil
+}
+
+// txGas is the gas tx counts against max_gas: the gas it runs with. That is
+// its declared gas limit, except for a free claim transaction, which runs with
+// types.FreeClaimTxGasLimit whatever it declares.
+func txGas(tx sdk.Tx) uint64 {
+	if types.IsClaimOnlyTx(tx) {
+		return types.FreeClaimTxGasLimit(tx)
+	}
+	if gasTx, ok := tx.(sdk.GasTx); ok {
+		return gasTx.GetGas()
+	}
+	return 0
+}
+
+// NewTxSelector returns the SDK's default transaction selector, counting each
+// transaction at txGas, as the proposal checks do. Set it on the SDK's
+// DefaultProposalHandler, whose selection runs before PrepareProposal's own
+// limits. The SDK counts a transaction's declared gas, but a free claim runs
+// with a limit computed from the claim, at most types.FreeClaimMaxGas, and
+// CheckTx admits a claim declaring up to max_gas. Without this, a single such
+// claim would use up the SDK's gas budget and leave every other transaction
+// out of the block.
+func NewTxSelector() baseapp.TxSelector {
+	return txSelector{TxSelector: baseapp.NewDefaultTxSelector()}
+}
+
+type txSelector struct {
+	baseapp.TxSelector
+}
+
+func (s txSelector) SelectTxForProposal(ctx context.Context, maxTxBytes, maxBlockGas uint64, memTx sdk.Tx, txBz []byte, _ uint64) bool {
+	return s.TxSelector.SelectTxForProposal(ctx, maxTxBytes, maxBlockGas, memTx, txBz, txGas(memTx))
+}
+
+// withinBlockLimits drops the transactions that would take the proposal past
+// the claim cap or max_gas. They stay in the mempool for a later block.
+//
+// It also keeps at most one free claim per Bitcoin address, the address the
+// claim's proof covers, and leaves out a free claim that can no longer
+// succeed because its UTXOs were claimed. keeper.ClaimProofDecorator already
+// keeps one claim per address in the mempool, but its record is cleared at
+// every commit and rebuilt by ReCheckTx, which a node can turn off
+// (mempool.recheck in config.toml). Copies of one valid claim, sent under
+// different broadcaster keys, could then wait in the mempool together, and
+// only the first can succeed: without this they would fill the block's claim
+// cap. Proposals are not checked for this: it only decides what the proposer
+// includes.
+func (h *ProposalHandler) withinBlockLimits(ctx sdk.Context, txs [][]byte) [][]byte {
+	limits := h.newBlockLimits(ctx)
+	claimedAddresses := make(map[string]bool)
+	kept := make([][]byte, 0, len(txs))
+	for _, bz := range txs {
+		tx, err := h.decoder(bz)
+		if err != nil {
+			continue
+		}
+		address, err := h.freeClaimAddress(ctx, tx)
+		if err != nil {
+			ctx.Logger().Debug("leaving free claim out of the proposal", "reason", err)
+			continue
+		}
+		if address != "" && claimedAddresses[address] {
+			ctx.Logger().Debug("leaving free claim out of the proposal", "reason", "another claim in the proposal covers its address", "btc_address", address)
+			continue
+		}
+		if err := limits.add(tx); err != nil {
+			ctx.Logger().Debug("leaving transaction out of the proposal", "reason", err)
+			continue
+		}
+		if address != "" {
+			claimedAddresses[address] = true
+		}
+		kept = append(kept, bz)
+	}
+	return kept
+}
+
+// freeClaimAddress returns the Bitcoin address a free claim transaction's
+// proof covers, or "" for any other transaction.
+func (h *ProposalHandler) freeClaimAddress(ctx sdk.Context, tx sdk.Tx) (string, error) {
+	if !types.IsClaimOnlyTx(tx) {
+		return "", nil
+	}
+	msgs := tx.GetMsgs()
+	if len(msgs) != 1 {
+		return "", fmt.Errorf("free claim transaction with %d messages", len(msgs))
+	}
+	return h.keeper.ClaimBitcoinAddress(ctx, msgs[0].(*types.MsgClaimWithProof))
+}
+
+// checkBlockLimits rejects a proposal past the claim cap or max_gas.
+func (h *ProposalHandler) checkBlockLimits(ctx sdk.Context, txs []sdk.Tx) error {
+	limits := h.newBlockLimits(ctx)
+	for _, tx := range txs {
+		if err := limits.add(tx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkInjectedBlocks rejects a proposal that carries a MsgBtcBlock outside a

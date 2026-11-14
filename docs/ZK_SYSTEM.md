@@ -552,6 +552,24 @@ All three are computationally infeasible.
 | Double-spend        | EntitledAmount zeroing        | `handle_msg_claim_with_proof.go:157` |
 | DoS via large proof | Exact proof layout check      | `proof_layout.go`                    |
 | DoS via many UTXOs  | Max 50 UTXOs per batch        | protobuf validation                  |
+| Free-claim spam     | Proof verified in CheckTx; failed claims leave no account | `claim_verification.go` |
+| Claim-filled blocks | `MaxClaimsPerBlock` (200), checked in Prepare/ProcessProposal | `keeper/abci/abci.go` |
+| Unbounded block gas | `block.max_gas` 100,000,000; free claims run with a finite gas limit | `app/consensus_params.go`, `types/claim_tx.go` |
+
+### 9.3.1 Claim Admission
+
+A free claim transaction (only `MsgClaimWithProof`, no fee) is checked by `ClaimProofDecorator` in the ante handler, after its signature:
+
+- **CheckTx, simulation and FinalizeBlock:** claims are enabled, one referenced UTXO exists, is unclaimed, has an address and has `MinUtxoConfirmationBlocks` confirmations, and the PLONK proof verifies (about 3 ms). A claim that fails never enters the mempool, and none of its ante writes, such as the sequence increment, are kept. The signer (the broadcaster) must already have an account; the claimed coins go to the claimer or receiver, whose account the bank send creates. FinalizeBlock verifies again because a proposer can include transactions that never passed an honest mempool; the message handler then skips its own verification.
+- **ReCheckTx:** the state checks only, so a claim whose UTXOs an earlier block claimed leaves the mempool. A proof's validity cannot change, and re-verifying a full mempool after every block would take seconds.
+
+A claim nested in authz `MsgExec` is not a free claim transaction: the message handler verifies it and charges `ClaimProofVerifyGas` (60,000) for it.
+
+A free claim runs with a gas limit computed from the claim, whatever gas it declares: 450,000 for the first UTXO and 50,000 for each further one, 2,900,000 for a full batch of 50. One UTXO uses about 250,000 gas and each further UTXO about 35,500. It cannot be left to declare its own gas: CheckTx does not run the message handler, so a claim declaring too little would pass CheckTx, run out of gas in its block, leave its UTXOs unclaimed, and could be sent again forever at no cost. A free claim over 16 KiB is rejected, so padding the transaction, which the ante handler charges for byte by byte, cannot use up the gas its handler needs; every field of the claim has a fixed or capped size. The limit is the gas the transaction reports to CometBFT, which drops a transaction with negative reported gas once `max_gas` is set.
+
+`MaxClaimsPerBlock` (default 200, a governance parameter) caps `MsgClaimWithProof` messages per block, including those nested in `MsgExec`, so one block costs at most about 0.6 s of verification. `PrepareProposal` leaves out claims past the cap (they stay in the mempool), and `ProcessProposal` rejects a proposal past it or past `max_gas`; with qbtc's no-op app mempool the SDK's own `ProcessProposal` checks neither. A free claim counts against `max_gas` at its computed gas everywhere, including the SDK's transaction selection in `PrepareProposal`, which would otherwise count its declared gas: a claim declaring the whole `max_gas` would leave every other transaction out of the block. Copies of one valid claim sent under different broadcaster keys would all pass the checks above, but only the first can succeed, and the rest would fill the claim cap. So the mempool holds one free claim per Bitcoin address, the address its proof covers: CheckTx and ReCheckTx look the address up in the module's transient store before verifying anything, so a copy costs a state read rather than a verification, and record it once the claim passes. Only a claim with a valid proof is recorded, so no one can hold another holder's address. The record lives in the mempool's copy of the state, which every commit replaces; ReCheckTx rebuilds it in mempool order, keeping the first claim of each address. Block execution and simulation ignore it. `PrepareProposal` applies the same rule and also leaves out a claim whose UTXOs were claimed, which covers nodes that turn ReCheckTx off.
+
+CheckTx shares one ABCI lock with block execution, so a flood of claims at a node slows that node. Validators should accept transactions only through sentry or RPC nodes.
 
 ### 9.4 Trust Assumptions
 

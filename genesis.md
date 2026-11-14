@@ -7,8 +7,8 @@
 ## (both are the defaults; --consensus-key-algo / --algo accept nothing else)
 ./qbtcd init qbtc --chain-id qbtc-testnet --consensus-key-algo ml_dsa_65
 ./qbtcd keys add qbtc-init-validator --algo ml_dsa_65
-## set minimum gas price
-./qbtcd config set app minimum-gas-prices 0.000qbtc
+## init also writes consensus_params.block.max_gas = 100000000 and
+## minimum-gas-prices = "0.0025qbtc" in app.toml; claims pay no fee
 
 ## mint 50 qbtc to genesis node
 ./qbtcd genesis add-genesis-account qbtc-init-validator "5000000000qbtc"

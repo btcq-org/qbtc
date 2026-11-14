@@ -1,45 +1,20 @@
 package btcreader_test
 
 import (
-	"context"
 	"testing"
+
+	sdkmath "cosmossdk.io/math"
 
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	txsigning "github.com/cosmos/cosmos-sdk/types/tx/signing"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
-
-// fakeAccountKeeper is an in-memory AccountKeeper used to observe calls made by
-// FreeClaimDecorator without spinning up a real keeper.
-type fakeAccountKeeper struct {
-	accounts map[string]sdk.AccountI
-	nextNum  uint64
-}
-
-func newFakeAccountKeeper() *fakeAccountKeeper {
-	return &fakeAccountKeeper{accounts: map[string]sdk.AccountI{}}
-}
-
-func (f *fakeAccountKeeper) GetAccount(_ context.Context, addr sdk.AccAddress) sdk.AccountI {
-	return f.accounts[addr.String()]
-}
-
-func (f *fakeAccountKeeper) NewAccountWithAddress(_ context.Context, addr sdk.AccAddress) sdk.AccountI {
-	acc := authtypes.NewBaseAccountWithAddress(addr)
-	_ = acc.SetAccountNumber(f.nextNum)
-	f.nextNum++
-	return acc
-}
-
-func (f *fakeAccountKeeper) SetAccount(_ context.Context, acc sdk.AccountI) {
-	f.accounts[acc.GetAddress().String()] = acc
-}
 
 // fakeTx implements the minimum subset of sdk.Tx, authsigning.SigVerifiableTx
 // and sdk.FeeTx exercised by FreeClaimDecorator.
@@ -47,6 +22,7 @@ type fakeTx struct {
 	msgs    []sdk.Msg
 	signers [][]byte
 	payer   []byte
+	gas     uint64
 }
 
 func (t fakeTx) GetMsgs() []sdk.Msg                                { return t.msgs }
@@ -54,67 +30,67 @@ func (t fakeTx) GetMsgsV2() ([]proto.Message, error)               { return nil,
 func (t fakeTx) GetSigners() ([][]byte, error)                     { return t.signers, nil }
 func (t fakeTx) GetPubKeys() ([]cryptotypes.PubKey, error)         { return nil, nil }
 func (t fakeTx) GetSignaturesV2() ([]txsigning.SignatureV2, error) { return nil, nil }
-func (t fakeTx) GetGas() uint64                                    { return 0 }
+func (t fakeTx) GetGas() uint64                                    { return t.gas }
 func (t fakeTx) GetFee() sdk.Coins                                 { return sdk.Coins{} }
 func (t fakeTx) FeePayer() []byte                                  { return t.payer }
 func (t fakeTx) FeeGranter() []byte                                { return nil }
 
-func TestFreeClaimDecorator_CreatesAccountForFirstTimeClaimer(t *testing.T) {
-	claimer := sdk.AccAddress([]byte("first-time-claimer-addr-01"))
-
-	ak := newFakeAccountKeeper()
-	decorator := btcreader.NewFreeClaimDecorator(ak)
-
-	tx := fakeTx{
-		msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String()}},
-		signers: [][]byte{claimer},
-		payer:   claimer,
+// A free claim runs with a gas limit computed from its UTXO count, whatever it
+// declares, in simulation too. The meter's limit is the gas the tx reports to
+// CometBFT, so it must be finite.
+func TestFreeClaimDecorator_GasLimit(t *testing.T) {
+	claimer := sdk.AccAddress([]byte("gas-limit-claimer-addr-01"))
+	decorator := btcreader.NewFreeClaimDecorator()
+	limit := func(numUTXOs int, declared uint64, simulate bool) uint64 {
+		t.Helper()
+		tx := fakeTx{
+			msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String(), Utxos: make([]types.UTXORef, numUTXOs)}},
+			signers: [][]byte{claimer},
+			gas:     declared,
+		}
+		var got uint64
+		_, err := decorator.AnteHandle(sdk.Context{}, tx, simulate, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
+			got = ctx.GasMeter().Limit()
+			return ctx, nil
+		})
+		require.NoError(t, err)
+		return got
 	}
 
-	nextCalled := false
-	_, err := decorator.AnteHandle(sdk.Context{}, tx, false, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
-		nextCalled = true
-		return ctx, nil
-	})
-
-	require.NoError(t, err)
-	require.True(t, nextCalled, "next decorator should run")
-	require.NotNil(t, ak.GetAccount(context.Background(), claimer),
-		"claimer account must be pre-created so downstream decorators can look it up")
+	for _, declared := range []uint64{0, 200_000, 1 << 62} {
+		for _, simulate := range []bool{false, true} {
+			require.Equal(t, types.FreeClaimBaseGas, limit(1, declared, simulate))
+			require.Equal(t, types.FreeClaimGasLimit(10), limit(10, declared, simulate))
+			require.Equal(t, types.FreeClaimMaxGas, limit(types.MaxBatchClaimUTXOs, declared, simulate))
+		}
+	}
 }
 
-func TestFreeClaimDecorator_PreservesExistingAccount(t *testing.T) {
-	claimer := sdk.AccAddress([]byte("returning-claimer-addr-01"))
-
-	ak := newFakeAccountKeeper()
-	existing := authtypes.NewBaseAccountWithAddress(claimer)
-	_ = existing.SetAccountNumber(42)
-	ak.SetAccount(context.Background(), existing)
-
-	decorator := btcreader.NewFreeClaimDecorator(ak)
-
+// A free claim padded past FreeClaimMaxTxBytes is rejected: the ante handler
+// charges for every byte, out of the gas its message handler needs.
+func TestFreeClaimDecorator_RejectsOversizedTx(t *testing.T) {
+	claimer := sdk.AccAddress([]byte("oversized-claimer-addr-01"))
+	decorator := btcreader.NewFreeClaimDecorator()
 	tx := fakeTx{
-		msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String()}},
+		msgs:    []sdk.Msg{&types.MsgClaimWithProof{Claimer: claimer.String(), Utxos: make([]types.UTXORef, 1)}},
 		signers: [][]byte{claimer},
-		payer:   claimer,
 	}
+	next := func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) { return ctx, nil }
 
-	_, err := decorator.AnteHandle(sdk.Context{}, tx, false, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
-		return ctx, nil
-	})
+	ctx := sdk.Context{}.WithTxBytes(make([]byte, types.FreeClaimMaxTxBytes))
+	_, err := decorator.AnteHandle(ctx, tx, false, next)
 	require.NoError(t, err)
 
-	acc := ak.GetAccount(context.Background(), claimer)
-	require.NotNil(t, acc)
-	require.Equal(t, uint64(42), acc.GetAccountNumber(), "existing account must not be overwritten")
+	ctx = sdk.Context{}.WithTxBytes(make([]byte, types.FreeClaimMaxTxBytes+1))
+	_, err = decorator.AnteHandle(ctx, tx, false, next)
+	require.ErrorIs(t, err, sdkerrors.ErrTxTooLarge)
 }
 
 func TestFreeClaimDecorator_RejectsMultiMsgClaimTx(t *testing.T) {
 	claimerA := sdk.AccAddress([]byte("multi-claimer-addr-aaaaaaa"))
 	claimerB := sdk.AccAddress([]byte("multi-claimer-addr-bbbbbbb"))
 
-	ak := newFakeAccountKeeper()
-	decorator := btcreader.NewFreeClaimDecorator(ak)
+	decorator := btcreader.NewFreeClaimDecorator()
 
 	tx := fakeTx{
 		msgs: []sdk.Msg{
@@ -133,17 +109,12 @@ func TestFreeClaimDecorator_RejectsMultiMsgClaimTx(t *testing.T) {
 
 	require.Error(t, err, "multi-msg claim tx must be rejected")
 	require.False(t, nextCalled, "next decorator must not run when ante rejects")
-	require.Nil(t, ak.GetAccount(context.Background(), claimerA),
-		"no accounts must be pre-created for a rejected multi-msg claim tx")
-	require.Nil(t, ak.GetAccount(context.Background(), claimerB),
-		"no accounts must be pre-created for a rejected multi-msg claim tx")
 }
 
 func TestFreeClaimDecorator_SkipsNonClaimTx(t *testing.T) {
 	sender := sdk.AccAddress([]byte("bank-sender-addr-1234567890"))
 
-	ak := newFakeAccountKeeper()
-	decorator := btcreader.NewFreeClaimDecorator(ak)
+	decorator := btcreader.NewFreeClaimDecorator()
 
 	tx := fakeTx{
 		msgs: []sdk.Msg{&banktypes.MsgSend{
@@ -155,10 +126,12 @@ func TestFreeClaimDecorator_SkipsNonClaimTx(t *testing.T) {
 		payer:   sender,
 	}
 
-	_, err := decorator.AnteHandle(sdk.Context{}, tx, false, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
+	minGasPrices := sdk.NewDecCoins(sdk.NewDecCoinFromDec("qbtc", sdkmath.LegacyNewDecWithPrec(25, 4)))
+	var got sdk.DecCoins
+	_, err := decorator.AnteHandle(sdk.Context{}.WithMinGasPrices(minGasPrices), tx, false, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
+		got = ctx.MinGasPrices()
 		return ctx, nil
 	})
 	require.NoError(t, err)
-	require.Nil(t, ak.GetAccount(context.Background(), sender),
-		"non-claim txs must not trigger account pre-creation")
+	require.Equal(t, minGasPrices, got, "a non-claim tx keeps the minimum gas price")
 }

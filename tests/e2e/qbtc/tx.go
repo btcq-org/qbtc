@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	clitestutil "github.com/cosmos/cosmos-sdk/testutil/cli"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	qbtcclitestutil "github.com/btcq-org/qbtc/x/qbtc/client/testutil"
@@ -55,7 +56,7 @@ func (s *E2ETestSuite) TestClaimWithProofCmd() {
 			utxos: []types.UTXORef{
 				{Txid: s.seedUTXOs[0].Txid, Vout: s.seedUTXOs[0].Vout},
 			},
-			// no valid claimable UTXOs remain — handler returns ErrInvalidRequest
+			// no valid claimable UTXOs remain — CheckTx returns ErrInvalidRequest
 			expectedCode: 18,
 			expectDelta:  0,
 		},
@@ -84,7 +85,13 @@ func (s *E2ETestSuite) TestClaimWithProofCmd() {
 // would, generates a PLONK proof, and assembles the MsgClaimWithProof for the
 // given claimer.
 func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *types.MsgClaimWithProof {
-	params, _, err := zktest.SignClaim(s.btcPrivKey, s.cfg.ChainID, s.btcAddress, claimer, "")
+	return s.buildReferredClaimMsg(claimer, "", utxos)
+}
+
+// buildReferredClaimMsg is buildClaimMsg with a referrer bound into the signed
+// claim message.
+func (s *E2ETestSuite) buildReferredClaimMsg(claimer, referrer string, utxos []types.UTXORef) *types.MsgClaimWithProof {
+	params, _, err := zktest.SignClaim(s.btcPrivKey, s.cfg.ChainID, s.btcAddress, claimer, referrer)
 	s.Require().NoError(err)
 
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(s.btcPrivKey.PubKey().SerializeCompressed())
@@ -97,6 +104,7 @@ func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *typ
 	return &types.MsgClaimWithProof{
 		Claimer:          claimer,
 		Broadcaster:      claimer,
+		Referrer:         referrer,
 		Utxos:            utxos,
 		Proof:            hex.EncodeToString(proofBytes),
 		PubKeyHashSha256: hex.EncodeToString(pubKeyHashSHA256[:]),
@@ -105,7 +113,8 @@ func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *typ
 
 // submitClaim invokes the real `tx qbtc claim-with-proof` CLI command via the
 // module's testutil wrapper, then polls for the DeliverTx result. This mirrors
-// the SDK pattern: sync-broadcast → assert CheckTx accepted → query final code.
+// the SDK pattern: sync-broadcast → CheckTx response if it rejected the tx,
+// otherwise the final code.
 func (s *E2ETestSuite) submitClaim(from string, msg *types.MsgClaimWithProof) sdk.TxResponse {
 	val := s.network.Validators[0]
 
@@ -124,6 +133,10 @@ func (s *E2ETestSuite) submitClaim(from string, msg *types.MsgClaimWithProof) sd
 	var syncResp sdk.TxResponse
 	s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &syncResp))
 	s.Require().NotEmpty(syncResp.TxHash, "expected a tx hash from sync broadcast")
+	if syncResp.Code != 0 {
+		// CheckTx turned the claim away; it never reaches a block.
+		return syncResp
+	}
 
 	resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, syncResp.TxHash)
 	s.Require().NoError(err)
@@ -143,4 +156,130 @@ func (s *E2ETestSuite) queryBalance(addr, denom string) sdkmath.Int {
 		return sdkmath.ZeroInt()
 	}
 	return res.Balance.Amount
+}
+
+// TestFirstTimeClaim claims to a destination that has no account on chain,
+// signed by an existing broadcaster key as the proof service does, with no fee
+// and the CLI's default gas. A claim with a bogus proof is turned away by
+// CheckTx and never reaches a block.
+func (s *E2ETestSuite) TestFirstTimeClaim() {
+	val := s.network.Validators[0]
+	broadcaster := val.Address.String()
+	seed := s.seedUTXOs[2]
+	utxos := []types.UTXORef{{Txid: seed.Txid, Vout: seed.Vout}}
+	defaultGasArgs := []string{
+		fmt.Sprintf("--%s=%s", flags.FlagFrom, broadcaster),
+		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
+		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastSync),
+		fmt.Sprintf("--%s=%s", flags.FlagChainID, s.cfg.ChainID),
+		fmt.Sprintf("--%s=0%s", flags.FlagFees, s.cfg.BondDenom),
+	}
+	broadcast := func(msg *types.MsgClaimWithProof) sdk.TxResponse {
+		out, err := qbtcclitestutil.MsgClaimWithProofExec(val.ClientCtx, msg, defaultGasArgs...)
+		s.Require().NoError(err)
+		var resp sdk.TxResponse
+		s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &resp))
+		return resp
+	}
+
+	s.Run("bogus proof is rejected by CheckTx", func() {
+		s.Require().NoError(s.network.WaitForNextBlock())
+		msg := s.buildClaimMsg(sdk.AccAddress([]byte("bogus-proof-destination")).String(), utxos)
+		msg.Broadcaster = broadcaster
+		msg.Proof = hex.EncodeToString(zktest.WellFormedProof(zk.ClaimCircuitNbCommitments))
+		resp := broadcast(msg)
+		s.Require().NotZero(resp.Code, "a bogus proof must not enter the mempool")
+		s.Require().Contains(resp.RawLog, "proof verification failed")
+	})
+
+	s.Run("destination without an account, no fee, default gas", func() {
+		s.Require().NoError(s.network.WaitForNextBlock())
+		claimer := sdk.AccAddress([]byte("first-time-claimer-dest")).String()
+		_, err := authtypes.NewQueryClient(val.ClientCtx).Account(context.Background(), &authtypes.QueryAccountRequest{Address: claimer})
+		s.Require().Error(err, "the destination must not have an account yet")
+
+		msg := s.buildClaimMsg(claimer, utxos)
+		msg.Broadcaster = broadcaster
+		sync := broadcast(msg)
+		s.Require().Zero(sync.Code, "CheckTx: %s", sync.RawLog)
+		resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, sync.TxHash)
+		s.Require().NoError(err)
+		s.Require().Zero(resp.Code, "DeliverTx: %s", resp.RawLog)
+		s.Require().Equal(sdkmath.NewIntFromUint64(seed.EntitledAmount).String(), s.queryBalance(claimer, s.cfg.BondDenom).String())
+	})
+}
+
+// TestFreeClaimGasByUTXOCount runs a real free claim of every size from 1 to
+// MaxBatchClaimUTXOs UTXOs with the CLI's default gas. A free claim runs with
+// the gas limit computed from its UTXO count, whatever it declares, and none
+// may run out of it: a claim that runs out of gas in its block leaves its
+// UTXOs unclaimed and could be sent again forever.
+func (s *E2ETestSuite) TestFreeClaimGasByUTXOCount() {
+	val := s.network.Validators[0]
+	destination := sdk.AccAddress([]byte("gas-by-utxo-count-dest")).String()
+	// The proof covers the address and destination, not particular UTXOs.
+	msg := s.buildClaimMsg(destination, nil)
+	msg.Broadcaster = val.Address.String()
+	args := []string{
+		fmt.Sprintf("--%s=%s", flags.FlagFrom, val.Address.String()),
+		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
+		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastSync),
+		fmt.Sprintf("--%s=%s", flags.FlagChainID, s.cfg.ChainID),
+		fmt.Sprintf("--%s=0%s", flags.FlagFees, s.cfg.BondDenom),
+	}
+
+	minHeadroom := 1.0
+	for n := 1; n <= types.MaxBatchClaimUTXOs; n++ {
+		msg.Utxos = s.gasBatches[n]
+		out, err := qbtcclitestutil.MsgClaimWithProofExec(val.ClientCtx, msg, args...)
+		s.Require().NoError(err)
+		var sync sdk.TxResponse
+		s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &sync))
+		s.Require().Zero(sync.Code, "claim of %d UTXOs, CheckTx: %s", n, sync.RawLog)
+
+		resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, sync.TxHash)
+		s.Require().NoError(err)
+		s.Require().Zero(resp.Code, "claim of %d UTXOs: %s", n, resp.RawLog)
+		s.Require().Equal(int64(types.FreeClaimGasLimit(n)), resp.GasWanted, "claim of %d UTXOs", n)
+		s.Require().LessOrEqual(resp.GasUsed, resp.GasWanted, "claim of %d UTXOs", n)
+
+		headroom := 1 - float64(resp.GasUsed)/float64(resp.GasWanted)
+		minHeadroom = min(minHeadroom, headroom)
+		s.T().Logf("claim of %2d UTXOs: %8d of %8d gas, %.0f%% headroom", n, resp.GasUsed, resp.GasWanted, 100*headroom)
+	}
+	s.T().Logf("smallest headroom: %.0f%%", 100*minHeadroom)
+}
+
+// TestReferredFreeClaimGas runs referred free claims of 1 and
+// MaxBatchClaimUTXOs UTXOs, each to a new destination with a new referrer and
+// both referral rewards paid, the most expensive path through the handler.
+func (s *E2ETestSuite) TestReferredFreeClaimGas() {
+	val := s.network.Validators[0]
+	args := []string{
+		fmt.Sprintf("--%s=%s", flags.FlagFrom, val.Address.String()),
+		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
+		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastSync),
+		fmt.Sprintf("--%s=%s", flags.FlagChainID, s.cfg.ChainID),
+		fmt.Sprintf("--%s=0%s", flags.FlagFees, s.cfg.BondDenom),
+	}
+	for _, n := range []int{1, types.MaxBatchClaimUTXOs} {
+		destination := sdk.AccAddress(fmt.Appendf(nil, "referred-dest-%d", n)).String()
+		referrer := sdk.AccAddress(fmt.Appendf(nil, "referrer-addr-%d", n)).String()
+		msg := s.buildReferredClaimMsg(destination, referrer, s.referredBatches[n])
+		msg.Broadcaster = val.Address.String()
+
+		out, err := qbtcclitestutil.MsgClaimWithProofExec(val.ClientCtx, msg, args...)
+		s.Require().NoError(err)
+		var sync sdk.TxResponse
+		s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &sync))
+		s.Require().Zero(sync.Code, "referred claim of %d UTXOs, CheckTx: %s", n, sync.RawLog)
+
+		resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, sync.TxHash)
+		s.Require().NoError(err)
+		s.T().Logf("referred claim of %2d UTXOs: %8d of %8d gas, code %d", n, resp.GasUsed, resp.GasWanted, resp.Code)
+		s.Require().Zero(resp.Code, "referred claim of %d UTXOs: %s", n, resp.RawLog)
+		s.Require().LessOrEqual(resp.GasUsed, resp.GasWanted, "referred claim of %d UTXOs", n)
+		s.Require().True(s.queryBalance(referrer, sdk.DefaultBondDenom).IsPositive(), "the referrer is paid")
+		s.Require().True(s.queryBalance(destination, sdk.DefaultBondDenom).GT(sdkmath.NewInt(int64(1_000*n))), "the referee reward is paid")
+	}
 }
