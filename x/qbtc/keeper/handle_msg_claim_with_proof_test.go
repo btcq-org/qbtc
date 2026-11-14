@@ -88,9 +88,10 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
 	addressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix)
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
+	transientKey := storetypes.NewTransientStoreKey("transient_test")
 
 	storeService := runtime.NewKVStoreService(storeKey)
-	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+	ctx := testutil.DefaultContextWithDB(t, storeKey, transientKey).Ctx
 	ctx = ctx.WithChainID(testChainID)
 
 	ctrl := gomock.NewController(t)
@@ -114,6 +115,7 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 
 	k := keeper.NewKeeper(
 		storeService,
+		runtime.NewTransientStoreService(transientKey),
 		encCfg.Codec,
 		addressCodec,
 		stakingKeeper,

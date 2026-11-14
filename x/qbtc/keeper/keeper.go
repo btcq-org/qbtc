@@ -52,10 +52,18 @@ type Keeper struct {
 	// ReferralStats holds the referral totals of each address that referred a
 	// claim or received a referee reward.
 	ReferralStats collections.Map[sdk.AccAddress, types.ReferralStats]
+
+	// PendingClaimAddresses, in the transient store, holds the Bitcoin
+	// addresses of the free claims in this node's mempool. Only CheckTx and
+	// ReCheckTx write it, to the mempool's copy of the state, which is replaced
+	// at every commit; it never reaches consensus state.
+	TransientSchema       collections.Schema
+	PendingClaimAddresses collections.KeySet[string]
 }
 
 func NewKeeper(
 	storeService corestore.KVStoreService,
+	transientStoreService corestore.TransientStoreService,
 	cdc codec.Codec,
 	addressCodec address.Codec,
 	stakingKeeper types.StakingKeeper,
@@ -87,6 +95,12 @@ func NewKeeper(
 		panic(err)
 	}
 	k.Schema = schema
+
+	tsb := collections.NewSchemaBuilderFromAccessor(transientStoreService.OpenTransientStore)
+	k.PendingClaimAddresses = collections.NewKeySet(tsb, types.PendingClaimAddressesKey, "pending_claim_addresses", collections.StringKey)
+	if k.TransientSchema, err = tsb.Build(); err != nil {
+		panic(err)
+	}
 
 	return k
 }

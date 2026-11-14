@@ -60,6 +60,13 @@ func TestClaimProofDecorator(t *testing.T) {
 		})
 		return nextCtx, called, err
 	}
+	simulate := func(ctx sdk.Context, msgs ...sdk.Msg) error {
+		t.Helper()
+		_, err := decorator.AnteHandle(ctx, msgsTx{msgs: msgs}, true, func(ctx sdk.Context, _ sdk.Tx, _ bool) (sdk.Context, error) {
+			return ctx, nil
+		})
+		return err
+	}
 	// checkCtx and recheckCtx are fresh copies of the state, as CheckTx and
 	// ReCheckTx see it after a commit.
 	checkCtx := func() sdk.Context {
@@ -119,6 +126,54 @@ func TestClaimProofDecorator(t *testing.T) {
 		_, called, err := ante(recheckCtx(), &bogus)
 		require.NoError(t, err)
 		require.True(t, called)
+	})
+
+	t.Run("the mempool takes one claim per address", func(t *testing.T) {
+		ctx := checkCtx()
+		_, _, err := ante(ctx, valid)
+		require.NoError(t, err)
+		pending, err := f.keeper.PendingClaimAddresses.Has(ctx, f.btcAddress)
+		require.NoError(t, err)
+		require.True(t, pending)
+
+		// A copy is turned away.
+		_, called, err := ante(ctx, valid)
+		require.ErrorContains(t, err, "already in the mempool")
+		require.False(t, called)
+		// Before its proof is verified: the bogus proof would fail verification.
+		_, _, err = ante(ctx, &bogus)
+		require.ErrorContains(t, err, "already in the mempool")
+	})
+
+	t.Run("a claim CheckTx rejects is not recorded", func(t *testing.T) {
+		ctx := checkCtx()
+		_, _, err := ante(ctx, &bogus)
+		require.ErrorContains(t, err, "proof verification failed")
+		_, _, err = ante(ctx, valid)
+		require.NoError(t, err)
+	})
+
+	t.Run("ReCheckTx keeps the first claim of an address", func(t *testing.T) {
+		ctx := recheckCtx()
+		_, _, err := ante(ctx, valid)
+		require.NoError(t, err)
+		_, _, err = ante(ctx, valid)
+		require.ErrorContains(t, err, "already in the mempool")
+	})
+
+	t.Run("block execution and simulation ignore the record", func(t *testing.T) {
+		ctx := checkCtx()
+		_, _, err := ante(ctx, valid)
+		require.NoError(t, err)
+		_, _, err = ante(ctx.WithIsCheckTx(false), valid)
+		require.NoError(t, err)
+		require.NoError(t, simulate(ctx, valid))
+
+		// and simulation records nothing
+		ctx = checkCtx()
+		require.NoError(t, simulate(ctx, valid))
+		_, _, err = ante(ctx, valid)
+		require.NoError(t, err)
 	})
 
 	t.Run("ReCheckTx drops a claim whose UTXOs were claimed", func(t *testing.T) {

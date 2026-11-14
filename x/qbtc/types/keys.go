@@ -47,6 +47,10 @@ var (
 
 	// ReferralStatsKeys is the prefix for referral totals per qbtc address
 	ReferralStatsKeys = collections.NewPrefix("referral_stats")
+
+	// PendingClaimAddressesKey, in the module's transient store, holds the
+	// Bitcoin addresses that have a free claim in this node's mempool.
+	PendingClaimAddressesKey = collections.NewPrefix("pending_claim_address")
 )
 
 const (
