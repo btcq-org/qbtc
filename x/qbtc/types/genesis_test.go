@@ -4,7 +4,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/stretchr/testify/require"
 )
@@ -68,4 +70,18 @@ func TestGenesisState_Validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenesisState_ValidateReferralStats(t *testing.T) {
+	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
+	addr := sdk.AccAddress(make([]byte, 20)).String()
+
+	valid := types.GenesisState{ReferralStats: []types.ReferralStats{{Address: addr, ReferredClaims: 1, ReferredAmount: 10}}}
+	require.NoError(t, valid.Validate())
+
+	bad := types.GenesisState{ReferralStats: []types.ReferralStats{{Address: "nope"}}}
+	require.ErrorContains(t, bad.Validate(), "invalid address")
+
+	dup := types.GenesisState{ReferralStats: []types.ReferralStats{{Address: addr}, {Address: addr}}}
+	require.ErrorContains(t, dup.Validate(), "duplicate address")
 }

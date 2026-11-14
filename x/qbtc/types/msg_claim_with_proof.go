@@ -7,6 +7,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	se "github.com/cosmos/cosmos-sdk/types/errors"
 
+	"github.com/btcq-org/qbtc/common"
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
 )
 
@@ -40,6 +41,10 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 		if _, err := sdk.AccAddressFromBech32(m.Receiver); err != nil {
 			return se.ErrInvalidAddress.Wrapf("invalid receiver address: %v", err)
 		}
+	}
+
+	if err := ValidateReferrer(m.Referrer, m.Destination()); err != nil {
+		return err
 	}
 
 	// Validate broadcaster (the cosmos tx signer)
@@ -108,6 +113,49 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 	}
 	if _, err := hex.DecodeString(m.PubKeyHashSha256); err != nil {
 		return se.ErrInvalidRequest.Wrapf("pub_key_hash_sha256 is not valid hex: %v", err)
+	}
+	return nil
+}
+
+// Destination returns the address the claimed coins go to and the signed claim
+// message names: the receiver when set, otherwise the claimer.
+func (m *MsgClaimWithProof) Destination() string {
+	if m.Receiver != "" {
+		return m.Receiver
+	}
+	return m.Claimer
+}
+
+// ValidateReferrer checks the optional referrer of a claim sent to
+// destination. An empty referrer is valid. Otherwise it must be a qbtc address
+// spelled exactly as the bech32 encoder writes it: the signed claim message
+// covers the string and referral totals are kept per account, so two
+// spellings of one account must not both verify. A claim cannot refer itself.
+// Wallet tooling calls this before asking the user to sign.
+func ValidateReferrer(referrer, destination string) error {
+	if referrer == "" {
+		return nil
+	}
+	referrerBytes, err := sdk.GetFromBech32(referrer, common.AccountAddressPrefix)
+	if err != nil {
+		return se.ErrInvalidAddress.Wrapf("invalid referrer address: %v", err)
+	}
+	if err := sdk.VerifyAddressFormat(referrerBytes); err != nil {
+		return se.ErrInvalidAddress.Wrapf("invalid referrer address: %v", err)
+	}
+	canonical, err := sdk.Bech32ifyAddressBytes(common.AccountAddressPrefix, referrerBytes)
+	if err != nil {
+		return se.ErrInvalidAddress.Wrapf("invalid referrer address: %v", err)
+	}
+	if canonical != referrer {
+		return se.ErrInvalidAddress.Wrapf("referrer address must be canonical bech32 %s", canonical)
+	}
+	destinationBytes, err := sdk.GetFromBech32(destination, common.AccountAddressPrefix)
+	if err != nil {
+		return se.ErrInvalidAddress.Wrapf("invalid destination address: %v", err)
+	}
+	if sdk.AccAddress(referrerBytes).Equals(sdk.AccAddress(destinationBytes)) {
+		return se.ErrInvalidRequest.Wrap("referrer cannot be the claim destination")
 	}
 	return nil
 }

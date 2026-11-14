@@ -39,8 +39,14 @@ func (s *msgServer) UpdateParam(ctx context.Context, msg *types.MsgUpdateParam) 
 	}
 
 	// Int64-valued governance parameters
-	if _, ok := constants.FromString(msg.Key); !ok {
+	constName, ok := constants.FromString(msg.Key)
+	if !ok {
 		return nil, sdkerrors.ErrUnknownRequest.Wrapf("unknown parameter key: %s", msg.Key)
+	}
+	if constName == constants.ReferrerRewardBps || constName == constants.RefereeRewardBps {
+		if msg.Value < 0 || msg.Value > constants.MaxRewardBps {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("%s must be between 0 and %d, got %d", msg.Key, constants.MaxRewardBps, msg.Value)
+		}
 	}
 	if err := s.k.ConstOverrides.Set(cacheCtx, msg.Key, msg.Value); err != nil {
 		return nil, err

@@ -8,6 +8,7 @@ import (
 
 	"cosmossdk.io/math"
 	"github.com/btcq-org/qbtc/common"
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	module "github.com/btcq-org/qbtc/x/qbtc/module"
 	qbtctestutil "github.com/btcq-org/qbtc/x/qbtc/testutil"
@@ -140,8 +141,15 @@ func (f *claimTestFixture) generateProof(t *testing.T) ([]byte, [32]byte) {
 // the way a wallet would and generates the ZK proof from that signature.
 func (f *claimTestFixture) generateProofForRecipient(t *testing.T, recipientAddr string) ([]byte, [32]byte) {
 	t.Helper()
+	return f.generateReferredProof(t, recipientAddr, "")
+}
 
-	params, _, err := zktest.SignClaim(f.btcPrivKey, testChainID, f.btcAddress, recipientAddr)
+// generateReferredProof is generateProofForRecipient with a referrer in the
+// signed claim message.
+func (f *claimTestFixture) generateReferredProof(t *testing.T, recipientAddr, referrer string) ([]byte, [32]byte) {
+	t.Helper()
+
+	params, _, err := zktest.SignClaim(f.btcPrivKey, testChainID, f.btcAddress, recipientAddr, referrer)
 	require.NoError(t, err)
 
 	pubKeyHashSHA256, err := zk.PubKeyHashSHA256(f.btcPrivKey.PubKey().SerializeCompressed())
@@ -619,5 +627,99 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "proof verification failed")
 		assert.Nil(t, resp)
+	})
+}
+
+// TestClaimWithProof_Referrer checks the referrer is bound by the signed claim
+// message, recorded on the claimed UTXO and paid from the referral pool.
+func TestClaimWithProof_Referrer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	f := setupClaimTest(t)
+	require.NoError(t, f.keeper.ConstOverrides.Set(f.ctx, constants.ReferrerRewardBps.String(), 500))
+	require.NoError(t, f.keeper.ConstOverrides.Set(f.ctx, constants.RefereeRewardBps.String(), 0))
+
+	referrer := qbtctestutil.GetRandomQBTCAddress()
+	referrerAcc, err := sdk.AccAddressFromBech32(referrer)
+	require.NoError(t, err)
+	claimerAcc, err := sdk.AccAddressFromBech32(f.claimerAddr)
+	require.NoError(t, err)
+
+	const txid = "aaac000000000000000000000000000000000000000000000000000000000001"
+	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, txid+"-0", types.UTXO{
+		Txid:           txid,
+		Vout:           0,
+		Amount:         100000000,
+		EntitledAmount: 60000000,
+		ScriptPubKey:   &types.ScriptPubKeyResult{Address: f.btcAddress},
+	}))
+
+	proofData, pubKeyHashSHA256 := f.generateReferredProof(t, f.claimerAddr, referrer)
+	newMsg := func(referrer string) *types.MsgClaimWithProof {
+		return &types.MsgClaimWithProof{
+			Claimer:          f.claimerAddr,
+			Broadcaster:      f.claimerAddr,
+			Referrer:         referrer,
+			Utxos:            []types.UTXORef{{Txid: txid, Vout: 0}},
+			Proof:            hex.EncodeToString(proofData),
+			PubKeyHashSha256: hex.EncodeToString(pubKeyHashSHA256[:]),
+		}
+	}
+	server := keeper.NewMsgServerImpl(f.keeper)
+
+	t.Run("swapped referrer is rejected", func(t *testing.T) {
+		_, err := server.ClaimWithProof(f.ctx, newMsg(qbtctestutil.GetRandomQBTCAddress()))
+		require.ErrorContains(t, err, "proof verification failed")
+	})
+
+	t.Run("dropped referrer is rejected", func(t *testing.T) {
+		_, err := server.ClaimWithProof(f.ctx, newMsg(""))
+		require.ErrorContains(t, err, "proof verification failed")
+	})
+
+	t.Run("signed referrer is paid", func(t *testing.T) {
+		poolAddr := sdk.AccAddress([]byte("referral-pool-addr00"))
+		f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
+		f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, claimerAcc, gomock.Any()).Return(nil).Times(1)
+		f.authKeeper.EXPECT().GetModuleAddress(types.ReferralModuleName).Return(poolAddr).AnyTimes()
+		f.bankKeeper.EXPECT().GetBalance(gomock.Any(), poolAddr, sdk.DefaultBondDenom).
+			Return(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1_000_000_000)).AnyTimes()
+		f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ReferralModuleName, referrerAcc,
+			sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 3_000_000))).Return(nil).Times(1)
+
+		ctx := f.ctx.WithEventManager(sdk.NewEventManager())
+		resp, err := server.ClaimWithProof(ctx, newMsg(referrer))
+		require.NoError(t, err)
+		require.Equal(t, uint64(60000000), resp.TotalAmountClaimed)
+
+		utxo, err := f.keeper.Utxoes.Get(ctx, txid+"-0")
+		require.NoError(t, err)
+		require.Equal(t, referrer, utxo.Referrer)
+
+		stats, err := f.keeper.GetReferralStats(ctx, referrerAcc)
+		require.NoError(t, err)
+		require.Equal(t, uint64(1), stats.ReferredClaims)
+		require.Equal(t, uint64(60000000), stats.ReferredAmount)
+		require.Equal(t, uint64(3_000_000), stats.ReferrerRewardsPaid)
+
+		var sawReward bool
+		for _, e := range ctx.EventManager().Events() {
+			switch e.Type {
+			case "claim_with_proof":
+				attr, ok := e.GetAttribute("referrer")
+				require.True(t, ok)
+				require.Equal(t, referrer, attr.Value)
+			case types.EventTypeReferralReward:
+				sawReward = true
+			}
+		}
+		require.True(t, sawReward)
+	})
+
+	t.Run("referrer equal to destination is rejected", func(t *testing.T) {
+		_, err := server.ClaimWithProof(f.ctx, newMsg(f.claimerAddr))
+		require.ErrorContains(t, err, "referrer cannot be the claim destination")
 	})
 }

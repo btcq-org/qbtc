@@ -143,6 +143,7 @@ tests/vetest/claim.sh <txid> <vout> --key-file ~/claim.key
 #   optional: --dest <qbtc address> | --dest-key <keyring name>   (default: a new key claim-dest-<txid8>-<vout>)
 #             --from <keyring name>                              (default validator0, pays the fee-free tx)
 #             --tss-port <port>                                  (default: first free port above 18480)
+#             --referrer <qbtc address>                          (signed into the claim message; paid from the referral pool)
 ```
 
 It derives the Hash160 from the key, checks with `qbtcd q qbtc utxo` that the

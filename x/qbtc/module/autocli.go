@@ -10,8 +10,19 @@ import (
 func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 	return &autocliv1.ModuleOptions{
 		Query: &autocliv1.ServiceCommandDescriptor{
-			Service:           types.Query_serviceDesc.ServiceName,
+			Service: types.Query_serviceDesc.ServiceName,
 			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
+				{
+					RpcMethod:      "ReferralStats",
+					Use:            "referral-stats [address]",
+					Short:          "Show the referral totals of a qbtc address",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "address"}},
+				},
+				{
+					RpcMethod: "ReferralPool",
+					Use:       "referral-pool",
+					Short:     "Show the referral pool balance and reward rates",
+				},
 				// this line is used by ignite scaffolding # autocli/query
 			},
 		},

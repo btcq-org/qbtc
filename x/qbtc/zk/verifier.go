@@ -51,8 +51,9 @@ func NewVerifierFromBytes(vkBytes []byte) (*Verifier, error) {
 //     RIPEMD160(params.PubKeyHashSHA256) equals it, closing the Hash160 binding
 //     between the proven pubkey and the address being claimed.
 //  2. Recomputes the BIP-137 claim digest from (ChainID, BitcoinAddress,
-//     QBTCAddress) and uses it as the MessageHash public input, so the proof
-//     is only valid for that chain, that Bitcoin address and that destination.
+//     QBTCAddress, Referrer) and uses it as the MessageHash public input, so
+//     the proof is only valid for that chain, that Bitcoin address, that
+//     destination and that referrer.
 //
 // If (1) is ever skipped, any address would be accepted — see
 // TestBinding_Hash160NativeCheck.
@@ -77,7 +78,7 @@ func (v *Verifier) VerifyProof(proof []byte, params VerificationParams) error {
 		return fmt.Errorf("address hash mismatch: RIPEMD160(PubKeyHashSHA256) does not match %s", params.BitcoinAddress)
 	}
 
-	messageHash := ClaimMessageDigest(params.ChainID, params.BitcoinAddress, params.QBTCAddress)
+	messageHash := ClaimMessageDigest(params.ChainID, params.BitcoinAddress, params.QBTCAddress, params.Referrer)
 
 	key, ok := v.vk.(*plonkbn254.VerifyingKey)
 	if !ok {

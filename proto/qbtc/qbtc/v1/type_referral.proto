@@ -1,0 +1,20 @@
+syntax = "proto3";
+package qbtc.qbtc.v1;
+
+option go_package = "github.com/btcq-org/qbtc/x/qbtc/types";
+
+// ReferralStats holds the referral totals of one qbtc address, in both roles:
+// as the referrer named in other claims, and as the referee whose own claims
+// named a referrer.
+message ReferralStats {
+  // The qbtc address these totals belong to.
+  string address = 1;
+  // Number of claims that named this address as referrer.
+  uint64 referred_claims = 2;
+  // Total amount claimed by claims that named this address as referrer.
+  uint64 referred_amount = 3;
+  // Total reward paid to this address as referrer.
+  uint64 referrer_rewards_paid = 4;
+  // Total reward paid to this address as referee.
+  uint64 referee_rewards_paid = 5;
+}

@@ -1,6 +1,7 @@
 package proofservice
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 	"github.com/btcq-org/qbtc/x/qbtc/zk/zktest"
 	"github.com/btcsuite/btcd/btcec/v2"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/rs/zerolog"
 )
 
@@ -51,7 +53,7 @@ func TestGenerateProof_RejectsBadSignatures(t *testing.T) {
 
 	sign := func(key *btcec.PrivateKey, destination string) string {
 		t.Helper()
-		_, signature, err := zktest.SignClaim(key, chainID, address, destination)
+		_, signature, err := zktest.SignClaim(key, chainID, address, destination, "")
 		if err != nil {
 			t.Fatalf("sign claim: %v", err)
 		}
@@ -81,6 +83,52 @@ func TestGenerateProof_RejectsBadSignatures(t *testing.T) {
 				ClaimerAddress: claimer,
 				ChainID:        chainID,
 				UTXOs:          []types.UTXORef{{Txid: "00", Vout: 0}},
+			})
+			if resp != nil || status != http.StatusBadRequest || errResp == nil {
+				t.Fatalf("expected 400 with error, got resp=%v status=%d err=%v", resp, status, errResp)
+			}
+			if errResp.Code != tc.wantCode {
+				t.Fatalf("expected code %s, got %+v", tc.wantCode, errResp)
+			}
+		})
+	}
+}
+
+// TestGenerateProof_Referrer covers the referrer checks that run before the
+// expensive prove step.
+func TestGenerateProof_Referrer(t *testing.T) {
+	const chainID = "qbtc-1"
+	claimer := sdk.MustBech32ifyAddressBytes("qbtc", make([]byte, 20))
+	referrer := sdk.MustBech32ifyAddressBytes("qbtc", bytes.Repeat([]byte{1}, 20))
+	priv, pub := btcec.PrivKeyFromBytes(testPrivKeyBytes)
+	address := zktest.P2WPKHAddress(pub)
+
+	_, unreferred, err := zktest.SignClaim(priv, chainID, address, claimer, "")
+	if err != nil {
+		t.Fatalf("sign claim: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		signature string
+		referrer  string
+		wantCode  string
+	}{
+		{"referrer is not an address", unreferred, "qbtc1nope", "INVALID_REFERRER"},
+		{"referrer is not canonical", unreferred, strings.ToUpper(referrer), "INVALID_REFERRER"},
+		{"referrer is the destination", unreferred, claimer, "INVALID_REFERRER"},
+		{"referrer added to an unreferred signature", unreferred, referrer, "ADDRESS_MISMATCH"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{logger: zerolog.Nop()}
+			resp, status, errResp := svc.generateProof(context.Background(), ProveRequest{
+				Signature:       tc.signature,
+				BitcoinAddress:  address,
+				ClaimerAddress:  claimer,
+				ReferrerAddress: tc.referrer,
+				ChainID:         chainID,
+				UTXOs:           []types.UTXORef{{Txid: "00", Vout: 0}},
 			})
 			if resp != nil || status != http.StatusBadRequest || errResp == nil {
 				t.Fatalf("expected 400 with error, got resp=%v status=%d err=%v", resp, status, errResp)

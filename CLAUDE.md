@@ -140,12 +140,13 @@ make release
 
 ```
 Off-chain:
-  Wallet or TSS  → BIP-137 signature of "qbtc-claim-v1|<chain-id>|<btc addr>|<qbtc dest>"
+  Wallet or TSS  → BIP-137 signature of "qbtc-claim-v1|<chain-id>|<btc addr>|<qbtc dest>[|<referrer>]"
   zkprover CLI   → recovers pubkey, PLONK proof (hides sig & pubkey), MsgClaimWithProof JSON
                           ↓
 On-chain (x/qbtc module):
   MsgClaimWithProof → ZK Verifier → BankKeeper.MintCoins
                                   → mark UTXO as claimed
+                                  → pay referral rewards from the referral pool (optional referrer)
 Background:
   qbtcd (in-process Bitcoin reader) → vote extensions → proposer injects attested blocks → indexes UTXOs
 ```
@@ -164,7 +165,7 @@ Background:
 
 ### ZK Circuit Design
 
-`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). The signed message is the BIP-137 digest of `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination>`, derived natively by both prover and verifier, so proofs are bound to the chain, the address and the destination without the circuit knowing the format.
+`BTCPubKeyOwnershipCircuit` in `x/qbtc/zk/` proves P2PKH / P2WPKH ownership via ECDSA secp256k1 + Hash160. It uses **PLONK + KZG commitments on BN254**. The trusted setup uses Hermez/Polygon Powers of Tau (production-grade). The signed message is the BIP-137 digest of `qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination>[|<referrer>]` (the referrer field is left out when there is none), derived natively by both prover and verifier, so proofs are bound to the chain, the address, the destination and the referrer without the circuit knowing the format.
 
 The ZK verifying key is loaded at genesis init and stored immutably in chain state — it cannot be replaced post-genesis.
 
@@ -177,9 +178,10 @@ Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-p
 `MsgClaimWithProof` →
 1. `ValidateBasic()` — syntax checks
 2. `Keeper.Utxoes.Get()` — look up the first claimable UTXO for its Bitcoin address string
-3. `zk.Verifier.VerifyProof()` — rebuild the claim digest from (chain ID, address, receiver-or-claimer), check `RIPEMD160(pub_key_hash_sha256)` against the address, PLONK verification against stored VK
+3. `zk.Verifier.VerifyProof()` — rebuild the claim digest from (chain ID, address, receiver-or-claimer, referrer), check `RIPEMD160(pub_key_hash_sha256)` against the address, PLONK verification against stored VK
 4. `BankKeeper.MintCoins()` — mint to claimer's address
-5. Set `EntitledAmount = 0` on the UTXO (idempotency guard)
+5. Set `EntitledAmount = 0` on the UTXO (idempotency guard) and record its referrer
+6. If a referrer is set, pay `ReferrerRewardBps` / `RefereeRewardBps` of the claimed amount from the `referral` module account (capped at its balance, never fails the claim) and update `ReferralStats`
 
 ### Dependencies
 

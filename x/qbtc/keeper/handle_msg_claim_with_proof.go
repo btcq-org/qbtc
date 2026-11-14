@@ -57,6 +57,16 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		recipientBech32 = msg.Receiver
 	}
 
+	// The optional referrer; ValidateBasic has checked it is canonical and not
+	// the destination.
+	var referrerAddr sdk.AccAddress
+	if msg.Referrer != "" {
+		referrerAddr, err = sdk.AccAddressFromBech32(msg.Referrer)
+		if err != nil {
+			return nil, sdkerror.ErrInvalidAddress.Wrapf("invalid referrer address: %v", err)
+		}
+	}
+
 	// Find the first valid UTXO to determine the proven address
 	var provenBtcAddress string
 	var foundValidUtxo bool
@@ -102,7 +112,8 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 
 	// Verify the ZK proof against the determined address. The signed claim
 	// message names recipientBech32 as destination (receiver when set, claimer
-	// otherwise), so the proof binds to where the coins actually go.
+	// otherwise) and msg.Referrer as referrer, so the proof binds to where the
+	// coins actually go and to who referred the claim.
 	if err := s.verifyProof(sdkCtx, msg, provenBtcAddress, recipientBech32); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrapf("proof verification failed: %v", err)
 	}
@@ -184,7 +195,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 
 	var totalClaimed uint64
 	for _, utxo := range claimableUTXOs {
-		if err := s.k.ClaimUTXO(cacheCtx, utxo.txid, utxo.vout, recipientAddr); err != nil {
+		if err := s.k.ClaimUTXO(cacheCtx, utxo.txid, utxo.vout, recipientAddr, msg.Referrer); err != nil {
 			return nil, sdkerror.ErrInvalidRequest.Wrapf("failed to claim UTXO[%d]: %v", utxo.index, err)
 		}
 		totalClaimed += utxo.amount
@@ -193,12 +204,17 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	// Commit all claims atomically
 	write()
 
+	if referrerAddr != nil {
+		s.k.applyReferral(sdkCtx, referrerAddr, recipientAddr, totalClaimed)
+	}
+
 	// Emit batch event
 	sdkCtx.EventManager().EmitEvent(
 		sdk.NewEvent(
 			"claim_with_proof",
 			sdk.NewAttribute("claimer", msg.Claimer),
 			sdk.NewAttribute("receiver", recipientBech32),
+			sdk.NewAttribute("referrer", msg.Referrer),
 			sdk.NewAttribute("btc_address", provenBtcAddress),
 			sdk.NewAttribute("utxos_claimed", fmt.Sprintf("%d", len(claimableUTXOs))),
 			sdk.NewAttribute("utxos_skipped", fmt.Sprintf("%d", skippedCount)),
@@ -209,6 +225,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 	sdkCtx.Logger().Info("batch claimed with proof",
 		"claimer", msg.Claimer,
 		"receiver", recipientBech32,
+		"referrer", msg.Referrer,
 		"btc_address", provenBtcAddress,
 		"utxos_claimed", len(claimableUTXOs),
 		"utxos_skipped", skippedCount,
@@ -225,8 +242,8 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 // verifyProof verifies the ZK proof for the claim. provenBtcAddress is the
 // address string stored on the UTXO being claimed and recipientBech32 is the
 // address the proof must commit to: the receiver when set, otherwise the
-// claimer. Both are part of the signed claim message, which prevents
-// front-running and redirection.
+// claimer. Both, and the optional referrer, are part of the signed claim
+// message, which prevents front-running, redirection and referrer swaps.
 func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof, provenBtcAddress, recipientBech32 string) error {
 	proofBytes, err := hex.DecodeString(msg.Proof)
 	if err != nil {
@@ -247,6 +264,7 @@ func (s *msgServer) verifyProof(sdkCtx sdk.Context, msg *types.MsgClaimWithProof
 		ChainID:          sdkCtx.ChainID(),
 		BitcoinAddress:   provenBtcAddress,
 		QBTCAddress:      recipientBech32,
+		Referrer:         msg.Referrer,
 		PubKeyHashSHA256: pubKeyHashSHA256,
 	})
 }

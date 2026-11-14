@@ -526,13 +526,15 @@ func bigIntToLimbs(n *big.Int) []frontend.Variable {
 
 // VerificationParams is everything the verifier needs besides the proof. All
 // fields are public on-chain data: the chain ID, the Bitcoin address string
-// stored on the UTXO, the destination qbtc address, and the claimer-supplied
-// SHA256 of their compressed public key (the circuit's second public input).
-// The verifier derives the claim digest and the Bitcoin AddressHash itself.
+// stored on the UTXO, the destination qbtc address, the optional referrer qbtc
+// address ("" for none), and the claimer-supplied SHA256 of their compressed
+// public key (the circuit's second public input). The verifier derives the
+// claim digest and the Bitcoin AddressHash itself.
 type VerificationParams struct {
 	ChainID          string
 	BitcoinAddress   string
 	QBTCAddress      string
+	Referrer         string
 	PubKeyHashSHA256 [32]byte
 }
 

@@ -379,3 +379,53 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		})
 	}
 }
+
+func TestMsgClaimWithProof_ValidateBasic_Referrer(t *testing.T) {
+	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
+	receiver := makeValidReceiverAddress()
+	referrer := sdk.AccAddress(make([]byte, 20)).String()
+
+	newMsg := func(receiver, referrer string) *MsgClaimWithProof {
+		return &MsgClaimWithProof{
+			Claimer:          validBech32Address,
+			Broadcaster:      validBech32Address,
+			Receiver:         receiver,
+			Referrer:         referrer,
+			Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+			PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+			Proof:            makeValidProof(),
+		}
+	}
+
+	testCases := []struct {
+		name     string
+		receiver string
+		referrer string
+		errMsg   string
+	}{
+		{name: "no referrer", receiver: "", referrer: ""},
+		{name: "referrer distinct from claimer", receiver: "", referrer: referrer},
+		{name: "referrer distinct from receiver", receiver: receiver, referrer: referrer},
+		{name: "referrer may be the claimer when coins go to a receiver", receiver: receiver, referrer: validBech32Address},
+		{name: "referrer is not bech32", referrer: "not-an-address", errMsg: "invalid referrer address"},
+		{name: "referrer has the wrong prefix", referrer: "cosmos1ddffch4l0ynyd8v4q05j9chzqf7dl2pvz9knds", errMsg: "invalid referrer address"},
+		{name: "referrer spelled in upper case", referrer: strings.ToUpper(referrer), errMsg: "canonical"},
+		{name: "referrer is the claimer destination", referrer: validBech32Address, errMsg: "referrer cannot be the claim destination"},
+		{name: "referrer is the receiver destination", receiver: receiver, referrer: receiver, errMsg: "referrer cannot be the claim destination"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := newMsg(tc.receiver, tc.referrer).ValidateBasic()
+			if tc.errMsg == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.errMsg)
+		})
+	}
+}
+
+func TestMsgClaimWithProof_Destination(t *testing.T) {
+	require.Equal(t, "claimer", (&MsgClaimWithProof{Claimer: "claimer"}).Destination())
+	require.Equal(t, "receiver", (&MsgClaimWithProof{Claimer: "claimer", Receiver: "receiver"}).Destination())
+}

@@ -55,7 +55,7 @@ func TestClaimUTXO_MintViaQBTCModuleAccount(t *testing.T) {
 	preBalance := app.BankKeeper.GetBalance(ctx, recipient, sdk.DefaultBondDenom)
 
 	// --- attempt the claim (recipient != nil → mints via "qbtc" module account) ---
-	err := app.QbtcKeeper.ClaimUTXO(ctx, txid, vout, recipient)
+	err := app.QbtcKeeper.ClaimUTXO(ctx, txid, vout, recipient, "")
 	require.NoError(t, err,
 		"ClaimUTXO with a recipient must succeed; if this fails with "+
 			"'module account qbtc does not have permissions to mint tokens' "+
@@ -96,7 +96,7 @@ func TestClaimUTXO_ReserveMint(t *testing.T) {
 	require.NoError(t, app.QbtcKeeper.Utxoes.Set(ctx, key, utxo))
 
 	// recipient == nil → mints via "reserve" module account
-	err := app.QbtcKeeper.ClaimUTXO(ctx, txid, vout, nil)
+	err := app.QbtcKeeper.ClaimUTXO(ctx, txid, vout, nil, "")
 	require.NoError(t, err, "ClaimUTXO via reserve module should always succeed")
 
 	claimed, err := app.QbtcKeeper.Utxoes.Get(ctx, key)

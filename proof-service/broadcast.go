@@ -138,6 +138,7 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 		Proof:            resp.Proof,
 		PubKeyHashSha256: resp.PubKeyHashSHA256,
 		Receiver:         resp.ReceiverAddress,
+		Referrer:         resp.ReferrerAddress,
 	}
 
 	// Fetch account number and sequence from chain

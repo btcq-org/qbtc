@@ -34,6 +34,11 @@ type ProveRequest struct {
 	// the destination named in the signed claim message instead of the claimer.
 	ReceiverAddress string `json:"receiver_address,omitempty"`
 
+	// ReferrerAddress optionally names the qbtc address that referred this
+	// claim. It is part of the signed claim message, so it must match what the
+	// user signed; empty means no referrer.
+	ReferrerAddress string `json:"referrer_address,omitempty"`
+
 	// ChainID for message binding (e.g., "qbtc-1").
 	// If empty, uses the configured default.
 	ChainID string `json:"chain_id,omitempty"`
@@ -69,6 +74,9 @@ type ProveResponse struct {
 
 	// ReceiverAddress is the receiver address (echoed back, may be empty).
 	ReceiverAddress string `json:"receiver_address,omitempty"`
+
+	// ReferrerAddress is the referrer address (echoed back, may be empty).
+	ReferrerAddress string `json:"referrer_address,omitempty"`
 
 	// TxHash is the on-chain transaction hash, populated only when broadcast=true.
 	TxHash string `json:"tx_hash,omitempty"`

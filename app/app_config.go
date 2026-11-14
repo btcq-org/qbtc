@@ -61,6 +61,7 @@ var (
 		{Account: stakingtypes.NotBondedPoolName, Permissions: []string{authtypes.Burner, stakingtypes.ModuleName}},
 		{Account: qbtcmoduletypes.ReserveModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: qbtcmoduletypes.ModuleName, Permissions: []string{authtypes.Minter}},
+		{Account: qbtcmoduletypes.ReferralModuleName},
 		{Account: govtypes.ModuleName, Permissions: []string{authtypes.Burner}},
 		{Account: stakingtypes.KeyRotationFeePoolName, Permissions: []string{authtypes.Burner}},
 	}

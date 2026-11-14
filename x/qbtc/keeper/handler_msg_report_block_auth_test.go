@@ -58,7 +58,7 @@ func TestSetMsgReportBlock_RejectsBlockAtAnotherHeight(t *testing.T) {
 	f, c := setupAuthTest(t)
 	block, coinbase, spend := authTestBlock(t, c)
 	c.mustSubmit(block)
-	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil))
+	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil, ""))
 
 	err := submitBlockMsg(f, attestedBlockMsg(t, f, c.height+1, block))
 	require.ErrorContains(t, err, "not on the last processed block")
@@ -91,7 +91,7 @@ func TestSetMsgReportBlock_DoesNotOverwriteUTXOs(t *testing.T) {
 	anchor := c.tip
 	block, coinbase, spend := authTestBlock(t, c)
 	c.mustSubmit(block)
-	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil))
+	require.NoError(t, f.keeper.ClaimUTXO(f.ctx, coinbase.TxHash().String(), 0, nil, ""))
 
 	// Rewind the tip so the same block passes the height and link checks again.
 	setBtcAnchor(t, f, 800000, &anchor)

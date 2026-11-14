@@ -11,7 +11,16 @@ const (
 	ClaimWithProofDisabled
 	MinUtxoConfirmationBlocks
 	MemoClaimDisabled
+	// ReferrerRewardBps is the referrer's reward in basis points of the amount
+	// a referred claim mints.
+	ReferrerRewardBps
+	// RefereeRewardBps is the reward in basis points of the claimed amount that
+	// goes to the destination of a referred claim.
+	RefereeRewardBps
 )
+
+// MaxRewardBps is the upper bound of the referral reward rates: 100%.
+const MaxRewardBps = 10_000
 
 func FromString(s string) (ConstantName, bool) {
 	switch s {
@@ -25,6 +34,10 @@ func FromString(s string) (ConstantName, bool) {
 		return MinUtxoConfirmationBlocks, true
 	case "MemoClaimDisabled":
 		return MemoClaimDisabled, true
+	case "ReferrerRewardBps":
+		return ReferrerRewardBps, true
+	case "RefereeRewardBps":
+		return RefereeRewardBps, true
 	default:
 		return 0, false
 	}

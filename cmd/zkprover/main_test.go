@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"math/big"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,6 +24,7 @@ func TestClaimMsgJSON_RoundTripsThroughChainCodec(t *testing.T) {
 		bitcoinAddress: "bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc",
 		claimer:        "qbtc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpz7s0q",
 		receiver:       "qbtc1receiver",
+		referrer:       "qbtc1referrer",
 		utxos: []types.UTXORef{
 			{Txid: "0000000000000000000000000000000000000000000000000000000000000001", Vout: 0},
 			{Txid: "0000000000000000000000000000000000000000000000000000000000000002", Vout: 3},
@@ -48,6 +51,8 @@ func TestClaimTarget_Message(t *testing.T) {
 	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1claimer", target.messageText())
 	target.receiver = "qbtc1receiver"
 	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1receiver", target.messageText())
+	target.referrer = "qbtc1referrer"
+	require.Equal(t, "qbtc-claim-v1|qbtc-1|bc1qaddr|qbtc1receiver|qbtc1referrer", target.messageText())
 }
 
 func TestParseUTXORef(t *testing.T) {
@@ -70,6 +75,27 @@ func TestClaimTarget_Validate(t *testing.T) {
 	err := target.validate()
 	require.Error(t, err, "the chain stores the lowercase form, so the signed text must use it")
 	require.Contains(t, err.Error(), canonical)
+}
+
+func TestClaimTarget_ValidateReferrer(t *testing.T) {
+	claimer := sdk.MustBech32ifyAddressBytes("qbtc", make([]byte, 20))
+	referrer := sdk.MustBech32ifyAddressBytes("qbtc", bytes.Repeat([]byte{1}, 20))
+	target := claimTarget{
+		chainID:        "qbtc-1",
+		bitcoinAddress: "bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc",
+		claimer:        claimer,
+		referrer:       referrer,
+	}
+	require.NoError(t, target.validate())
+
+	target.referrer = claimer
+	require.ErrorContains(t, target.validate(), "referrer cannot be the claim destination")
+
+	target.referrer = strings.ToUpper(referrer)
+	require.ErrorContains(t, target.validate(), "canonical")
+
+	target.referrer = "qbtc1notanaddress"
+	require.ErrorContains(t, target.validate(), "--referrer")
 }
 
 func TestTSSScalar(t *testing.T) {

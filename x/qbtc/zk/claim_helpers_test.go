@@ -18,7 +18,14 @@ import (
 // cannot import it without a cycle.
 func signClaimForTest(t *testing.T, priv *btcec.PrivateKey, chainID, bitcoinAddress, qbtcAddress string) (ProofParams, string, [32]byte) {
 	t.Helper()
-	digest := ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress)
+	return signReferredClaimForTest(t, priv, chainID, bitcoinAddress, qbtcAddress, "")
+}
+
+// signReferredClaimForTest is signClaimForTest with a referrer in the signed
+// message.
+func signReferredClaimForTest(t *testing.T, priv *btcec.PrivateKey, chainID, bitcoinAddress, qbtcAddress, referrer string) (ProofParams, string, [32]byte) {
+	t.Helper()
+	digest := ClaimMessageDigest(chainID, bitcoinAddress, qbtcAddress, referrer)
 	sigBase64 := base64.StdEncoding.EncodeToString(btcecdsa.SignCompact(priv, digest[:], true))
 
 	pub, r, s, err := ParseBIP137Signature(sigBase64, digest)

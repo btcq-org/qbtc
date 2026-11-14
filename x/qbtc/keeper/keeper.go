@@ -48,6 +48,10 @@ type Keeper struct {
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
+
+	// ReferralStats holds the referral totals of each address that referred a
+	// claim or received a referee reward.
+	ReferralStats collections.Map[sdk.AccAddress, types.ReferralStats]
 }
 
 func NewKeeper(
@@ -76,6 +80,7 @@ func NewKeeper(
 		LastProcessedBlock: collections.NewItem(sb, types.LastProcessedBlockKey, "last_processed_block", collections.Uint64Value),
 		BtcTipHeader:       collections.NewItem(sb, types.BtcTipHeaderKey, "btc_tip_header", collections.BytesValue),
 		BtcPeriodStartTime: collections.NewItem(sb, types.BtcPeriodStartTimeKey, "btc_period_start_time", collections.Uint64Value),
+		ReferralStats:      collections.NewMap(sb, types.ReferralStatsKeys, "referral_stats", sdk.AccAddressKey, codec.CollValue[types.ReferralStats](cdc)),
 	}
 	schema, err := sb.Build()
 	if err != nil {
