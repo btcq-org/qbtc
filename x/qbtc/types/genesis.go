@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
@@ -35,6 +36,12 @@ func (gs GenesisState) Validate() error {
 	if len(gs.ZkVerifyingKey) > 0 {
 		if err := ValidateVerifyingKey(gs.ZkVerifyingKey); err != nil {
 			return fmt.Errorf("invalid zk_verifying_key: %w", err)
+		}
+	}
+
+	for i, hash := range gs.UtxoChunkHashes {
+		if len(hash) != sha256.Size {
+			return fmt.Errorf("utxo_chunk_hashes[%d] is %d bytes, want %d", i, len(hash), sha256.Size)
 		}
 	}
 

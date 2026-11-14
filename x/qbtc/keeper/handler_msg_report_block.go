@@ -40,6 +40,13 @@ func (s *msgServer) SetMsgReportBlock(ctx context.Context, msg *types.MsgBtcBloc
 	if err := msg.ValidateBasic(); err != nil {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("invalid MsgBtcBlock")
 	}
+	loaded, err := s.k.UtxoSnapshotLoaded(sdkCtx)
+	if err != nil {
+		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to read genesis UTXO snapshot progress: %v", err)
+	}
+	if !loaded {
+		return nil, sdkerror.ErrInvalidRequest.Wrap("Bitcoin blocks apply only once the genesis UTXO snapshot is loaded")
+	}
 	// The blocks must be attested in the previous block's vote extensions by
 	// validators with more than 2/3 of the voting power.
 	if err := s.k.ValidateBtcBlockVotes(sdkCtx, msg); err != nil {

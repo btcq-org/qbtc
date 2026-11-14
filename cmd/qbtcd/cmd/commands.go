@@ -71,10 +71,13 @@ func initRootCmd(
 		},
 	})
 
+	genesisCmd := genutilcli.Commands(txConfig, basicManager, app.DefaultNodeHome)
+	genesisCmd.AddCommand(NewSetUtxoChunkHashesCmd(app.DefaultNodeHome))
+
 	// add keybase, auxiliary RPC, query, genesis, and tx child commands
 	rootCmd.AddCommand(
 		server.StatusCommand(),
-		genutilcli.Commands(txConfig, basicManager, app.DefaultNodeHome),
+		genesisCmd,
 		queryCommand(),
 		txCommand(),
 		keysCommands(),

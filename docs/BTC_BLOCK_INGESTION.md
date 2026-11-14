@@ -11,9 +11,11 @@ How qbtc learns about Bitcoin blocks, what the chain checks, and what it trusts 
 
 Vote extensions are active for a block when `vote_extensions_enable_height` (consensus parameter `abci`) is not 0 and the block's height is greater than it, because a proposal uses the previous height's extensions. Before that, no `MsgBtcBlock` is accepted.
 
+A chain that starts from a genesis UTXO snapshot (`utxo_chunk_hashes` in the qbtc genesis, see `genesis.md`) loads one chunk of the snapshot per block. Until every chunk is loaded, the proposer injects no `MsgBtcBlock`, `ProcessProposal` rejects a proposal that carries one, and the handler refuses it: a Bitcoin block applied earlier could spend a UTXO that a later chunk then writes back. The proposer and `ProcessProposal` read the state before the block, so ingestion starts one block after the last chunk loads.
+
 ## What the chain checks
 
-`ProcessProposal` rejects a proposal if a `MsgBtcBlock` is outside an injected transaction, if it holds more than one `MsgBtcBlock`, if vote extensions are not active, or if the vote evidence below is invalid. The handler (`x/qbtc/keeper/handler_msg_report_block.go`, `btc_block.go`) repeats these checks in `FinalizeBlock`. The message is atomic: one failing block fails all of it.
+`ProcessProposal` rejects a proposal if a `MsgBtcBlock` is outside an injected transaction, if it holds more than one `MsgBtcBlock`, if vote extensions are not active, if the genesis UTXO snapshot is still loading, or if the vote evidence below is invalid. The handler (`x/qbtc/keeper/handler_msg_report_block.go`, `btc_block.go`) repeats these checks in `FinalizeBlock`. The message is atomic: one failing block fails all of it.
 
 - The signer is the injection signer, and vote extensions are active.
 - The extended commit is valid for this block's last commit (`baseapp.ValidateVoteExtensions`): same round, validators and powers, every extension signature valid, and signed votes carry more than 2/3 of the power.
