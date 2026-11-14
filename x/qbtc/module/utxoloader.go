@@ -2,152 +2,155 @@ package module
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	protoio "github.com/cosmos/gogoproto/io"
 )
 
+// genesisCoinbaseTxid is the coinbase of Bitcoin's genesis block, which can
+// never be spent. Its UTXO is loaded as already claimed.
+const genesisCoinbaseTxid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+
+// UtxoLoader loads the genesis UTXO snapshot. At InitChain it splits
+// config/genesis.bin into chunk files under utxo_chunks/ and checks them
+// against the genesis utxo_chunk_hashes; then each block loads the next chunk
+// into state, checking its hash again. Neither genesis.bin nor the chunk files
+// are deleted: a block executed again after a crash, or by optimistic
+// execution, reads its chunk again. Operators can delete them once the
+// snapshot is loaded.
 type UtxoLoader struct {
 	DataDir string
 }
 
 func NewUtxoLoader(dataDir string) UtxoLoader {
-	return UtxoLoader{
-		DataDir: dataDir,
-	}
+	return UtxoLoader{DataDir: dataDir}
 }
-func (ul *UtxoLoader) EnsureUtxoFileSplitted(ctx sdk.Context) error {
-	initialUtxoFile := filepath.Join(ul.DataDir, "config", "genesis.bin")
-	if _, err := os.Stat(initialUtxoFile); os.IsNotExist(err) {
-		ctx.Logger().Info("no initial UTXO file found, skipping split")
+
+func (ul UtxoLoader) genesisFile() string {
+	return filepath.Join(ul.DataDir, "config", "genesis.bin")
+}
+
+func (ul UtxoLoader) chunkFile(index uint64) string {
+	return filepath.Join(ul.DataDir, "utxo_chunks", fmt.Sprintf("genesis_chunk_%d.bin", index))
+}
+
+// PrepareUtxoChunks makes the chunk files match expected, the genesis
+// utxo_chunk_hashes. Chunk files that already match, as after a replayed
+// InitChain, are kept; otherwise genesis.bin is split again. A genesis.bin
+// without hashes in genesis is an error, so a snapshot is never loaded
+// unchecked.
+func (ul UtxoLoader) PrepareUtxoChunks(ctx sdk.Context, expected [][]byte) error {
+	if len(expected) == 0 {
+		if _, err := os.Stat(ul.genesisFile()); err == nil {
+			return fmt.Errorf("%s is present but genesis has no utxo_chunk_hashes", ul.genesisFile())
+		}
 		return nil
 	}
-	if err := ul.SplitUtxoFile(ctx); err != nil {
+	if err := ul.checkChunkFiles(expected); err == nil {
+		ctx.Logger().Info("genesis UTXO chunk files already match genesis", "chunks", len(expected))
+		return nil
+	}
+
+	f, err := os.Open(ul.genesisFile())
+	if err != nil {
+		return fmt.Errorf("genesis has %d utxo_chunk_hashes: %w", len(expected), err)
+	}
+	defer f.Close()
+	if err := os.MkdirAll(filepath.Dir(ul.chunkFile(0)), 0o755); err != nil {
 		return err
 	}
-	if err := os.Remove(initialUtxoFile); err != nil {
+	ctx.Logger().Info("splitting genesis UTXO file", "file", ul.genesisFile())
+	hashes, err := types.SplitUtxoChunks(bufio.NewReader(f), ul.createChunkFile)
+	if err != nil {
 		return err
+	}
+	if len(hashes) != len(expected) {
+		return fmt.Errorf("%s splits into %d chunks, genesis has %d utxo_chunk_hashes", ul.genesisFile(), len(hashes), len(expected))
+	}
+	for i := range hashes {
+		if !bytes.Equal(hashes[i], expected[i]) {
+			return fmt.Errorf("genesis UTXO chunk %d hashes to %x, genesis expects %x", i, hashes[i], expected[i])
+		}
+	}
+	ctx.Logger().Info("genesis UTXO file split", "chunks", len(hashes))
+	return nil
+}
+
+// createChunkFile writes chunk index to a temporary file and renames it into
+// place when it is complete, so a crash never leaves a partial chunk file.
+func (ul UtxoLoader) createChunkFile(index uint64) (io.Writer, func() error, error) {
+	path := ul.chunkFile(index)
+	tmp, err := os.Create(path + ".tmp")
+	if err != nil {
+		return nil, nil, err
+	}
+	finish := func() error {
+		if err := tmp.Sync(); err != nil {
+			return errors.Join(err, tmp.Close())
+		}
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		return os.Rename(tmp.Name(), path)
+	}
+	return tmp, finish, nil
+}
+
+// checkChunkFiles returns nil if every chunk file exists and matches its hash.
+func (ul UtxoLoader) checkChunkFiles(expected [][]byte) error {
+	for i, hash := range expected {
+		f, err := os.Open(ul.chunkFile(uint64(i)))
+		if err != nil {
+			return err
+		}
+		err = types.ReadUtxoChunk(bufio.NewReader(f), hash, func(types.UTXO) error { return nil })
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("chunk %d: %w", i, err)
+		}
 	}
 	return nil
 }
 
-// SplitUtxoFile splits the large genesis.bin file into smaller files for easier handling.
-func (ul *UtxoLoader) SplitUtxoFile(ctx sdk.Context) error {
-	initialUtxoFile := filepath.Join(ul.DataDir, "config", "genesis.bin")
-	f, err := os.Open(initialUtxoFile)
-	if err != nil {
+// LoadNextUtxoChunk loads the next genesis UTXO chunk into state, if any is
+// left. Any failure, including a missing file, a truncated record or a hash
+// mismatch, is returned: the block then fails, so no write of a bad chunk is
+// committed and the node stops instead of diverging from the other nodes.
+func (ul UtxoLoader) LoadNextUtxoChunk(ctx sdk.Context, k *keeper.Keeper) error {
+	index, hash, done, err := k.NextUtxoChunk(ctx)
+	if err != nil || done {
 		return err
+	}
+	path := ul.chunkFile(index)
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("genesis UTXO chunk %d: %w", index, err)
 	}
 	defer f.Close()
-	reader := protoio.NewDelimitedReader(f, 50*1024*1024) // 50MB max message size
-	outputDir := filepath.Join(ul.DataDir, "utxo_chunks")
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return err
-	}
-	chunkIndex := 0
-	for {
-		err := ul.LoadUtxosToChunkFile(ctx, reader, chunkIndex, outputDir)
-		if err != nil {
-			ctx.Logger().Info("splitting utxo files", "total", chunkIndex, "chunk_index", chunkIndex)
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
-		}
 
-		chunkIndex++
-	}
-}
-
-func (ul *UtxoLoader) LoadUtxosToChunkFile(ctx sdk.Context, genesisReader protoio.Reader, chunkIndex int, outputDir string) (err error) {
-	chunkFile := filepath.Join(outputDir, fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
-	outF, createErr := os.Create(chunkFile)
-	if createErr != nil {
-		return createErr
-	}
-
-	bufferWriter := bufio.NewWriter(outF)
-	writer := protoio.NewDelimitedWriter(bufferWriter)
-
-	// ensure file is properly closed
-	// and returning an error if there is a failure during file finalization
-	defer func() {
-		flushErr := bufferWriter.Flush()
-		if flushErr != nil {
-			ctx.Logger().Error("failed to flush to file", "flush_error", flushErr)
-		}
-		closeErr := outF.Close()
-		if closeErr != nil {
-			ctx.Logger().Error("failed to finalize file", "close_error", closeErr)
-		}
-		err = errors.Join(err, closeErr, flushErr)
-	}()
-
-	// Read and write 1,000,000 UTXOs per chunk file
-	for range 1000000 {
-		var utxo types.UTXO
-		if err := genesisReader.ReadMsg(&utxo); err != nil {
-			return fmt.Errorf("error reading utxo: %w", err)
-		}
-
-		if err := writer.WriteMsg(&utxo); err != nil {
-			return fmt.Errorf("error writing utxo: %w", err)
-		}
-	}
-
-	// close proto writer
-	return writer.Close()
-}
-func (ul *UtxoLoader) EnsureLoadUtxoFromChunkFile(ctx sdk.Context, chunkIndex int, k *keeper.Keeper) error {
-	chunkFile := filepath.Join(ul.DataDir, "utxo_chunks", fmt.Sprintf("genesis_chunk_%d.bin", chunkIndex))
-	_, err := os.Stat(chunkFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	ctx.Logger().Info("loading utxo from chunk file", "file", chunkFile)
-	if err := ul.LoadUtxosFromChunkFile(ctx, k, chunkFile); err != nil {
-		return err
-	}
-	return os.Remove(chunkFile)
-}
-
-func (ul *UtxoLoader) LoadUtxosFromChunkFile(ctx sdk.Context, k *keeper.Keeper, chunkFile string) error {
-	f, err := os.Open(chunkFile)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	reader := protoio.NewDelimitedReader(f, 50*1024*1024) // 50MB max message size
-	processed := 0
-	for {
-		var utxo types.UTXO
-		if err := reader.ReadMsg(&utxo); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				ctx.Logger().Warn("break", "processed", processed, "err", err)
-				break
-			}
-			return err
-		}
-		// This is the first UTXO , set it to already claimed , we need to mint 50 QBTC to start our genesis node
-		if utxo.Txid == "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b" {
+	ctx.Logger().Info("loading genesis UTXO chunk", "chunk", index, "file", path)
+	loaded := 0
+	err = types.ReadUtxoChunk(bufio.NewReader(f), hash, func(utxo types.UTXO) error {
+		if utxo.Txid == genesisCoinbaseTxid {
 			utxo.EntitledAmount = 0
 		}
-		err = k.Utxoes.Set(ctx, utxo.GetKey(), utxo)
-		if err != nil {
-			return err
-		}
-		processed++
+		loaded++
+		return k.Utxoes.Set(ctx, utxo.GetKey(), utxo)
+	})
+	if err != nil {
+		return fmt.Errorf("genesis UTXO chunk %d (%s): %w", index, path, err)
 	}
-
+	if err := k.MarkUtxoChunkLoaded(ctx, index); err != nil {
+		return err
+	}
+	ctx.Logger().Info("loaded genesis UTXO chunk", "chunk", index, "utxos", loaded)
 	return nil
 }

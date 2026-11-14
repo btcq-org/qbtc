@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
@@ -84,4 +85,12 @@ func TestGenesisState_ValidateReferralStats(t *testing.T) {
 
 	dup := types.GenesisState{ReferralStats: []types.ReferralStats{{Address: addr}, {Address: addr}}}
 	require.ErrorContains(t, dup.Validate(), "duplicate address")
+}
+
+func TestGenesisState_ValidateUtxoChunkHashes(t *testing.T) {
+	hash := bytes.Repeat([]byte{0xab}, 32)
+	valid := types.GenesisState{UtxoChunkHashes: [][]byte{hash, hash}}
+	require.NoError(t, valid.Validate())
+	short := types.GenesisState{UtxoChunkHashes: [][]byte{hash, hash[:31]}}
+	require.ErrorContains(t, short.Validate(), "utxo_chunk_hashes[1] is 31 bytes")
 }
