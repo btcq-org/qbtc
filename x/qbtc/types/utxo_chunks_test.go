@@ -84,6 +84,16 @@ func TestSplitUtxoChunks_TruncatedFile(t *testing.T) {
 	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
+// A file that ends right after a record's length prefix is truncated, not
+// complete: gogoproto's delimited reader reports io.EOF there.
+func TestSplitUtxoChunks_EndsAfterLengthPrefix(t *testing.T) {
+	file := append(genesisUtxoFile(t, 3), 0x01)
+	_, _, err := splitInMemory(t, file, 2)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	_, err = UtxoChunkHashes(bytes.NewReader(file))
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+}
+
 func TestUtxoChunkHashesMatchesSplit(t *testing.T) {
 	file := genesisUtxoFile(t, 5)
 	want, err := SplitUtxoChunks(bytes.NewReader(file), func(uint64) (io.Writer, func() error, error) {
@@ -122,6 +132,12 @@ func TestReadUtxoChunk(t *testing.T) {
 	})
 	t.Run("truncated chunk", func(t *testing.T) {
 		err := ReadUtxoChunk(bytes.NewReader(chunk[:len(chunk)-3]), hash, func(UTXO) error { return nil })
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	})
+	t.Run("chunk ending after a length prefix", func(t *testing.T) {
+		withPrefix := append(bytes.Clone(chunk), 0x01)
+		withPrefixHash := sha256.Sum256(withPrefix)
+		err := ReadUtxoChunk(bytes.NewReader(withPrefix), withPrefixHash[:], func(UTXO) error { return nil })
 		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	})
 	t.Run("chunk cut at a record boundary", func(t *testing.T) {

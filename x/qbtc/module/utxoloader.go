@@ -49,10 +49,15 @@ func (ul UtxoLoader) chunkFile(index uint64) string {
 // unchecked.
 func (ul UtxoLoader) PrepareUtxoChunks(ctx sdk.Context, expected [][]byte) error {
 	if len(expected) == 0 {
-		if _, err := os.Stat(ul.genesisFile()); err == nil {
+		_, err := os.Stat(ul.genesisFile())
+		switch {
+		case err == nil:
 			return fmt.Errorf("%s is present but genesis has no utxo_chunk_hashes", ul.genesisFile())
+		case errors.Is(err, os.ErrNotExist):
+			return nil
+		default:
+			return fmt.Errorf("check %s: %w", ul.genesisFile(), err)
 		}
-		return nil
 	}
 	if err := ul.checkChunkFiles(expected); err == nil {
 		ctx.Logger().Info("genesis UTXO chunk files already match genesis", "chunks", len(expected))

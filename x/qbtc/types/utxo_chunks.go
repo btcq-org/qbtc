@@ -3,6 +3,8 @@ package types
 import (
 	"bufio"
 	"crypto/sha256"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
@@ -19,6 +21,44 @@ const (
 	MaxUtxoMessageSize = 50 * 1024 * 1024
 )
 
+// utxoRecordReader reads the length-delimited UTXO records of genesis.bin and
+// of a chunk file. gogoproto's delimited reader returns io.EOF when the input
+// ends right after a record's length prefix, the same error as a clean end, so
+// a file cut there would read as complete. Here only an end before a length
+// prefix is io.EOF; an end anywhere inside a record is io.ErrUnexpectedEOF.
+type utxoRecordReader struct {
+	r   *bufio.Reader
+	buf []byte
+}
+
+func newUtxoRecordReader(r io.Reader) *utxoRecordReader {
+	return &utxoRecordReader{r: bufio.NewReader(r)}
+}
+
+// read reads the next record into utxo, replacing its content.
+func (rr *utxoRecordReader) read(utxo *UTXO) error {
+	length, err := binary.ReadUvarint(rr.r)
+	if err != nil {
+		// io.EOF before the prefix, io.ErrUnexpectedEOF inside it.
+		return err
+	}
+	if length > MaxUtxoMessageSize {
+		return fmt.Errorf("UTXO record of %d bytes exceeds %d", length, MaxUtxoMessageSize)
+	}
+	if uint64(cap(rr.buf)) < length {
+		rr.buf = make([]byte, length)
+	}
+	buf := rr.buf[:length]
+	if _, err := io.ReadFull(rr.r, buf); err != nil {
+		if errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF
+		}
+		return err
+	}
+	utxo.Reset()
+	return utxo.Unmarshal(buf)
+}
+
 // ChunkWriterFunc returns the writer for chunk index and a function that
 // finishes it once every record is written.
 type ChunkWriterFunc func(index uint64) (w io.Writer, finish func() error, err error)
@@ -34,10 +74,10 @@ func SplitUtxoChunks(r io.Reader, open ChunkWriterFunc) ([][]byte, error) {
 }
 
 func splitUtxoChunks(r io.Reader, utxosPerChunk int, open ChunkWriterFunc) ([][]byte, error) {
-	reader := protoio.NewDelimitedReader(r, MaxUtxoMessageSize)
+	reader := newUtxoRecordReader(r)
 	var hashes [][]byte
 	var utxo UTXO
-	readErr := reader.ReadMsg(&utxo)
+	readErr := reader.read(&utxo)
 	for index := uint64(0); readErr != io.EOF; index++ {
 		if readErr != nil {
 			return nil, fmt.Errorf("read genesis UTXO: %w", readErr)
@@ -53,8 +93,7 @@ func splitUtxoChunks(r io.Reader, utxosPerChunk int, open ChunkWriterFunc) ([][]
 			if err := writer.WriteMsg(&utxo); err != nil {
 				return nil, fmt.Errorf("write UTXO chunk %d: %w", index, err)
 			}
-			utxo.Reset()
-			readErr = reader.ReadMsg(&utxo)
+			readErr = reader.read(&utxo)
 		}
 		if readErr != nil && readErr != io.EOF {
 			return nil, fmt.Errorf("read genesis UTXO: %w", readErr)
@@ -84,10 +123,10 @@ func UtxoChunkHashes(r io.Reader) ([][]byte, error) {
 // record is an error, not the end of the chunk.
 func ReadUtxoChunk(r io.Reader, expectedHash []byte, fn func(UTXO) error) error {
 	hash := sha256.New()
-	reader := protoio.NewDelimitedReader(io.TeeReader(r, hash), MaxUtxoMessageSize)
+	reader := newUtxoRecordReader(io.TeeReader(r, hash))
 	for {
 		var utxo UTXO
-		err := reader.ReadMsg(&utxo)
+		err := reader.read(&utxo)
 		if err == io.EOF {
 			break
 		}
