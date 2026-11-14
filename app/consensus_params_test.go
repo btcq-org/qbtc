@@ -8,6 +8,7 @@ import (
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 )
 
@@ -24,4 +25,8 @@ func TestFreeClaimGasFitsBlockMaxGas(t *testing.T) {
 	// max_gas is set.
 	var infinite uint64 = math.MaxUint64
 	require.Error(t, postCheck(nil, &abci.ResponseCheckTx{GasWanted: int64(infinite)}))
+
+	// A block of MaxClaimsPerBlock one-UTXO claims fits max_gas.
+	maxClaims := uint64(constants.DefaultValues[constants.MaxClaimsPerBlock])
+	require.LessOrEqual(t, maxClaims*types.FreeClaimBaseGas, uint64(DefaultBlockMaxGas))
 }
