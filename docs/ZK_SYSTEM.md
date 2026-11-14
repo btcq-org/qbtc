@@ -552,6 +552,18 @@ All three are computationally infeasible.
 | Double-spend        | EntitledAmount zeroing        | `handle_msg_claim_with_proof.go:157` |
 | DoS via large proof | Exact proof layout check      | `proof_layout.go`                    |
 | DoS via many UTXOs  | Max 50 UTXOs per batch        | protobuf validation                  |
+| Free-claim spam     | Proof verified in CheckTx; a failed claim leaves no ante writes | `claim_verification.go` |
+
+### 9.3.1 Claim Admission
+
+A free claim transaction (only `MsgClaimWithProof`, no fee) is checked by `ClaimProofDecorator` in the ante handler, after its signature:
+
+- **CheckTx, simulation and FinalizeBlock:** claims are enabled, one referenced UTXO exists, is unclaimed, has an address and has `MinUtxoConfirmationBlocks` confirmations, and the PLONK proof verifies (about 3 ms). A claim that fails never enters the mempool, and none of its ante writes, such as the sequence increment, are kept. The signer (the broadcaster) must already have an account; the claimed coins go to the claimer or receiver, whose account the bank send creates. FinalizeBlock verifies again because a proposer can include transactions that never passed an honest mempool; the message handler then skips its own verification.
+- **ReCheckTx:** the state checks only, so a claim whose UTXOs an earlier block claimed leaves the mempool. A proof's validity cannot change, and re-verifying a full mempool after every block would take seconds.
+
+A claim nested in authz `MsgExec` is not a free claim transaction: the message handler verifies it and charges `ClaimProofVerifyGas` (60,000) for it.
+
+CheckTx shares one ABCI lock with block execution, so a flood of claims at a node slows that node. Validators should accept transactions only through sentry or RPC nodes.
 
 ### 9.4 Trust Assumptions
 
