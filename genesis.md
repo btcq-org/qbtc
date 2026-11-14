@@ -1,4 +1,6 @@
 ```bash
+## mainnet uses chain-id qbtc-1 (scripts/install.sh); a new network needs its
+## own chain-id so claim proofs and attestations from another chain never apply
 ./qbtcd config set client chain-id qbtc-testnet
 
 ## the chain accepts ML-DSA-65 keys only: `init` writes
@@ -47,6 +49,9 @@ jq --arg start "$START" \
     | .app_state.qbtc.btc_anchor_header = $header
     | .app_state.qbtc.btc_anchor_period_start_time = $period' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
 
+# claims are off by default (ClaimWithProofDisabled = 1); governance enables
+# them with MsgUpdateParam once the chain is ready
+
 # genesis UTXO snapshot: with $NODE_HOME/config/genesis.bin in place, write
 # the SHA-256 of each of its chunks into $GENESIS. Every node splits its
 # genesis.bin the same way at InitChain, refuses one that does not match, and
@@ -56,6 +61,12 @@ jq --arg start "$START" \
 ./qbtcd genesis set-utxo-chunk-hashes --home "$NODE_HOME"
 
 ./qbtcd genesis validate-genesis --home "$NODE_HOME"
+
+# only now, after the last edit: publish $GENESIS and
+# $NODE_HOME/config/genesis.bin, and add these lines to the release's
+# sha256sum.txt. scripts/install.sh looks the files up by the bare names
+# genesis.json and genesis.bin, so run sha256sum from the config directory.
+(cd "$NODE_HOME/config" && sha256sum genesis.json genesis.bin)
 ```
 
 `config/genesis.bin` and `utxo_chunks/` in the node home may be deleted to free

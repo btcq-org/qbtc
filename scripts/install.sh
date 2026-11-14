@@ -10,7 +10,17 @@ ARCH="linux-amd64"
 GENESIS_URL="https://sgp1.vultrobjects.com/genesis/genesis.json"
 GENESIS_BIN_URL="https://sgp1.vultrobjects.com/genesis/genesis-954355.bin"
 COSMOVISOR_URL="https://github.com/cosmos/cosmos-sdk/releases/download/cosmovisor%2Fv1.7.1/cosmovisor-v1.7.1-linux-amd64.tar.gz"
-STATESYNC_RPC="http://45.76.190.51:26657"
+# From SHA256SUMS-cosmovisor-v1.7.1.txt in the cosmovisor v1.7.1 release.
+COSMOVISOR_SHA256="014d9a9f8b5b3322642b450943e8fd5323a9b805f26aec9b24d52cc7c4c3bcff"
+CHAIN_ID="${QBTC_CHAIN_ID:-qbtc-1}"
+# Comma-separated HTTPS RPC servers for state sync, run by different
+# operators. At least two are required: the trust hash must match on each.
+STATESYNC_RPCS="${QBTC_STATESYNC_RPCS:-}"
+# Optional published trust height and hash; every RPC server must agree.
+TRUST_HEIGHT="${QBTC_TRUST_HEIGHT:-}"
+TRUST_HASH="${QBTC_TRUST_HASH:-}"
+# Optional persistent peers; by default the first RPC server's node, port 26656.
+PERSISTENT_PEERS="${QBTC_PERSISTENT_PEERS:-}"
 
 # ========== COLORS ==========
 RED='\033[0;31m'
@@ -155,6 +165,77 @@ parse_args() {
     fi
 }
 
+# ========== CHECKSUM FUNCTIONS ==========
+
+# release_sha256 NAME prints the SHA-256 of NAME listed in the release's
+# sha256sum.txt, or nothing if it is not listed.
+release_sha256() {
+    local name="$1"
+    curl -fsSL "https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/sha256sum.txt" 2>/dev/null |
+        awk -v name="$name" '$2 == name || $2 == "*" name {print $1}'
+}
+
+# verify_sha256 FILE EXPECTED fails unless FILE hashes to EXPECTED.
+verify_sha256() {
+    local file="$1"
+    local expected="$2"
+    if [[ -z "$expected" ]]; then
+        print_error "No SHA-256 known for $(basename "$file"); refusing to use it"
+        return 1
+    fi
+    if ! echo "$expected  $file" | sha256sum -c --status; then
+        print_error "Checksum verification failed for $(basename "$file")"
+        return 1
+    fi
+    print_success "Checksum verified for $(basename "$file")"
+}
+
+# check_genesis_chain_id FILE fails unless FILE is the genesis of CHAIN_ID.
+# The checksum proves the file is the one published, not that it is for the
+# chain this node is configured for.
+check_genesis_chain_id() {
+    local file="$1"
+    local chain_id
+    if ! command -v jq &> /dev/null; then
+        print_error "jq is required to check genesis.json. Please install jq and try again."
+        return 1
+    fi
+    chain_id=$(jq -r .chain_id "$file" 2>/dev/null)
+    if [[ "$chain_id" != "$CHAIN_ID" ]]; then
+        print_error "genesis.json is for chain-id '${chain_id}', not ${CHAIN_ID}"
+        return 1
+    fi
+}
+
+# download_verified URL DEST EXPECTED [CHECK] downloads URL, checks it against
+# EXPECTED and, if given, the CHECK function, and only then moves it to DEST.
+download_verified() {
+    local url="$1"
+    local dest="$2"
+    local expected="$3"
+    local check="${4:-}"
+    local tmp="${dest}.download"
+    # refuse before downloading: genesis.bin is large
+    if [[ -z "$expected" ]]; then
+        print_error "No SHA-256 known for $(basename "$dest"); refusing to download it"
+        return 1
+    fi
+    if ! curl -fL --progress-bar "$url" -o "$tmp"; then
+        print_error "Failed to download $url"
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! verify_sha256 "$tmp" "$expected"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if [[ -n "$check" ]] && ! "$check" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    mv "$tmp" "$dest"
+}
+
 # ========== INSTALLATION FUNCTIONS ==========
 
 download_and_install_qbtcd() {
@@ -221,6 +302,11 @@ download_and_install_cosmovisor() {
         return 1
     fi
 
+    if ! verify_sha256 "$tmp_dir/cosmovisor.tar.gz" "$COSMOVISOR_SHA256"; then
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
     print_info "Extracting archive..."
     tar -xzf "$tmp_dir/cosmovisor.tar.gz" -C "$tmp_dir"
 
@@ -261,51 +347,100 @@ setup_statesync() {
         return 1
     fi
 
-    print_info "Querying latest block from $STATESYNC_RPC..."
-    local latest_height
-    latest_height=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block" | jq -r .result.block.header.height)
-    if [[ -z "$latest_height" || "$latest_height" == "null" ]]; then
-        print_error "Failed to query latest block height from $STATESYNC_RPC"
+    # Each entry trimmed, https only, none empty and none twice: two entries
+    # naming the same server would pass for two independent ones.
+    if [[ ",${STATESYNC_RPCS}," == *,,* ]]; then
+        print_error "QBTC_STATESYNC_RPCS has an empty entry: $STATESYNC_RPCS"
         return 1
     fi
-
-    if [[ "$latest_height" -le 2000 ]]; then
-        print_error "Chain height ($latest_height) is too low for statesync (need > 2000)"
+    local raw=() rpcs=() rpc seen
+    IFS=',' read -r -a raw <<< "$STATESYNC_RPCS"
+    for rpc in "${raw[@]}"; do
+        rpc="${rpc#"${rpc%%[![:space:]]*}"}"
+        rpc="${rpc%"${rpc##*[![:space:]]}"}"
+        rpc="${rpc%/}"
+        if [[ -z "$rpc" ]]; then
+            print_error "QBTC_STATESYNC_RPCS has an empty entry: $STATESYNC_RPCS"
+            return 1
+        fi
+        if [[ "$rpc" != https://* || "$rpc" =~ [[:space:]] ]]; then
+            print_error "State sync RPC server $rpc must be an https:// URL"
+            return 1
+        fi
+        for seen in "${rpcs[@]}"; do
+            if [[ "$seen" == "$rpc" ]]; then
+                print_error "State sync RPC server $rpc is listed twice"
+                return 1
+            fi
+        done
+        rpcs+=("$rpc")
+    done
+    if [[ ${#rpcs[@]} -lt 2 ]]; then
+        print_error "State sync needs at least two independent RPC servers: set QBTC_STATESYNC_RPCS=https://rpc-a,https://rpc-b"
         return 1
     fi
+    # config.toml gets the list that was checked, not the raw input
+    local rpc_servers
+    rpc_servers=$(IFS=','; echo "${rpcs[*]}")
 
-    local trust_height=$((latest_height / 2000 * 2000))
-    local trust_hash
-    trust_hash=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/block?height=$trust_height" | jq -r .result.block_id.hash)
-    if [[ -z "$trust_hash" || "$trust_hash" == "null" ]]; then
-        print_error "Failed to query trust hash at height $trust_height"
-        return 1
+    local trust_height="$TRUST_HEIGHT"
+    local trust_hash="$TRUST_HASH"
+    if [[ -z "$trust_height" ]]; then
+        print_info "Querying latest block from ${rpcs[0]}..."
+        local latest_height
+        latest_height=$(curl -fsS --connect-timeout 5 --max-time 10 "${rpcs[0]}/block" | jq -r .result.block.header.height)
+        if [[ -z "$latest_height" || "$latest_height" == "null" ]]; then
+            print_error "Failed to query latest block height from ${rpcs[0]}"
+            return 1
+        fi
+        if [[ "$latest_height" -le 2000 ]]; then
+            print_error "Chain height ($latest_height) is too low for statesync (need > 2000)"
+            return 1
+        fi
+        trust_height=$((latest_height / 2000 * 2000))
     fi
 
-    print_info "Latest height: $latest_height"
+    # Every RPC server must report the same hash at the trust height, so one
+    # server alone cannot point the node at another chain.
+    local hash
+    for rpc in "${rpcs[@]}"; do
+        hash=$(curl -fsS --connect-timeout 5 --max-time 10 "$rpc/block?height=$trust_height" | jq -r .result.block_id.hash)
+        if [[ -z "$hash" || "$hash" == "null" ]]; then
+            print_error "Failed to query the block hash at height $trust_height from $rpc"
+            return 1
+        fi
+        if [[ -z "$trust_hash" ]]; then
+            trust_hash="$hash"
+        elif [[ "$hash" != "$trust_hash" ]]; then
+            print_error "$rpc reports hash $hash at height $trust_height, expected $trust_hash"
+            return 1
+        fi
+    done
+
     print_info "Trust height:  $trust_height"
     print_info "Trust hash:    $trust_hash"
 
-    # Query the node ID for persistent_peers
-    local node_id
-    node_id=$(curl -s --connect-timeout 5 --max-time 10 "$STATESYNC_RPC/status" | jq -r .result.node_info.id)
-    if [[ -z "$node_id" || "$node_id" == "null" ]]; then
-        print_error "Failed to query node ID from $STATESYNC_RPC"
-        return 1
+    local peers="$PERSISTENT_PEERS"
+    if [[ -z "$peers" ]]; then
+        local node_id
+        node_id=$(curl -fsS --connect-timeout 5 --max-time 10 "${rpcs[0]}/status" | jq -r .result.node_info.id)
+        if [[ -z "$node_id" || "$node_id" == "null" ]]; then
+            print_error "Failed to query node ID from ${rpcs[0]}"
+            return 1
+        fi
+        local rpc_host
+        rpc_host=$(echo "${rpcs[0]}" | sed -E 's|^https://||; s|[:/].*$||')
+        peers="${node_id}@${rpc_host}:26656"
     fi
-
-    local rpc_host
-    rpc_host=$(echo "$STATESYNC_RPC" | sed -E 's|^https?://||; s|:[0-9]+$||')
-    local peer="${node_id}@${rpc_host}:26656"
-    print_info "Persistent peer: $peer"
+    print_info "Persistent peers: $peers"
 
     print_info "Updating config.toml..."
     sed -i.bak -E \
         "s|^(enable[[:space:]]+=[[:space:]]+).*$|\1true|
-         s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"${STATESYNC_RPC},${STATESYNC_RPC}\"|
+         s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"${rpc_servers}\"|
          s|^(trust_height[[:space:]]+=[[:space:]]+).*$|\1${trust_height}|
          s|^(trust_hash[[:space:]]+=[[:space:]]+).*$|\1\"${trust_hash}\"|
-         s|^(persistent_peers[[:space:]]+=[[:space:]]+).*$|\1\"${peer}\"|" "$config_file"
+         s|^(persistent_peers[[:space:]]+=[[:space:]]+).*$|\1\"${peers}\"|" "$config_file"
     rm -f "${config_file}.bak"
 
     print_success "Statesync configured"
@@ -319,7 +454,7 @@ init_qbtcd() {
 
         if ask_yn "Overwrite existing genesis and data?" "n"; then
             print_info "Running qbtcd init with overwrite..."
-            qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id qbtc --overwrite
+            qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id "$CHAIN_ID" --overwrite
             qbtcd comet unsafe-reset-all --home "$QBTCD_HOME"
         else
             print_info "Skipping qbtcd initialization."
@@ -327,13 +462,13 @@ init_qbtcd() {
         fi
     else
         print_info "Running qbtcd init..."
-        qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id qbtc
+        qbtcd init qbtc-node --home "$QBTCD_HOME" --chain-id "$CHAIN_ID"
     fi
 
-    qbtcd config set client chain-id qbtc --home "$QBTCD_HOME"
+    qbtcd config set client chain-id "$CHAIN_ID" --home "$QBTCD_HOME"
     print_info "Downloading genesis.json..."
-    if ! curl -fsSL "$GENESIS_URL" -o "$QBTCD_HOME/config/genesis.json"; then
-        print_error "Failed to download genesis.json"
+    local genesis_sha256="${QBTC_GENESIS_SHA256:-$(release_sha256 genesis.json)}"
+    if ! download_verified "$GENESIS_URL" "$QBTCD_HOME/config/genesis.json" "$genesis_sha256" check_genesis_chain_id; then
         return 1
     fi
 
@@ -341,8 +476,8 @@ init_qbtcd() {
         setup_statesync
     elif ask_yn "Download genesis.bin snapshot? (large file)" "n"; then
         print_info "Downloading genesis.bin (this may take a while)..."
-        if ! curl -fL --progress-bar "$GENESIS_BIN_URL" -o "$QBTCD_HOME/config/genesis.bin"; then
-            print_error "Failed to download genesis.bin"
+        local genesis_bin_sha256="${QBTC_GENESIS_BIN_SHA256:-$(release_sha256 genesis.bin)}"
+        if ! download_verified "$GENESIS_BIN_URL" "$QBTCD_HOME/config/genesis.bin" "$genesis_bin_sha256"; then
             return 1
         fi
         print_success "genesis.bin downloaded"
