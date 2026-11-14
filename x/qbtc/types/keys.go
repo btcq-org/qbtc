@@ -51,6 +51,13 @@ var (
 	// PendingClaimAddressesKey, in the module's transient store, holds the
 	// Bitcoin addresses that have a free claim in this node's mempool.
 	PendingClaimAddressesKey = collections.NewPrefix("pending_claim_address")
+
+	// UtxoChunkHashesKey stores the SHA-256 of each genesis UTXO chunk, by
+	// chunk index.
+	UtxoChunkHashesKey = collections.NewPrefix("genesis_chunk_hashes")
+
+	// UtxoChunksLoadedKey stores how many genesis UTXO chunks are in state.
+	UtxoChunksLoadedKey = collections.NewPrefix("genesis_chunks_loaded")
 )
 
 const (
