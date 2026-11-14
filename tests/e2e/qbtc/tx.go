@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	clitestutil "github.com/cosmos/cosmos-sdk/testutil/cli"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	qbtcclitestutil "github.com/btcq-org/qbtc/x/qbtc/client/testutil"
@@ -55,7 +56,7 @@ func (s *E2ETestSuite) TestClaimWithProofCmd() {
 			utxos: []types.UTXORef{
 				{Txid: s.seedUTXOs[0].Txid, Vout: s.seedUTXOs[0].Vout},
 			},
-			// no valid claimable UTXOs remain — handler returns ErrInvalidRequest
+			// no valid claimable UTXOs remain — CheckTx returns ErrInvalidRequest
 			expectedCode: 18,
 			expectDelta:  0,
 		},
@@ -105,7 +106,8 @@ func (s *E2ETestSuite) buildClaimMsg(claimer string, utxos []types.UTXORef) *typ
 
 // submitClaim invokes the real `tx qbtc claim-with-proof` CLI command via the
 // module's testutil wrapper, then polls for the DeliverTx result. This mirrors
-// the SDK pattern: sync-broadcast → assert CheckTx accepted → query final code.
+// the SDK pattern: sync-broadcast → CheckTx response if it rejected the tx,
+// otherwise the final code.
 func (s *E2ETestSuite) submitClaim(from string, msg *types.MsgClaimWithProof) sdk.TxResponse {
 	val := s.network.Validators[0]
 
@@ -124,6 +126,10 @@ func (s *E2ETestSuite) submitClaim(from string, msg *types.MsgClaimWithProof) sd
 	var syncResp sdk.TxResponse
 	s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &syncResp))
 	s.Require().NotEmpty(syncResp.TxHash, "expected a tx hash from sync broadcast")
+	if syncResp.Code != 0 {
+		// CheckTx turned the claim away; it never reaches a block.
+		return syncResp
+	}
 
 	resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, syncResp.TxHash)
 	s.Require().NoError(err)
@@ -143,4 +149,55 @@ func (s *E2ETestSuite) queryBalance(addr, denom string) sdkmath.Int {
 		return sdkmath.ZeroInt()
 	}
 	return res.Balance.Amount
+}
+
+// TestFirstTimeClaim claims to a destination that has no account on chain,
+// signed by an existing broadcaster key as the proof service does, with no fee
+// and the CLI's default gas. A claim with a bogus proof is turned away by
+// CheckTx and never reaches a block.
+func (s *E2ETestSuite) TestFirstTimeClaim() {
+	val := s.network.Validators[0]
+	broadcaster := val.Address.String()
+	seed := s.seedUTXOs[2]
+	utxos := []types.UTXORef{{Txid: seed.Txid, Vout: seed.Vout}}
+	defaultGasArgs := []string{
+		fmt.Sprintf("--%s=%s", flags.FlagFrom, broadcaster),
+		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
+		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastSync),
+		fmt.Sprintf("--%s=%s", flags.FlagChainID, s.cfg.ChainID),
+		fmt.Sprintf("--%s=0%s", flags.FlagFees, s.cfg.BondDenom),
+	}
+	broadcast := func(msg *types.MsgClaimWithProof) sdk.TxResponse {
+		out, err := qbtcclitestutil.MsgClaimWithProofExec(val.ClientCtx, msg, defaultGasArgs...)
+		s.Require().NoError(err)
+		var resp sdk.TxResponse
+		s.Require().NoError(val.ClientCtx.Codec.UnmarshalJSON(out.Bytes(), &resp))
+		return resp
+	}
+
+	s.Run("bogus proof is rejected by CheckTx", func() {
+		s.Require().NoError(s.network.WaitForNextBlock())
+		msg := s.buildClaimMsg(sdk.AccAddress([]byte("bogus-proof-destination")).String(), utxos)
+		msg.Broadcaster = broadcaster
+		msg.Proof = hex.EncodeToString(zktest.WellFormedProof(zk.ClaimCircuitNbCommitments))
+		resp := broadcast(msg)
+		s.Require().NotZero(resp.Code, "a bogus proof must not enter the mempool")
+		s.Require().Contains(resp.RawLog, "proof verification failed")
+	})
+
+	s.Run("destination without an account, no fee, default gas", func() {
+		s.Require().NoError(s.network.WaitForNextBlock())
+		claimer := sdk.AccAddress([]byte("first-time-claimer-dest")).String()
+		_, err := authtypes.NewQueryClient(val.ClientCtx).Account(context.Background(), &authtypes.QueryAccountRequest{Address: claimer})
+		s.Require().Error(err, "the destination must not have an account yet")
+
+		msg := s.buildClaimMsg(claimer, utxos)
+		msg.Broadcaster = broadcaster
+		sync := broadcast(msg)
+		s.Require().Zero(sync.Code, "CheckTx: %s", sync.RawLog)
+		resp, err := clitestutil.GetTxResponse(s.network, val.ClientCtx, sync.TxHash)
+		s.Require().NoError(err)
+		s.Require().Zero(resp.Code, "DeliverTx: %s", resp.RawLog)
+		s.Require().Equal(sdkmath.NewIntFromUint64(seed.EntitledAmount).String(), s.queryBalance(claimer, s.cfg.BondDenom).String())
+	})
 }
