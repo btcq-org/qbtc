@@ -35,10 +35,11 @@ type HomeDir string
 type ModuleInputs struct {
 	depinject.In
 
-	Config       *types.Module
-	StoreService store.KVStoreService
-	Cdc          codec.Codec
-	AddressCodec address.Codec
+	Config                *types.Module
+	StoreService          store.KVStoreService
+	TransientStoreService store.TransientStoreService
+	Cdc                   codec.Codec
+	AddressCodec          address.Codec
 
 	AuthKeeper    types.AuthKeeper
 	BankKeeper    types.BankKeeper
@@ -61,6 +62,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	}
 	k := keeper.NewKeeper(
 		in.StoreService,
+		in.TransientStoreService,
 		in.Cdc,
 		in.AddressCodec,
 		in.StakingKeeper,
