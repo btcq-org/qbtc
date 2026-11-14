@@ -121,6 +121,16 @@ func TestPrepareUtxoChunks(t *testing.T) {
 		ul := NewUtxoLoader(t.TempDir())
 		require.NoError(t, ul.PrepareUtxoChunks(ctx, nil))
 	})
+	t.Run("genesis.bin that cannot be checked", func(t *testing.T) {
+		// The node home is a regular file, so the stat fails with ENOTDIR:
+		// an error other than absence, which must not read as no snapshot.
+		home := filepath.Join(t.TempDir(), "home")
+		writeFile(t, home, nil)
+		ul := NewUtxoLoader(home)
+		err := ul.PrepareUtxoChunks(ctx, nil)
+		require.Error(t, err)
+		require.NotErrorIs(t, err, os.ErrNotExist)
+	})
 }
 
 func TestLoadNextUtxoChunk(t *testing.T) {

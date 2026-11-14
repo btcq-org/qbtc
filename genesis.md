@@ -26,8 +26,10 @@
 # https://sgp1.vultrobjects.com/genesis/proving.key
 # https://sgp1.vultrobjects.com/genesis/verifying.key
 # every step below edits the genesis file in the node home, the same file
-# init, gentx and collect-gentxs wrote (use your --home if it is not the default)
-GENESIS="$HOME/.qbtc/config/genesis.json"
+# init, gentx and collect-gentxs wrote (set NODE_HOME to your --home if it is
+# not the default)
+NODE_HOME="$HOME/.qbtc"
+GENESIS="$NODE_HOME/config/genesis.json"
 
 # update genesis file to include verify key
 jq --arg key "$(cat output.txt)" '.app_state.qbtc.zk_verifying_key = $key' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
@@ -45,15 +47,15 @@ jq --arg start "$START" \
     | .app_state.qbtc.btc_anchor_header = $header
     | .app_state.qbtc.btc_anchor_period_start_time = $period' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
 
-# genesis UTXO snapshot: with config/genesis.bin in place in the node home,
-# write the SHA-256 of each of its chunks into $GENESIS. Every node splits its
+# genesis UTXO snapshot: with $NODE_HOME/config/genesis.bin in place, write
+# the SHA-256 of each of its chunks into $GENESIS. Every node splits its
 # genesis.bin the same way at InitChain, refuses one that does not match, and
 # checks each chunk again before loading it (one chunk per block). Bitcoin
 # blocks apply only after the last chunk. A genesis.bin without these hashes is
 # refused.
-./qbtcd genesis set-utxo-chunk-hashes
+./qbtcd genesis set-utxo-chunk-hashes --home "$NODE_HOME"
 
-./qbtcd genesis validate-genesis
+./qbtcd genesis validate-genesis --home "$NODE_HOME"
 ```
 
 `config/genesis.bin` and `utxo_chunks/` in the node home may be deleted to free
