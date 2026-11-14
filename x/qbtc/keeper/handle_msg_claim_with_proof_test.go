@@ -107,6 +107,8 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 		authKeeper,
 		govtypes.ModuleName,
 	)
+	// Claims are off by default at genesis; these tests run with them enabled.
+	require.NoError(t, k.ConstOverrides.Set(ctx, constants.ClaimWithProofDisabled.String(), 0))
 
 	// Create claimer address
 	claimerAddr := qbtctestutil.GetRandomQBTCAddress()
