@@ -10,4 +10,5 @@ var DefaultValues = map[ConstantName]int64{
 	MemoClaimDisabled:         0,
 	ReferrerRewardBps:         500, // 5% of the referred claim
 	RefereeRewardBps:          100, // non-zero on mocknet so tests exercise the referee payout
+	MaxClaimsPerBlock:         200, // MsgClaimWithProof messages per block, each a PLONK verification
 }
