@@ -183,7 +183,7 @@ Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-p
 5. Set `EntitledAmount = 0` on the UTXO (idempotency guard) and record its referrer
 6. If a referrer is set, pay `ReferrerRewardBps` / `RefereeRewardBps` of the claimed amount from the `referral` module account (capped at its balance, never fails the claim) and update `ReferralStats`
 
-For a free claim tx (claim-only, no fee), `ClaimProofDecorator` (`x/qbtc/keeper/claim_verification.go`) runs steps 2–3 in the ante handler, so CheckTx drops an invalid claim (ReCheckTx skips the proof), and the handler skips its own verification. `MaxClaimsPerBlock` (default 200) and `block.max_gas` are enforced in `PrepareProposal`/`ProcessProposal`.
+For a free claim tx (claim-only, no fee), `ClaimProofDecorator` (`x/qbtc/keeper/claim_verification.go`) runs steps 2–3 in the ante handler, so CheckTx drops an invalid claim (ReCheckTx skips the proof), and the handler skips its own verification. CheckTx/ReCheckTx also keep one free claim per Bitcoin address in the mempool, recorded in the module's transient store (`PendingClaimAddresses`). `MaxClaimsPerBlock` (default 200) and `block.max_gas` are enforced in `PrepareProposal`/`ProcessProposal`.
 
 ### Dependencies
 
