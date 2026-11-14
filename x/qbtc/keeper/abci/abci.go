@@ -3,6 +3,7 @@ package abci
 import (
 	"fmt"
 
+	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
@@ -55,6 +56,7 @@ func (h *ProposalHandler) PrepareProposal(ctx sdk.Context, req *abci.RequestPrep
 	if err != nil {
 		return nil, err
 	}
+	resp.Txs = h.withinBlockLimits(ctx, resp.Txs)
 
 	// Combine the injected MsgBtcBlock txs with the ones selected by default handler, up to tx limit
 	combinedTxs := injectTxs
@@ -204,8 +206,83 @@ func (h *ProposalHandler) ProcessProposal(ctx sdk.Context, req *abci.RequestProc
 		ctx.Logger().Error("rejecting proposal", "error", err)
 		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
+	if err := h.checkBlockLimits(ctx, txs); err != nil {
+		ctx.Logger().Error("rejecting proposal", "error", err)
+		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
+	}
 
 	return h.processProposalHandler(ctx, req)
+}
+
+// blockLimits tracks a proposal against the per-block claim cap
+// (MaxClaimsPerBlock MsgClaimWithProof messages, each a PLONK verification)
+// and the consensus max_gas. With qbtc's no-op app mempool the SDK's
+// ProcessProposal accepts any proposal, so without these checks a proposer
+// could fill a block with claims or exceed max_gas.
+type blockLimits struct {
+	maxClaims int64
+	maxGas    int64
+	claims    int64
+	gas       uint64
+}
+
+func (h *ProposalHandler) newBlockLimits(ctx sdk.Context) *blockLimits {
+	l := &blockLimits{maxClaims: h.keeper.GetConfig(ctx, constants.MaxClaimsPerBlock), maxGas: -1}
+	if b := ctx.ConsensusParams().Block; b != nil {
+		l.maxGas = b.MaxGas
+	}
+	return l
+}
+
+// add counts tx against the limits and reports whether it still fits.
+// Injected transactions count against neither.
+func (l *blockLimits) add(tx sdk.Tx) error {
+	if btcreader.IsInjectTx(tx) {
+		return nil
+	}
+	claims := l.claims + int64(types.CountClaimMsgs(tx.GetMsgs()))
+	if claims > l.maxClaims {
+		return fmt.Errorf("more than %d claim messages in the block", l.maxClaims)
+	}
+	// As in CometBFT, max_gas -1 is the only "no limit". l.gas never exceeds
+	// max_gas, so the subtraction cannot wrap, and a huge declared gas cannot
+	// wrap the sum.
+	gas := txGas(tx)
+	if l.maxGas >= 0 && gas > uint64(l.maxGas)-l.gas {
+		return fmt.Errorf("transactions want more than the block's max gas %d", l.maxGas)
+	}
+	l.claims, l.gas = claims, l.gas+gas
+	return nil
+}
+
+// withinBlockLimits drops the transactions that would take the proposal past
+// the claim cap or max_gas. They stay in the mempool for a later block.
+func (h *ProposalHandler) withinBlockLimits(ctx sdk.Context, txs [][]byte) [][]byte {
+	limits := h.newBlockLimits(ctx)
+	kept := make([][]byte, 0, len(txs))
+	for _, bz := range txs {
+		tx, err := h.decoder(bz)
+		if err != nil {
+			continue
+		}
+		if err := limits.add(tx); err != nil {
+			ctx.Logger().Debug("leaving transaction out of the proposal", "reason", err)
+			continue
+		}
+		kept = append(kept, bz)
+	}
+	return kept
+}
+
+// checkBlockLimits rejects a proposal past the claim cap or max_gas.
+func (h *ProposalHandler) checkBlockLimits(ctx sdk.Context, txs []sdk.Tx) error {
+	limits := h.newBlockLimits(ctx)
+	for _, tx := range txs {
+		if err := limits.add(tx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkInjectedBlocks rejects a proposal that carries a MsgBtcBlock outside a

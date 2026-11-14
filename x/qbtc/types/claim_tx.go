@@ -2,6 +2,7 @@ package types
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/authz"
 )
 
 // A free claim transaction pays no fee, so it cannot be left to declare its own
@@ -55,4 +56,24 @@ func IsClaimOnlyTx(tx sdk.Tx) bool {
 		}
 	}
 	return true
+}
+
+// CountClaimMsgs returns the number of MsgClaimWithProof messages in msgs,
+// including those nested in authz MsgExec. Each one costs a PLONK
+// verification when the block runs.
+func CountClaimMsgs(msgs []sdk.Msg) int {
+	n := 0
+	for _, msg := range msgs {
+		switch m := msg.(type) {
+		case *MsgClaimWithProof:
+			n++
+		case *authz.MsgExec:
+			inner, err := m.GetMessages()
+			if err != nil {
+				continue
+			}
+			n += CountClaimMsgs(inner)
+		}
+	}
+	return n
 }

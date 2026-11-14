@@ -41,3 +41,13 @@ func TestIsClaimOnlyTx(t *testing.T) {
 	exec := authz.NewMsgExec(sdk.AccAddress("grantee"), []sdk.Msg{claim})
 	require.False(t, types.IsClaimOnlyTx(msgsTx{msgs: []sdk.Msg{&exec}}))
 }
+
+func TestCountClaimMsgs(t *testing.T) {
+	claim := &types.MsgClaimWithProof{}
+	inner := authz.NewMsgExec(sdk.AccAddress("grantee"), []sdk.Msg{claim, &types.MsgEmpty{}})
+	outer := authz.NewMsgExec(sdk.AccAddress("grantee"), []sdk.Msg{&inner, claim})
+	require.Equal(t, 0, types.CountClaimMsgs(nil))
+	require.Equal(t, 1, types.CountClaimMsgs([]sdk.Msg{claim, &types.MsgEmpty{}}))
+	require.Equal(t, 1, types.CountClaimMsgs([]sdk.Msg{&inner}))
+	require.Equal(t, 3, types.CountClaimMsgs([]sdk.Msg{claim, &outer}))
+}
