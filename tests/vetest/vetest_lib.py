@@ -198,6 +198,9 @@ def cmd_genesis_patch(a):
         if a.enable_height is not None:
             g["consensus"]["params"].setdefault("abci", {})["vote_extensions_enable_height"] = str(a.enable_height)
         q = g["app_state"]["qbtc"]
+        # Claims are off by default at genesis; the S9 scenario claims.
+        params = [p for p in q.get("params") or [] if p.get("key") != "ClaimWithProofDisabled"]
+        q["params"] = params + [{"key": "ClaimWithProofDisabled", "value": "0"}]
         if a.utxo_file:
             with open(a.utxo_file) as f:
                 q["utxos"] = json.load(f)
