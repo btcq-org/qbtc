@@ -13,6 +13,8 @@ import (
 	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -150,6 +152,23 @@ func outputAmount(out *wire.TxOut) (uint64, error) {
 	return uint64(out.Value), nil
 }
 
+// totalOutputAmount sums a transaction's output values, with Bitcoin's rule
+// that the total cannot exceed 21 million BTC, so the sum cannot overflow.
+func totalOutputAmount(outs []*wire.TxOut) (uint64, error) {
+	total := uint64(0)
+	for _, out := range outs {
+		amount, err := outputAmount(out)
+		if err != nil {
+			return 0, err
+		}
+		if amount > btcutil.MaxSatoshi || total+amount > btcutil.MaxSatoshi {
+			return 0, fmt.Errorf("output total exceeds %d satoshis", int64(btcutil.MaxSatoshi))
+		}
+		total += amount
+	}
+	return total, nil
+}
+
 // scriptPubKey describes an output script the way Bitcoin Core's getblock
 // does: the script hex, its class name, and an address only for the classes
 // Core gives one (not bare public keys or multisig, which have no address).
@@ -180,13 +199,9 @@ func (s *msgServer) processTransaction(ctx sdk.Context, params *chaincfg.Params,
 	if err != nil {
 		return fee, err
 	}
-	totalOutput := uint64(0)
-	for _, out := range tx.TxOut {
-		amount, err := outputAmount(out)
-		if err != nil {
-			return fee, err
-		}
-		totalOutput += amount
+	totalOutput, err := totalOutputAmount(tx.TxOut)
+	if err != nil {
+		return fee, err
 	}
 	if totalInput > 0 && totalInput > totalOutput {
 		// calculate the transaction fee
@@ -432,6 +447,18 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	totalFee uint64,
 	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_coinbase_vout")
+	totalOutput, err := totalOutputAmount(outs)
+	if err != nil {
+		return err
+	}
+	// The block's fees are already taken out of the spending transactions'
+	// entitlement, so the coinbase is entitled to its value minus the fees,
+	// once in total, split across its outputs in proportion to their value.
+	// That is at most the block subsidy: Bitcoin rejects a coinbase that pays
+	// more than the subsidy plus the fees, but the entitlement does not rely on
+	// the attested block being valid in that respect.
+	subsidy := uint64(blockchain.CalcBlockSubsidy(int32(blockHeight), params))
+	totalClaimable := min(totalOutput-min(totalFee, totalOutput), subsidy)
 	for n, out := range outs {
 		if out.Value == 0 {
 			continue
@@ -441,10 +468,7 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 		if err != nil {
 			return err
 		}
-		entitleAmount := amount
-		if entitleAmount > totalFee {
-			entitleAmount = entitleAmount - totalFee
-		}
+		entitleAmount := proportionalEntitlement(totalClaimable, amount, totalOutput)
 		utxo := types.UTXO{
 			Txid:           txID,
 			Vout:           uint32(n),
