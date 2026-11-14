@@ -21,6 +21,64 @@ func TestGenesis(t *testing.T) {
 
 }
 
+// Export then import keeps the governance string params, the const overrides
+// and the UTXOs.
+func TestGenesis_ExportImportRoundTrip(t *testing.T) {
+	f := initFixture(t)
+	devAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+	genesisState := types.GenesisState{
+		Params: []*types.Param{{Key: "EmissionCurve", Value: 9}},
+		StringParams: []types.StringParam{
+			{Key: types.DevFundAddressKey, Value: devAddr},
+			{Key: types.MarketingFundAddressKey, Value: devAddr},
+		},
+		Utxos: []*types.UTXO{{Txid: "11", Vout: 1, Amount: 5, EntitledAmount: 5, ScriptPubKey: &types.ScriptPubKeyResult{Address: "a"}}},
+	}
+
+	require.NoError(t, f.keeper.InitGenesis(f.ctx, genesisState))
+	exported, err := f.keeper.ExportGenesis(f.ctx)
+	require.NoError(t, err)
+	require.NoError(t, exported.Validate())
+	require.ElementsMatch(t, genesisState.StringParams, exported.StringParams)
+
+	imported := initFixture(t)
+	require.NoError(t, imported.keeper.InitGenesis(imported.ctx, *exported))
+	got, err := imported.keeper.GetStringParam(imported.ctx, types.DevFundAddressKey)
+	require.NoError(t, err)
+	require.Equal(t, devAddr, got)
+	again, err := imported.keeper.ExportGenesis(imported.ctx)
+	require.NoError(t, err)
+	require.Equal(t, exported, again)
+}
+
+// The chunk hashes are stored at InitGenesis. The export refuses while chunks
+// are left to load, since those UTXOs are only in the chunk files, and leaves
+// the hashes out once every chunk is loaded, since the UTXOs are then exported.
+func TestGenesis_UtxoChunkHashes(t *testing.T) {
+	hashes := [][]byte{bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)}
+	f := initFixture(t)
+	require.NoError(t, f.keeper.InitGenesis(f.ctx, types.GenesisState{UtxoChunkHashes: hashes}))
+
+	index, hash, done, err := f.keeper.NextUtxoChunk(f.ctx)
+	require.NoError(t, err)
+	require.False(t, done)
+	require.Equal(t, uint64(0), index)
+	require.Equal(t, hashes[0], hash)
+
+	_, err = f.keeper.ExportGenesis(f.ctx)
+	require.ErrorContains(t, err, "snapshot is loading")
+
+	require.NoError(t, f.keeper.MarkUtxoChunkLoaded(f.ctx, 0))
+	require.NoError(t, f.keeper.MarkUtxoChunkLoaded(f.ctx, 1))
+	loaded, err := f.keeper.UtxoSnapshotLoaded(f.ctx)
+	require.NoError(t, err)
+	require.True(t, loaded)
+	exported, err := f.keeper.ExportGenesis(f.ctx)
+	require.NoError(t, err)
+	require.Empty(t, exported.UtxoChunkHashes)
+}
+
 // The Bitcoin anchor is loaded from genesis, and an export carries the current
 // tip forward as the anchor, so an imported chain continues at the next block.
 func TestGenesis_BtcAnchor(t *testing.T) {

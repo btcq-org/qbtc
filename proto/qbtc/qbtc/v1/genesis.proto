@@ -39,4 +39,18 @@ message GenesisState {
   uint32 btc_anchor_period_start_time = 8;
   // Referral totals per qbtc address.
   repeated ReferralStats referral_stats = 9 [ (gogoproto.nullable) = false ];
+  // Governance string parameters, such as DevFundAddress and
+  // MarketingFundAddress.
+  repeated StringParam string_params = 10 [ (gogoproto.nullable) = false ];
+  // The SHA-256 of each genesis UTXO chunk file, in chunk order. The node
+  // splits config/genesis.bin into these chunks at InitChain and loads one
+  // chunk per block, checking it against its hash first. Empty when the chain
+  // starts without a UTXO snapshot.
+  repeated bytes utxo_chunk_hashes = 11;
+}
+
+// StringParam is a string-valued governance parameter.
+message StringParam {
+  string key = 1;
+  string value = 2;
 }

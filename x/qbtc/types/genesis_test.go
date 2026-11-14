@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
@@ -84,4 +85,58 @@ func TestGenesisState_ValidateReferralStats(t *testing.T) {
 
 	dup := types.GenesisState{ReferralStats: []types.ReferralStats{{Address: addr}, {Address: addr}}}
 	require.ErrorContains(t, dup.Validate(), "duplicate address")
+}
+
+func TestGenesisState_ValidateStringParamsAndChunkHashes(t *testing.T) {
+	addr := sdk.AccAddress(bytes.Repeat([]byte{0x01}, 20)).String()
+	hash := bytes.Repeat([]byte{0xab}, 32)
+	tests := []struct {
+		desc     string
+		genState types.GenesisState
+		errMsg   string
+	}{
+		{
+			desc: "fund addresses and chunk hashes",
+			genState: types.GenesisState{
+				StringParams: []types.StringParam{
+					{Key: types.DevFundAddressKey, Value: addr},
+					{Key: types.MarketingFundAddressKey, Value: ""},
+				},
+				UtxoChunkHashes: [][]byte{hash, hash},
+			},
+		},
+		{
+			desc:     "unknown string param",
+			genState: types.GenesisState{StringParams: []types.StringParam{{Key: "Other", Value: addr}}},
+			errMsg:   "unknown string param",
+		},
+		{
+			desc: "string param set twice",
+			genState: types.GenesisState{StringParams: []types.StringParam{
+				{Key: types.DevFundAddressKey, Value: addr},
+				{Key: types.DevFundAddressKey, Value: addr},
+			}},
+			errMsg: "set twice",
+		},
+		{
+			desc:     "invalid fund address",
+			genState: types.GenesisState{StringParams: []types.StringParam{{Key: types.DevFundAddressKey, Value: "nope"}}},
+			errMsg:   "invalid address",
+		},
+		{
+			desc:     "short chunk hash",
+			genState: types.GenesisState{UtxoChunkHashes: [][]byte{hash, hash[:31]}},
+			errMsg:   "utxo_chunk_hashes[1] is 31 bytes",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			err := tc.genState.Validate()
+			if tc.errMsg == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.errMsg)
+		})
+	}
 }

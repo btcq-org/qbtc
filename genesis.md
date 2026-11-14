@@ -1,4 +1,6 @@
 ```bash
+## mainnet uses chain-id qbtc-1 (scripts/install.sh); a new network needs its
+## own chain-id so claim proofs and attestations from another chain never apply
 ./qbtcd config set client chain-id qbtc-testnet
 
 ## the chain accepts ML-DSA-65 keys only: `init` writes
@@ -25,8 +27,12 @@
 # https://sgp1.vultrobjects.com/genesis/circuit.cs
 # https://sgp1.vultrobjects.com/genesis/proving.key
 # https://sgp1.vultrobjects.com/genesis/verifying.key
+# every step below edits the genesis file in the node home, the same file
+# init, gentx and collect-gentxs wrote (use your --home if it is not the default)
+GENESIS="$HOME/.qbtc/config/genesis.json"
+
 # update genesis file to include verify key
-jq --arg key "$(cat output.txt)" '.app_state.qbtc.zk_verifying_key = $key' genesis.json > tmp.json
+jq --arg key "$(cat output.txt)" '.app_state.qbtc.zk_verifying_key = $key' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
 
 # set the Bitcoin anchor: START is the first Bitcoin height the chain processes,
 # and the anchor is the block before it (see docs/BTC_BLOCK_INGESTION.md)
@@ -39,10 +45,40 @@ jq --arg start "$START" \
    --argjson period "$PERIOD_START_TIME" \
    '.app_state.qbtc.btc_initial_height = $start
     | .app_state.qbtc.btc_anchor_header = $header
-    | .app_state.qbtc.btc_anchor_period_start_time = $period' tmp.json > genesis.json
+    | .app_state.qbtc.btc_anchor_period_start_time = $period' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
+
+# governance fund addresses (string params), kept by export and import
+jq --arg dev "<dev fund address>" --arg mkt "<marketing fund address>" \
+   '.app_state.qbtc.string_params = [{"key":"DevFundAddress","value":$dev},{"key":"MarketingFundAddress","value":$mkt}]' \
+   "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
+
+# claims are off by default (ClaimWithProofDisabled = 1); governance enables
+# them with MsgUpdateParam once the chain is ready
+
+# genesis UTXO snapshot: with config/genesis.bin in place in the node home,
+# write the SHA-256 of each of its chunks into $GENESIS. Every node splits its
+# genesis.bin the same way at InitChain, refuses one that does not match, and
+# checks each chunk again before loading it (one chunk per block). Bitcoin
+# blocks apply only after the last chunk. A genesis.bin without these hashes is
+# refused.
+./qbtcd genesis set-utxo-chunk-hashes
 
 ./qbtcd genesis validate-genesis
+
+# only now, after the last edit: publish $GENESIS and config/genesis.bin, and
+# list both in the release's sha256sum.txt, which scripts/install.sh checks
+# them against
+sha256sum "$GENESIS" "$HOME/.qbtc/config/genesis.bin"
 ```
+
+`config/genesis.bin` and `utxo_chunks/` in the node home may be deleted to free
+disk once the snapshot has loaded and that is committed: wait for the
+`loaded genesis UTXO chunk` log line of the last chunk, then for the node to
+commit a later block. The line is logged while its block executes; a node that
+stops before that block commits executes it again and needs the chunk file. The
+node never deletes them itself.
+
+`qbtcd export --for-zero-height` is not supported; export at the last height.
 
 ## setup firewall
 ```bash

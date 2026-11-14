@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/zk"
@@ -35,6 +36,15 @@ func (gs GenesisState) Validate() error {
 	if len(gs.ZkVerifyingKey) > 0 {
 		if err := ValidateVerifyingKey(gs.ZkVerifyingKey); err != nil {
 			return fmt.Errorf("invalid zk_verifying_key: %w", err)
+		}
+	}
+
+	if err := gs.validateStringParams(); err != nil {
+		return err
+	}
+	for i, hash := range gs.UtxoChunkHashes {
+		if len(hash) != sha256.Size {
+			return fmt.Errorf("utxo_chunk_hashes[%d] is %d bytes, want %d", i, len(hash), sha256.Size)
 		}
 	}
 
@@ -116,6 +126,28 @@ func (gs GenesisState) validateBtcAnchor() error {
 	}
 	if gs.BtcAnchorPeriodStartTime == 0 || int64(gs.BtcAnchorPeriodStartTime) > header.Timestamp.Unix() {
 		return fmt.Errorf("btc_anchor_period_start_time must be set and not after the anchor's timestamp")
+	}
+	return nil
+}
+
+// validateStringParams checks that each string param is a known key, set
+// once, with an empty value or a valid address.
+func (gs GenesisState) validateStringParams() error {
+	seen := make(map[string]bool, len(gs.StringParams))
+	for _, p := range gs.StringParams {
+		if !isStringParamKey(p.Key) {
+			return fmt.Errorf("unknown string param %q", p.Key)
+		}
+		if seen[p.Key] {
+			return fmt.Errorf("string param %q is set twice", p.Key)
+		}
+		seen[p.Key] = true
+		if p.Value == "" {
+			continue
+		}
+		if _, err := sdk.AccAddressFromBech32(p.Value); err != nil {
+			return fmt.Errorf("string param %s: invalid address: %w", p.Key, err)
+		}
 	}
 	return nil
 }

@@ -52,6 +52,22 @@ func TestSetMsgReportBlock_RejectsOtherSigner(t *testing.T) {
 	require.Equal(t, uint64(800000), getLastProcessed(t, f))
 }
 
+// Bitcoin blocks wait until every genesis UTXO chunk is loaded: a block
+// applied earlier could spend a UTXO that a later chunk writes back.
+func TestSetMsgReportBlock_WaitsForUtxoSnapshot(t *testing.T) {
+	f, c := setupAuthTest(t)
+	require.NoError(t, f.keeper.UtxoChunkHashes.Set(f.ctx, 0, make([]byte, 32)))
+	block, _, _ := authTestBlock(t, c)
+	msg := attestedBlockMsg(t, f, c.height+1, block)
+
+	require.ErrorContains(t, submitBlockMsg(f, msg), "genesis UTXO snapshot")
+	require.Equal(t, uint64(800000), getLastProcessed(t, f))
+
+	require.NoError(t, f.keeper.MarkUtxoChunkLoaded(f.ctx, 0))
+	require.NoError(t, submitBlockMsg(f, msg))
+	require.Equal(t, uint64(800001), getLastProcessed(t, f))
+}
+
 // An accepted block cannot be applied again at the next height: it does not
 // link to the new tip.
 func TestSetMsgReportBlock_RejectsBlockAtAnotherHeight(t *testing.T) {

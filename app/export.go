@@ -2,26 +2,30 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 // ExportAppStateAndValidators exports the state of the application for a genesis
 // file.
-func (app *App) ExportAppStateAndValidators(forZeroHeight bool, jailAllowedAddrs, modulesToExport []string) (servertypes.ExportedApp, error) {
-	// as if they could withdraw from the start of the next block
+//
+// A zero-height export must also reset distribution, staking and slashing
+// heights, as simapp's prepForZeroHeightGenesis does. qbtc does not implement
+// that for SDK v0.55, so it refuses the export instead of writing a genesis
+// with inconsistent state.
+func (app *App) ExportAppStateAndValidators(forZeroHeight bool, _, modulesToExport []string) (servertypes.ExportedApp, error) {
+	if forZeroHeight {
+		return servertypes.ExportedApp{}, errors.New("export --for-zero-height is not supported; export at the last height instead")
+	}
+
 	ctx := app.NewContextLegacy(true, cmtproto.Header{Height: app.LastBlockHeight()})
 
 	// We export at last height + 1, because that's the height at which
 	// CometBFT will start InitChain.
 	height := app.LastBlockHeight() + 1
-	if forZeroHeight {
-		height = 0
-		app.prepForZeroHeightGenesis(ctx, jailAllowedAddrs)
-	}
 
 	genState, err := app.ModuleManager.ExportGenesisForModules(ctx, app.appCodec, modulesToExport)
 	if err != nil {
@@ -38,12 +42,4 @@ func (app *App) ExportAppStateAndValidators(forZeroHeight bool, jailAllowedAddrs
 		Height:          height,
 		ConsensusParams: app.GetConsensusParams(ctx),
 	}, err
-}
-
-// prepForZeroHeightGenesis prepares for fresh start at zero height
-// NOTE zero height genesis is a temporary feature which will be deprecated
-//
-//	in favor of export at a block height
-func (app *App) prepForZeroHeightGenesis(ctx sdk.Context, jailAllowedAddrs []string) {
-
 }

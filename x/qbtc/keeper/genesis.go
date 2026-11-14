@@ -35,6 +35,16 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set referral stats %s: %w", stats.Address, err)
 		}
 	}
+	for _, item := range genState.StringParams {
+		if err := k.StringParams.Set(ctx, item.Key, item.Value); err != nil {
+			return fmt.Errorf("failed to set string param %s: %w", item.Key, err)
+		}
+	}
+	for i, hash := range genState.UtxoChunkHashes {
+		if err := k.UtxoChunkHashes.Set(ctx, uint64(i), hash); err != nil {
+			return fmt.Errorf("failed to set utxo chunk hash %d: %w", i, err)
+		}
+	}
 
 	// Initialize ZK verifying key from genesis
 	if len(genState.ZkVerifyingKey) > 0 {
@@ -74,6 +84,17 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 
 // ExportGenesis returns the module's exported genesis.
 func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) {
+	// Once the snapshot is loaded, every UTXO is exported below, so the
+	// exported genesis needs no chunks. Before that, part of the snapshot is
+	// only in the chunk files.
+	next, _, loaded, err := k.NextUtxoChunk(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read utxo snapshot progress: %w", err)
+	}
+	if !loaded {
+		return nil, fmt.Errorf("cannot export while the genesis UTXO snapshot is loading (chunk %d is next)", next)
+	}
+
 	genesis := types.DefaultGenesis()
 	if err := k.Utxoes.Walk(ctx, nil, func(key string, value types.UTXO) (stop bool, err error) {
 		genesis.Utxos = append(genesis.Utxos, &value)
@@ -100,6 +121,13 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 		return false, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to export referral stats: %w", err)
+	}
+
+	if err := k.StringParams.Walk(ctx, nil, func(key, value string) (stop bool, err error) {
+		genesis.StringParams = append(genesis.StringParams, types.StringParam{Key: key, Value: value})
+		return false, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to export string params: %w", err)
 	}
 
 	// Export ZK verifying key
