@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	se "github.com/cosmos/cosmos-sdk/types/errors"
@@ -54,6 +55,13 @@ func (itd InjectedTxDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate b
 		}
 	}
 
+	// The block's max_gas is for user transactions: PrepareProposal and
+	// ProcessProposal leave the inject tx out of it, and its size is bounded by
+	// types.MaxBtcBlocksPerMsg. The SDK's block gas meter is off by default; if
+	// it is turned on, baseapp charges the tx's gas to the block gas meter of the
+	// context returned here, so a meter of its own keeps a batch of Bitcoin
+	// blocks from using up the block.
+	//
 	// skip rest of antes
-	return ctx, nil
+	return ctx.WithBlockGasMeter(storetypes.NewInfiniteGasMeter()), nil
 }

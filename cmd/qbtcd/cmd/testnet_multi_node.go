@@ -14,6 +14,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/btcq-org/qbtc/app"
 	"github.com/btcq-org/qbtc/bitcoin"
 	cmtconfig "github.com/cometbft/cometbft/config"
 	cmtmldsa65 "github.com/cometbft/cometbft/crypto/mldsa65"
@@ -717,13 +718,24 @@ func collectGenFiles(
 
 // applyQbtcConsensusParams sets the consensus parameters every qbtc genesis
 // needs: ABCI vote extensions from the configured height, for attesting
-// Bitcoin blocks, and ML-DSA-65 as the only validator key type.
+// Bitcoin blocks, ML-DSA-65 as the only validator key type, and a finite
+// block gas limit.
 func applyQbtcConsensusParams(appGenesis *genutiltypes.AppGenesis, args initArgs) error {
-	if appGenesis.Consensus == nil || appGenesis.Consensus.Params == nil {
-		return fmt.Errorf("genesis has no consensus params")
+	if err := applyQbtcBlockGasLimit(appGenesis); err != nil {
+		return err
 	}
 	appGenesis.Consensus.Params.ABCI.VoteExtensionsEnableHeight = args.voteExtensionsEnableHeight
 	appGenesis.Consensus.Params.Validator.PubKeyTypes = []string{cmtmldsa65.KeyType}
+	return nil
+}
+
+// applyQbtcBlockGasLimit sets block.max_gas to app.DefaultBlockMaxGas.
+// CometBFT's default of -1 puts no limit on a block's gas.
+func applyQbtcBlockGasLimit(appGenesis *genutiltypes.AppGenesis) error {
+	if appGenesis.Consensus == nil || appGenesis.Consensus.Params == nil {
+		return fmt.Errorf("genesis has no consensus params")
+	}
+	appGenesis.Consensus.Params.Block.MaxGas = app.DefaultBlockMaxGas
 	return nil
 }
 

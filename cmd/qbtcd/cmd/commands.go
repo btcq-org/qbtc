@@ -26,7 +26,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	authcmd "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
+	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 
 	"github.com/btcq-org/qbtc/app"
 )
@@ -38,6 +40,7 @@ func initRootCmd(
 ) {
 	initCmd := genutilcli.InitCmd(basicManager, app.DefaultNodeHome)
 	setFlagDefault(initCmd, genutilcli.FlagConsensusKeyAlgo, cmtmldsa65.KeyType)
+	initCmd.PostRunE = setGenesisBlockGasLimit
 
 	rootCmd.AddCommand(
 		initCmd,
@@ -88,6 +91,20 @@ func keysCommands() *cobra.Command {
 		}
 	}
 	return cmd
+}
+
+// setGenesisBlockGasLimit runs after `qbtcd init` and sets block.max_gas in
+// the genesis file init wrote.
+func setGenesisBlockGasLimit(cmd *cobra.Command, _ []string) error {
+	genFile := server.GetServerContextFromCmd(cmd).Config.GenesisFile()
+	appGenesis, err := genutiltypes.AppGenesisFromFile(genFile)
+	if err != nil {
+		return err
+	}
+	if err := applyQbtcBlockGasLimit(appGenesis); err != nil {
+		return err
+	}
+	return genutil.ExportGenesisFile(appGenesis, genFile)
 }
 
 // setFlagDefault changes the default of an already defined flag.

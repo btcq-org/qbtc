@@ -16,6 +16,22 @@ type msgsTx struct{ msgs []sdk.Msg }
 func (t msgsTx) GetMsgs() []sdk.Msg                    { return t.msgs }
 func (t msgsTx) GetMsgsV2() ([]protov2.Message, error) { return nil, nil }
 
+func TestFreeClaimGasLimit(t *testing.T) {
+	require.Equal(t, types.FreeClaimBaseGas, types.FreeClaimGasLimit(1))
+	require.Equal(t, uint64(500_000), types.FreeClaimGasLimit(2))
+	require.Equal(t, uint64(2_900_000), types.FreeClaimGasLimit(types.MaxBatchClaimUTXOs))
+	require.Equal(t, types.FreeClaimMaxGas, types.FreeClaimGasLimit(types.MaxBatchClaimUTXOs))
+	// ValidateBasic rejects these; the limit stays in range anyway.
+	require.Equal(t, types.FreeClaimBaseGas, types.FreeClaimGasLimit(0))
+	require.Equal(t, types.FreeClaimMaxGas, types.FreeClaimGasLimit(types.MaxBatchClaimUTXOs+1))
+}
+
+func TestFreeClaimTxGasLimit(t *testing.T) {
+	claim := &types.MsgClaimWithProof{Utxos: make([]types.UTXORef, 3)}
+	require.Equal(t, uint64(550_000), types.FreeClaimTxGasLimit(msgsTx{msgs: []sdk.Msg{claim}}))
+	require.Equal(t, types.FreeClaimMaxGas, types.FreeClaimTxGasLimit(msgsTx{msgs: []sdk.Msg{claim, claim}}))
+}
+
 func TestIsClaimOnlyTx(t *testing.T) {
 	claim := &types.MsgClaimWithProof{}
 	require.True(t, types.IsClaimOnlyTx(msgsTx{msgs: []sdk.Msg{claim}}))

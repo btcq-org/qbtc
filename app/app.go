@@ -186,6 +186,7 @@ func New(
 
 	app.BtcReader = btcreader.NewReader(readerConfig, app.AppCodec(), logger)
 	defaultProposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
+	defaultProposalHandler.SetTxSelector(qbtcabi.NewTxSelector())
 	btcProposalHandler := qbtcabi.NewProposalHandler(
 		app.QbtcKeeper,
 		app.BtcReader,
