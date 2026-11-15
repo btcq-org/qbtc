@@ -35,6 +35,16 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 			return fmt.Errorf("failed to set referral stats %s: %w", stats.Address, err)
 		}
 	}
+	// InitChain does not run the module's ValidateGenesis, and the gov claim
+	// handler fails on a stored fund address it cannot parse.
+	for _, item := range genState.StringParams {
+		if err := types.ValidateStringParam(item.Key, item.Value); err != nil {
+			return err
+		}
+		if err := k.StringParams.Set(ctx, item.Key, item.Value); err != nil {
+			return fmt.Errorf("failed to set string param %s: %w", item.Key, err)
+		}
+	}
 	for i, hash := range genState.UtxoChunkHashes {
 		if err := k.UtxoChunkHashes.Set(ctx, uint64(i), hash); err != nil {
 			return fmt.Errorf("failed to set utxo chunk hash %d: %w", i, err)
@@ -116,6 +126,13 @@ func (k Keeper) ExportGenesis(ctx context.Context) (*types.GenesisState, error) 
 		return false, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to export referral stats: %w", err)
+	}
+
+	if err := k.StringParams.Walk(ctx, nil, func(key, value string) (stop bool, err error) {
+		genesis.StringParams = append(genesis.StringParams, types.StringParam{Key: key, Value: value})
+		return false, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to export string params: %w", err)
 	}
 
 	// Export ZK verifying key

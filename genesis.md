@@ -49,6 +49,12 @@ jq --arg start "$START" \
     | .app_state.qbtc.btc_anchor_header = $header
     | .app_state.qbtc.btc_anchor_period_start_time = $period' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
 
+# governance fund addresses (string params), kept by export and import; an
+# empty value leaves the address unset
+jq --arg dev "<dev fund address>" --arg mkt "<marketing fund address>" \
+   '.app_state.qbtc.string_params = [{"key":"DevFundAddress","value":$dev},{"key":"MarketingFundAddress","value":$mkt}]' \
+   "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
+
 # claims are off by default, with a proof (ClaimWithProofDisabled = 1) and by
 # memo (MemoClaimDisabled = 1); governance enables them with MsgUpdateParam
 # once the chain is ready
@@ -76,6 +82,8 @@ disk once the snapshot has loaded and that is committed: wait for the
 commit a later block. The line is logged while its block executes; a node that
 stops before that block commits executes it again and needs the chunk file. The
 node never deletes them itself.
+
+`qbtcd export --for-zero-height` is not supported; export at the last height.
 
 ## setup firewall
 ```bash

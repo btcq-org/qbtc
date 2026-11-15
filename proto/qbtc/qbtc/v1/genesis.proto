@@ -44,4 +44,13 @@ message GenesisState {
   // chunk per block, checking it against its hash first. Empty when the chain
   // starts without a UTXO snapshot.
   repeated bytes utxo_chunk_hashes = 10;
+  // Governance string parameters, such as DevFundAddress and
+  // MarketingFundAddress.
+  repeated StringParam string_params = 11 [ (gogoproto.nullable) = false ];
+}
+
+// StringParam is a string-valued governance parameter.
+message StringParam {
+  string key = 1;
+  string value = 2;
 }

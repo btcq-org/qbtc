@@ -39,6 +39,9 @@ func (gs GenesisState) Validate() error {
 		}
 	}
 
+	if err := gs.validateStringParams(); err != nil {
+		return err
+	}
 	for i, hash := range gs.UtxoChunkHashes {
 		if len(hash) != sha256.Size {
 			return fmt.Errorf("utxo_chunk_hashes[%d] is %d bytes, want %d", i, len(hash), sha256.Size)
@@ -123,6 +126,22 @@ func (gs GenesisState) validateBtcAnchor() error {
 	}
 	if gs.BtcAnchorPeriodStartTime == 0 || int64(gs.BtcAnchorPeriodStartTime) > header.Timestamp.Unix() {
 		return fmt.Errorf("btc_anchor_period_start_time must be set and not after the anchor's timestamp")
+	}
+	return nil
+}
+
+// validateStringParams checks that each string param is a known key, set
+// once, with an empty value or a valid address.
+func (gs GenesisState) validateStringParams() error {
+	seen := make(map[string]bool, len(gs.StringParams))
+	for _, p := range gs.StringParams {
+		if err := ValidateStringParam(p.Key, p.Value); err != nil {
+			return err
+		}
+		if seen[p.Key] {
+			return fmt.Errorf("string param %q is set twice", p.Key)
+		}
+		seen[p.Key] = true
 	}
 	return nil
 }
