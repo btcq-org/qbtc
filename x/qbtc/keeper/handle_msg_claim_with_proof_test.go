@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"cosmossdk.io/math"
@@ -47,13 +48,28 @@ type claimTestFixture struct {
 	btcPrivKey    *btcec.PrivateKey
 }
 
+var (
+	zkSetupOnce   sync.Once
+	zkSetupResult *zk.SetupResult
+	zkSetupErr    error
+)
+
+// sharedZKSetup runs the PLONK setup once for the package and returns the same
+// result to every caller: the setup is deterministic and takes minutes.
+func sharedZKSetup(t *testing.T) *zk.SetupResult {
+	t.Helper()
+	zkSetupOnce.Do(func() {
+		zkSetupResult, zkSetupErr = zk.SetupWithOptions(zk.TestSetupOptions())
+	})
+	require.NoError(t, zkSetupErr, "ZK circuit setup should succeed")
+	return zkSetupResult
+}
+
 // setupClaimTest initializes the test environment with ZK verifier
 func setupClaimTest(t *testing.T) *claimTestFixture {
 	t.Helper()
 
-	// Setup ZK circuit (TSS-compatible)
-	setup, err := zk.SetupWithOptions(zk.TestSetupOptions())
-	require.NoError(t, err, "ZK circuit setup should succeed")
+	setup := sharedZKSetup(t)
 
 	vkBytes, err := zk.SerializeVerifyingKey(setup.VerifyingKey)
 	require.NoError(t, err, "VK serialization should succeed")

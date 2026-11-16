@@ -63,11 +63,15 @@ bench:
 	@echo Running unit tests with benchmarking...
 	@go test -mod=readonly -v -timeout 30m -bench=. ./...
 
+# TEST_PKGS narrows test-all to some packages; CI runs the ZK-heavy ones on
+# runners of their own.
+TEST_PKGS ?= ./...
+
 test-all:
 	@echo Running unit tests...
 	@go mod download github.com/vultisig/go-wrappers
 	@export LD_LIBRARY_PATH=$$(go list -m -f '{{.Dir}}' github.com/vultisig/go-wrappers)/includes/linux:$$LD_LIBRARY_PATH && \
-	go test -mod=readonly -tags=testing -v -timeout 30m ./...
+	go test -mod=readonly -tags=testing -v -timeout 30m $(TEST_PKGS)
 
 test: govet test-unit
 

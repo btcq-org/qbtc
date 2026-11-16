@@ -54,9 +54,45 @@ jobs:
         with:
           name: build-artifact
           path: build/qbtcd
+  # PRs run the short tests. On main, the tests that generate PLONK proofs
+  # (several GB of memory and minutes of CPU each) run one package per
+  # runner: together on one runner they ran out of memory and time.
   test:
     runs-on: ubuntu-latest
     needs: build
+    if: github.ref != 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: go.sum
+      - name: Test
+        run: make test
+
+  test-all:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: keeper
+            pkgs: ./x/qbtc/keeper
+          - name: zk
+            pkgs: ./x/qbtc/zk
+          - name: dkls-tss
+            pkgs: ./cmd/dkls-tss
+          - name: e2e
+            pkgs: ./tests/e2e/qbtc
+          - name: rest
+            pkgs: rest
+    name: test-all (${{ matrix.name }})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,8 +105,8 @@ jobs:
           cache-dependency-path: go.sum
       - name: Test
         run: |
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            make test-all
-          else
-            make test
+          pkgs='${{ matrix.pkgs }}'
+          if [ "$pkgs" = rest ]; then
+            pkgs=$(go list ./... | grep -vE '/x/qbtc/keeper$|/x/qbtc/zk$|/cmd/dkls-tss$|/tests/e2e/qbtc$' | tr '\n' ' ')
           fi
+          make test-all TEST_PKGS="$pkgs"
