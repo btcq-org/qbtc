@@ -104,8 +104,7 @@ func TestDKLSTSS_ZKProofIntegration(t *testing.T) {
 	// Step 1: PLONK Setup
 	// ========================================
 	t.Log("Step 1: Running PLONK setup...")
-	setup, err := zk.SetupWithOptions(zk.TestSetupOptions())
-	require.NoError(t, err, "PLONK setup should succeed")
+	setup := sharedZKSetup(t)
 
 	// Register verifier
 	vkBytes, err := zk.SerializeVerifyingKey(setup.VerifyingKey)
@@ -232,8 +231,7 @@ func TestDKLSTSS_2of3_ZKProof(t *testing.T) {
 
 	// PLONK Setup
 	t.Log("Setting up PLONK...")
-	setup, err := zk.SetupWithOptions(zk.TestSetupOptions())
-	require.NoError(t, err)
+	setup := sharedZKSetup(t)
 
 	vkBytes, err := zk.SerializeVerifyingKey(setup.VerifyingKey)
 	require.NoError(t, err)

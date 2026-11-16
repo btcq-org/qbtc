@@ -28,8 +28,7 @@ func TestFullClaimFlow_Integration(t *testing.T) {
 
 	// Step 1: Setup (simulates genesis initialization)
 	t.Log("Step 1: Running PLONK setup...")
-	setup, err := SetupWithOptions(TestSetupOptions())
-	require.NoError(t, err, "setup should succeed")
+	setup := sharedTestSetup(t)
 
 	vkBytes, err := SerializeVerifyingKey(setup.VerifyingKey)
 	require.NoError(t, err, "VK serialization should succeed")

@@ -23,9 +23,7 @@ type SecurityAuditTestSuite struct {
 
 func (s *SecurityAuditTestSuite) SetupSuite() {
 	ClearVerifierForTesting()
-	setup, err := SetupWithOptions(TestSetupOptions())
-	s.Require().NoError(err)
-	s.setup = setup
+	s.setup = sharedTestSetup(s.T())
 }
 
 // =============================================================================

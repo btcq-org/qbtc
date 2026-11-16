@@ -22,9 +22,7 @@ type CircuitSignatureTestSuite struct {
 
 func (s *CircuitSignatureTestSuite) SetupSuite() {
 	ClearVerifierForTesting()
-	setup, err := SetupWithOptions(TestSetupOptions())
-	s.Require().NoError(err)
-	s.setup = setup
+	s.setup = sharedTestSetup(s.T())
 }
 
 // TestSignatureCircuit_EndToEnd runs the full wallet flow: the user signs the
