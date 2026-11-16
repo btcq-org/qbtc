@@ -40,6 +40,7 @@ func TestClaimProofDecorator(t *testing.T) {
 
 	proof, pubKeyHash := f.generateProof(t)
 	valid := &types.MsgClaimWithProof{
+		BitcoinAddress:   f.btcAddress,
 		Claimer:          f.claimerAddr,
 		Broadcaster:      f.claimerAddr,
 		Utxos:            []types.UTXORef{{Txid: txid, Vout: 0}},
@@ -128,6 +129,54 @@ func TestClaimProofDecorator(t *testing.T) {
 		require.True(t, called)
 	})
 
+	// Another holder's UTXO. A claim is checked against the address it names,
+	// whatever it lists and whatever happens to the UTXOs it lists.
+	other := types.UTXO{
+		Txid:           "cccc000000000000000000000000000000000000000000000000000000000002",
+		Amount:         100_000_000,
+		EntitledAmount: 70_000_000,
+		ScriptPubKey:   &types.ScriptPubKeyResult{Address: bitcoinAddressFromHash([20]byte{0xbb})},
+	}
+	require.NoError(t, f.keeper.Utxoes.Set(f.ctx, other.GetKey(), other))
+	otherRef := types.UTXORef{Txid: other.Txid, Vout: 0}
+
+	t.Run("a claim that lists another holder's UTXO stays at its own address", func(t *testing.T) {
+		listsOther := *valid
+		listsOther.Utxos = []types.UTXORef{{Txid: txid, Vout: 0}, otherRef}
+		_, _, err := ante(checkCtx(), &listsOther)
+		require.NoError(t, err)
+
+		// A block claims its own UTXO: ReCheckTx drops it, and the other
+		// holder's address is not recorded.
+		ctx, _ := f.ctx.CacheContext()
+		claimed := utxo
+		claimed.EntitledAmount = 0
+		require.NoError(t, f.keeper.Utxoes.Set(ctx, claimed.GetKey(), claimed))
+		ctx = ctx.WithIsReCheckTx(true)
+		_, called, err := ante(ctx, &listsOther)
+		require.ErrorContains(t, err, "no valid claimable UTXOs found at Bitcoin address "+f.btcAddress)
+		require.False(t, called)
+		pending, err := f.keeper.PendingClaimAddresses.Has(ctx, other.ScriptPubKey.Address)
+		require.NoError(t, err)
+		require.False(t, pending)
+		// The proposer leaves it out too.
+		_, err = f.keeper.ClaimBitcoinAddress(ctx, &listsOther)
+		require.ErrorContains(t, err, "no valid claimable UTXOs found")
+	})
+
+	t.Run("a claim that names another holder's address fails its proof", func(t *testing.T) {
+		namesOther := *valid
+		namesOther.BitcoinAddress = other.ScriptPubKey.Address
+		namesOther.Utxos = []types.UTXORef{{Txid: txid, Vout: 0}, otherRef}
+		ctx := checkCtx()
+		_, called, err := ante(ctx, &namesOther)
+		require.ErrorContains(t, err, "proof verification failed")
+		require.False(t, called)
+		pending, err := f.keeper.PendingClaimAddresses.Has(ctx, other.ScriptPubKey.Address)
+		require.NoError(t, err)
+		require.False(t, pending)
+	})
+
 	t.Run("the mempool takes one claim per address", func(t *testing.T) {
 		ctx := checkCtx()
 		_, _, err := ante(ctx, valid)
@@ -138,7 +187,7 @@ func TestClaimProofDecorator(t *testing.T) {
 
 		// A copy is turned away.
 		_, called, err := ante(ctx, valid)
-		require.ErrorContains(t, err, "already in the mempool")
+		require.ErrorContains(t, err, "already in the mempool; send this claim again after the next block")
 		require.False(t, called)
 		// Before its proof is verified: the bogus proof would fail verification.
 		_, _, err = ante(ctx, &bogus)

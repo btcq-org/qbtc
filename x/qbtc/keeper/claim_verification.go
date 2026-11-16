@@ -19,8 +19,8 @@ import (
 // 50 µs.
 const ClaimProofVerifyGas uint64 = 60_000
 
-// resolvedClaim is what a MsgClaimWithProof is checked against: the address
-// of its first claimable UTXO and the destination the proof must name.
+// resolvedClaim is what a MsgClaimWithProof is checked against: the Bitcoin
+// address it names and the destination the proof must name.
 type resolvedClaim struct {
 	btcAddress      string
 	recipient       sdk.AccAddress
@@ -31,10 +31,10 @@ type resolvedClaim struct {
 }
 
 // resolveClaim runs the state checks of a claim, without the proof: claims
-// are enabled, the verifier is loaded, and one of the referenced UTXOs exists,
-// is unclaimed, has an address and has enough confirmations. The first such
-// UTXO's address is the one the proof must cover. The ante handler and the
-// message handler both use it, so they check the same thing.
+// are enabled, the verifier is loaded, and one of the referenced UTXOs is at
+// the claim's Bitcoin address, unclaimed and has enough confirmations. The
+// proof must cover that address. The ante handler and the message handler
+// both use it, so they check the same thing.
 func (k Keeper) resolveClaim(ctx sdk.Context, msg *types.MsgClaimWithProof) (*resolvedClaim, error) {
 	if k.GetConfig(ctx, constants.ClaimWithProofDisabled) > 0 {
 		return nil, sdkerror.ErrInvalidRequest.Wrap("ClaimWithProof feature is disabled")
@@ -103,43 +103,43 @@ func (k Keeper) resolveClaim(ctx sdk.Context, msg *types.MsgClaimWithProof) (*re
 	return claim, nil
 }
 
-// ClaimBitcoinAddress returns the Bitcoin address a claim's proof must cover:
-// the address of the first referenced UTXO that exists, is unclaimed, has an
-// address and has enough confirmations. It fails if there is none.
+// ClaimBitcoinAddress returns the Bitcoin address a claim names, after
+// checking that the claim can still succeed: one of its UTXOs is at that
+// address, unclaimed and has enough confirmations. The address comes from the
+// message, not from the UTXOs, so it is the same every time a claim is
+// checked, and so is the validity of its proof.
 func (k Keeper) ClaimBitcoinAddress(ctx sdk.Context, msg *types.MsgClaimWithProof) (string, error) {
 	minConfirmations := k.GetConfig(ctx, constants.MinUtxoConfirmationBlocks)
 	lastProcessedBlock, err := k.GetLastProcessedBlock(ctx)
 	if err != nil {
 		return "", sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
 	}
+	if _, err := zk.BitcoinAddressToHash160(msg.BitcoinAddress); err != nil {
+		return "", sdkerror.ErrInvalidAddress.Wrapf("invalid bitcoin address: %v", err)
+	}
 
-	for i, utxoRef := range msg.Utxos {
+	for _, utxoRef := range msg.Utxos {
 		utxo, err := k.Utxoes.Get(ctx, getUTXOKey(utxoRef.Txid, utxoRef.Vout))
 		if err != nil {
 			continue // Skip non-existent UTXOs
 		}
-		if utxo.EntitledAmount == 0 {
-			continue // Skip already claimed UTXOs
+		if claimableAt(utxo, msg.BitcoinAddress, minConfirmations, lastProcessedBlock) {
+			return msg.BitcoinAddress, nil
 		}
-		if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address == "" {
-			continue // Skip UTXOs without address
-		}
-		if minConfirmations > 0 && utxo.BlockHeight > 0 && lastProcessedBlock < utxo.BlockHeight+uint64(minConfirmations) {
-			continue // Skip UTXOs that have not reached the minimum confirmation threshold
-		}
-		if _, err := zk.BitcoinAddressToHash160(utxo.ScriptPubKey.Address); err != nil {
-			continue // Skip UTXOs with invalid addresses
-		}
-		address := utxo.ScriptPubKey.Address
-		ctx.Logger().Debug("using UTXO for proof verification",
-			"index", i,
-			"txid", utxoRef.Txid,
-			"vout", utxoRef.Vout,
-			"btc_address", address,
-		)
-		return address, nil
 	}
-	return "", sdkerror.ErrInvalidRequest.Wrap("no valid claimable UTXOs found")
+	return "", sdkerror.ErrInvalidRequest.Wrapf("no valid claimable UTXOs found at Bitcoin address %s", msg.BitcoinAddress)
+}
+
+// claimableAt reports whether utxo is at address, unclaimed and has reached
+// the minimum confirmation threshold.
+func claimableAt(utxo types.UTXO, address string, minConfirmations int64, lastProcessedBlock uint64) bool {
+	if utxo.EntitledAmount == 0 {
+		return false
+	}
+	if utxo.ScriptPubKey == nil || utxo.ScriptPubKey.Address != address {
+		return false
+	}
+	return minConfirmations <= 0 || utxo.BlockHeight == 0 || lastProcessedBlock >= utxo.BlockHeight+uint64(minConfirmations)
 }
 
 // verifyClaimProof verifies the claim's PLONK proof.
@@ -199,7 +199,9 @@ func (c *resolvedClaim) digest() [sha256.Size]byte {
 //     transactions that never went through an honest mempool. The message
 //     handler then skips its own verification.
 //   - ReCheckTx: the state checks only, so a claim whose UTXOs an earlier block
-//     claimed leaves the mempool. The proof's validity cannot change.
+//     claimed leaves the mempool. The proof's validity cannot change: every
+//     input of the verification, the Bitcoin address included, is in the
+//     transaction.
 //
 // The mempool holds one free claim per Bitcoin address, the address its proof
 // covers. Copies of one valid claim sent under different broadcaster keys
@@ -212,6 +214,12 @@ func (c *resolvedClaim) digest() [sha256.Size]byte {
 // failure discards it, and every commit clears it. ReCheckTx then rebuilds it
 // in mempool order, keeping the first claim of each address and evicting the
 // rest.
+//
+// The proof does not bind which UTXOs a claim lists. Anyone who sees a claim
+// can resend it, under another key, with only some of its UTXOs. The coins
+// still go to the destination the proof names, but if the copy reaches a node
+// first, that node rejects the full claim until the copy is in a block, and
+// the owner has to send it again after that block for the remaining UTXOs.
 //
 // A claim nested in authz MsgExec does not reach this decorator; the message
 // handler verifies it and charges ClaimProofVerifyGas.
@@ -246,7 +254,7 @@ func (d ClaimProofDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate boo
 			return ctx, err
 		}
 		if pending {
-			return ctx, sdkerror.ErrInvalidRequest.Wrapf("a claim for Bitcoin address %s is already in the mempool", claim.btcAddress)
+			return ctx, sdkerror.ErrInvalidRequest.Wrapf("a claim for Bitcoin address %s is already in the mempool; send this claim again after the next block", claim.btcAddress)
 		}
 	}
 	if !ctx.IsReCheckTx() {

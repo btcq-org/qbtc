@@ -26,24 +26,31 @@ func claimTxs(n int) []sdk.Tx {
 	return txs
 }
 
-// claimFor is a free claim of the given UTXOs.
-func claimFor(refs ...types.UTXORef) sdk.Tx {
-	return gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgClaimWithProof{Utxos: refs}}}}
+// claimFor is a free claim of the given UTXOs for holder's address.
+func claimFor(holder byte, refs ...types.UTXORef) sdk.Tx {
+	return gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgClaimWithProof{BitcoinAddress: holderAddress(holder), Utxos: refs}}}}
+}
+
+// holderAddress is the P2WPKH address of holder.
+func holderAddress(holder byte) string {
+	hash := make([]byte, 20)
+	hash[0] = holder
+	addr, err := btcutil.NewAddressWitnessPubKeyHash(hash, &chaincfg.MainNetParams)
+	if err != nil {
+		panic(err)
+	}
+	return addr.EncodeAddress()
 }
 
 // seedUTXO stores an unclaimed UTXO, number i, at the P2WPKH address of
 // holder, and returns a reference to it.
 func seedUTXO(t *testing.T, ctx sdk.Context, k *keeper.Keeper, i int, holder byte) types.UTXORef {
 	t.Helper()
-	hash := make([]byte, 20)
-	hash[0] = holder
-	addr, err := btcutil.NewAddressWitnessPubKeyHash(hash, &chaincfg.MainNetParams)
-	require.NoError(t, err)
 	utxo := types.UTXO{
 		Txid:           fmt.Sprintf("%064x", i),
 		Amount:         1_000,
 		EntitledAmount: 1_000,
-		ScriptPubKey:   &types.ScriptPubKeyResult{Address: addr.EncodeAddress()},
+		ScriptPubKey:   &types.ScriptPubKeyResult{Address: holderAddress(holder)},
 	}
 	require.NoError(t, k.Utxoes.Set(ctx, utxo.GetKey(), utxo))
 	return types.UTXORef{Txid: utxo.Txid}
@@ -150,7 +157,7 @@ func TestPrepareProposalBlockLimits(t *testing.T) {
 		// each claim of its own holder's UTXO
 		claims := make([]sdk.Tx, maxClaims+5)
 		for i := range claims {
-			claims[i] = claimFor(seedUTXO(t, ctx, f.keeper, 1000+i, byte(i)))
+			claims[i] = claimFor(byte(i), seedUTXO(t, ctx, f.keeper, 1000+i, byte(i)))
 		}
 		kept := prepare(ctx, claims)
 		require.Len(t, kept, maxClaims)
@@ -193,19 +200,19 @@ func TestPrepareProposalOneClaimPerAddress(t *testing.T) {
 	send := gasTx{plainTx: plainTx{msgs: []sdk.Msg{&types.MsgEmpty{}}}}
 
 	t.Run("copies of one claim", func(t *testing.T) {
-		require.Equal(t, [][]byte{{0}, {2}, {3}}, prepare(ctx, claimFor(a1), claimFor(a1), claimFor(b1), send))
+		require.Equal(t, [][]byte{{0}, {2}, {3}}, prepare(ctx, claimFor('a', a1), claimFor('a', a1), claimFor('b', b1), send))
 		// Proposals are not checked for this.
 		require.Equal(t, abci.ResponseProcessProposal_ACCEPT, f.process(ctx, f.txs...))
 	})
 
 	t.Run("two claims of one address", func(t *testing.T) {
 		// The second waits for a later block.
-		require.Equal(t, [][]byte{{0}}, prepare(ctx, claimFor(a1), claimFor(a2)))
+		require.Equal(t, [][]byte{{0}}, prepare(ctx, claimFor('a', a1), claimFor('a', a2)))
 	})
 
 	t.Run("a claim that lists another holder's UTXO after its own", func(t *testing.T) {
-		// It covers a's address only, so b's claim stays.
-		require.Equal(t, [][]byte{{0}, {1}}, prepare(ctx, claimFor(a1, b1), claimFor(b1)))
+		// It names a's address, so b's claim stays.
+		require.Equal(t, [][]byte{{0}, {1}}, prepare(ctx, claimFor('a', a1, b1), claimFor('b', b1)))
 	})
 
 	t.Run("a claim of claimed UTXOs", func(t *testing.T) {
@@ -214,6 +221,9 @@ func TestPrepareProposalOneClaimPerAddress(t *testing.T) {
 		require.NoError(t, err)
 		utxo.EntitledAmount = 0
 		require.NoError(t, f.keeper.Utxoes.Set(ctx, utxo.GetKey(), utxo))
-		require.Equal(t, [][]byte{{1}}, prepare(ctx, claimFor(a1), claimFor(b1)))
+		require.Equal(t, [][]byte{{1}}, prepare(ctx, claimFor('a', a1), claimFor('b', b1)))
+		// A claim keeps the address it names: with its own UTXO claimed it
+		// is left out, and does not take the place of the other holder's.
+		require.Equal(t, [][]byte{{1}}, prepare(ctx, claimFor('a', a1, b1), claimFor('b', b1)))
 	})
 }

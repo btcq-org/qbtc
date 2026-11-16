@@ -288,7 +288,7 @@ qbtc-claim-v1|<chain-id>|<bitcoin address>|<destination qbtc address>[|<referrer
 | --------------- | -------------------------------------------- | ----------------------------------------------- |
 | Version         | `qbtc-claim-v1`                              | `ClaimMessageVersion`                           |
 | Chain ID        | `qbtc-1`                                     | `sdk.Context.ChainID()`                         |
-| Bitcoin address | `bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc` | `UTXO.ScriptPubKey.Address`, byte for byte      |
+| Bitcoin address | `bc1q4wr4k0uwzryx9jyss3tsd60gaulpxaggzm3mnc` | `MsgClaimWithProof.bitcoin_address`, which must equal `UTXO.ScriptPubKey.Address` byte for byte |
 | Destination     | `qbtc1...`                                   | `MsgClaimWithProof.receiver`, else `.claimer`   |
 | Referrer        | `qbtc1...`, optional                         | `MsgClaimWithProof.referrer`                    |
 
@@ -461,7 +461,7 @@ The verifier is a thread-safe singleton initialized once from genesis. After ini
 
 The handler:
 
-1. Finds the first valid UTXO to determine the proven Bitcoin address string
+1. Takes the Bitcoin address from the message (`bitcoin_address`) and checks that one listed UTXO is at that address, unclaimed and has enough confirmations
 2. Resolves the destination (receiver when set, otherwise claimer)
 3. Calls the global verifier with the chain ID, the address, the destination, the referrer and the supplied `pub_key_hash_sha256`
 4. On success, claims the listed UTXOs whose stored address equals that string by minting tokens, zeroing EntitledAmount and recording the referrer on each UTXO. UTXOs of the same key at its other address type are skipped, because the signature does not name them
@@ -561,7 +561,7 @@ All three are computationally infeasible.
 A free claim transaction (only `MsgClaimWithProof`, no fee) is checked by `ClaimProofDecorator` in the ante handler, after its signature:
 
 - **CheckTx, simulation and FinalizeBlock:** claims are enabled, one referenced UTXO exists, is unclaimed, has an address and has `MinUtxoConfirmationBlocks` confirmations, and the PLONK proof verifies (about 3 ms). A claim that fails never enters the mempool, and none of its ante writes, such as the sequence increment, are kept. The signer (the broadcaster) must already have an account; the claimed coins go to the claimer or receiver, whose account the bank send creates. FinalizeBlock verifies again because a proposer can include transactions that never passed an honest mempool; the message handler then skips its own verification.
-- **ReCheckTx:** the state checks only, so a claim whose UTXOs an earlier block claimed leaves the mempool. A proof's validity cannot change, and re-verifying a full mempool after every block would take seconds.
+- **ReCheckTx:** the state checks only, so a claim whose UTXOs an earlier block claimed leaves the mempool. A proof's validity cannot change, and re-verifying a full mempool after every block would take seconds. It cannot change because every input of the verification is in the transaction: the chain ID, the Bitcoin address (`bitcoin_address`), the destination, the referrer and `pub_key_hash_sha256`. The address is not derived from the listed UTXOs, so a block that claims, spends or adds a UTXO cannot move a claim to another holder's address.
 
 A claim nested in authz `MsgExec` is not a free claim transaction: the message handler verifies it and charges `ClaimProofVerifyGas` (60,000) for it.
 
@@ -569,7 +569,9 @@ A free claim runs with a gas limit computed from the claim, whatever gas it decl
 
 `qbtcd init` and `qbtcd multi-node` write `block.max_gas = 100,000,000` to genesis. The SDK's transaction selection in `PrepareProposal` counts a free claim at that computed gas too, not its declared gas: a claim declaring the whole `max_gas` would otherwise leave every other transaction out of the block. A batch of injected Bitcoin blocks can use more gas than `max_gas`, so it never charges the block's gas: the SDK's block gas meter is off by default, and if it is turned on the inject transaction runs on a meter of its own.
 
-`MaxClaimsPerBlock` (default 200, a governance parameter) caps `MsgClaimWithProof` messages per block, including those nested in `MsgExec`, so one block costs at most about 0.6 s of verification. `PrepareProposal` leaves out claims past the cap (they stay in the mempool), and `ProcessProposal` rejects a proposal past it or past `max_gas`; with qbtc's no-op app mempool the SDK's own `ProcessProposal` checks neither. Copies of one valid claim sent under different broadcaster keys would all pass the checks above, but only the first can succeed, and the rest would fill the claim cap. So the mempool holds one free claim per Bitcoin address, the address its proof covers: CheckTx and ReCheckTx look the address up in the module's transient store before verifying anything, so a copy costs a state read rather than a verification, and record it once the claim passes. Only a claim with a valid proof is recorded, so no one can hold another holder's address. The record lives in the mempool's copy of the state, which every commit replaces; ReCheckTx rebuilds it in mempool order, keeping the first claim of each address. Block execution and simulation ignore it. `PrepareProposal` applies the same rule and also leaves out a claim whose UTXOs were claimed, which covers nodes that turn ReCheckTx off.
+`MaxClaimsPerBlock` (default 200, a governance parameter) caps `MsgClaimWithProof` messages per block, including those nested in `MsgExec`, so one block costs at most about 0.6 s of verification. `PrepareProposal` leaves out claims past the cap (they stay in the mempool), and `ProcessProposal` rejects a proposal past it or past `max_gas`; with qbtc's no-op app mempool the SDK's own `ProcessProposal` checks neither. Copies of one valid claim sent under different broadcaster keys would all pass the checks above, but only the first can succeed, and the rest would fill the claim cap. So the mempool holds one free claim per Bitcoin address, the address the claim names and its proof covers: CheckTx and ReCheckTx look the address up in the module's transient store before verifying anything, so a copy costs a state read rather than a verification, and record it once the claim passes. Only a claim with a valid proof is recorded, so no one can hold another holder's address. The record lives in the mempool's copy of the state, which every commit replaces; ReCheckTx rebuilds it in mempool order, keeping the first claim of each address. Block execution and simulation ignore it. `PrepareProposal` applies the same rule and also leaves out a claim whose UTXOs were claimed, which covers nodes that turn ReCheckTx off.
+
+The proof binds the address, the destination and the referrer, but not which UTXOs a claim lists. Anyone who sees a claim can resend it, under another key, with only some of its UTXOs. The coins still go where the proof says, so nothing can be stolen, but a node that receives the copy first rejects the full claim ("a claim for Bitcoin address … is already in the mempool") until the copy is in a block. The owner then sends the claim again after that block for the remaining UTXOs. A wallet or proof service that gets this error should resend after the next block.
 
 CheckTx shares one ABCI lock with block execution, so a flood of claims at a node slows that node. Validators should accept transactions only through sentry or RPC nodes.
 

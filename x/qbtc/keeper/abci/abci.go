@@ -1,6 +1,7 @@
 package abci
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/btcq-org/qbtc/constants"
@@ -10,6 +11,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 type ProposalHandler struct {
@@ -260,7 +262,8 @@ func (l *blockLimits) add(tx sdk.Tx) error {
 //
 // It also keeps at most one free claim per Bitcoin address, the address the
 // claim's proof covers, and leaves out a free claim that can no longer
-// succeed because its UTXOs were claimed. keeper.ClaimProofDecorator already
+// succeed because its UTXOs were claimed. The address is the one the claim
+// names, which CheckTx verified its proof against. keeper.ClaimProofDecorator already
 // keeps one claim per address in the mempool, but its record is cleared at
 // every commit and rebuilt by ReCheckTx, which a node can turn off
 // (mempool.recheck in config.toml). Copies of one valid claim, sent under
@@ -279,7 +282,13 @@ func (h *ProposalHandler) withinBlockLimits(ctx sdk.Context, txs [][]byte) [][]b
 		}
 		address, err := h.freeClaimAddress(ctx, tx)
 		if err != nil {
-			ctx.Logger().Debug("leaving free claim out of the proposal", "reason", err)
+			// A claim that can no longer succeed is expected; anything else,
+			// such as a store error, is not.
+			if errors.Is(err, sdkerrors.ErrInvalidRequest) || errors.Is(err, sdkerrors.ErrInvalidAddress) {
+				ctx.Logger().Debug("leaving free claim out of the proposal", "reason", err)
+			} else {
+				ctx.Logger().Warn("leaving free claim out of the proposal", "reason", err)
+			}
 			continue
 		}
 		if address != "" && claimedAddresses[address] {
@@ -298,8 +307,8 @@ func (h *ProposalHandler) withinBlockLimits(ctx sdk.Context, txs [][]byte) [][]b
 	return kept
 }
 
-// freeClaimAddress returns the Bitcoin address a free claim transaction's
-// proof covers, or "" for any other transaction.
+// freeClaimAddress returns the Bitcoin address a free claim transaction
+// names, if the claim can still succeed, or "" for any other transaction.
 func (h *ProposalHandler) freeClaimAddress(ctx sdk.Context, tx sdk.Tx) (string, error) {
 	if !types.IsClaimOnlyTx(tx) {
 		return "", nil

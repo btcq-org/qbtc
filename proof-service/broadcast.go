@@ -133,6 +133,7 @@ func (b *Broadcaster) BroadcastClaim(ctx context.Context, resp *ProveResponse) (
 	// Build the message
 	msg := &qbtctypes.MsgClaimWithProof{
 		Claimer:          resp.ClaimerAddress,
+		BitcoinAddress:   resp.BitcoinAddress,
 		Broadcaster:      key.fromAddr,
 		Utxos:            resp.UTXOs,
 		Proof:            resp.Proof,

@@ -102,6 +102,7 @@ func (s *E2ETestSuite) buildReferredClaimMsg(claimer, referrer string, utxos []t
 	s.Require().NoError(err)
 
 	return &types.MsgClaimWithProof{
+		BitcoinAddress:   s.btcAddress,
 		Claimer:          claimer,
 		Broadcaster:      claimer,
 		Referrer:         referrer,

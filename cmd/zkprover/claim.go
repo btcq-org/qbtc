@@ -133,6 +133,7 @@ func tssScalar(name string, b []byte) (*big.Int, *btcec.ModNScalar, error) {
 func buildClaimMsg(target claimTarget, proof []byte, pubKeyHashSHA256 [32]byte) *types.MsgClaimWithProof {
 	return &types.MsgClaimWithProof{
 		Claimer:          target.claimer,
+		BitcoinAddress:   target.bitcoinAddress,
 		Receiver:         target.receiver,
 		Referrer:         target.referrer,
 		Utxos:            target.utxos,

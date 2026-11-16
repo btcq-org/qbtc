@@ -42,6 +42,7 @@ func TestClaimMsgJSON_RoundTripsThroughChainCodec(t *testing.T) {
 	var got types.MsgClaimWithProof
 	require.NoError(t, cdc.UnmarshalJSON(out, &got))
 	require.Equal(t, *want, got)
+	require.Equal(t, target.bitcoinAddress, got.BitcoinAddress)
 	require.Equal(t, hex.EncodeToString(proof), got.Proof)
 	require.Empty(t, got.Broadcaster, "left for the CLI to fill from --from")
 }

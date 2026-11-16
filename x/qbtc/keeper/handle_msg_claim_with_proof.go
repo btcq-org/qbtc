@@ -12,7 +12,7 @@ import (
 
 // ClaimWithProof handles the MsgClaimWithProof message.
 // It looks up all specified UTXOs, verifies the ZK proof against the first UTXO's address,
-// and releases only the UTXOs that match the proven address.
+// and releases only the UTXOs at the address the claim names.
 // UTXOs with non-matching addresses are skipped (not failed) for better UX.
 func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithProof) (*types.MsgClaimWithProofResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
@@ -42,7 +42,7 @@ func (s *msgServer) ClaimWithProof(ctx context.Context, msg *types.MsgClaimWithP
 		return nil, sdkerror.ErrUnknownRequest.Wrapf("failed to get last processed block: %v", err)
 	}
 
-	// Collect UTXOs that match the proven address
+	// Collect UTXOs at the address the claim names
 	type claimableUTXO struct {
 		index  int
 		txid   string

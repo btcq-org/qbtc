@@ -177,7 +177,7 @@ Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-p
 
 `MsgClaimWithProof` →
 1. `ValidateBasic()` — syntax checks
-2. `Keeper.Utxoes.Get()` — look up the first claimable UTXO for its Bitcoin address string
+2. `Keeper.ClaimBitcoinAddress()` — the claim names its Bitcoin address (`bitcoin_address`); one listed UTXO must be at that address, unclaimed and confirmed
 3. `zk.Verifier.VerifyProof()` — rebuild the claim digest from (chain ID, address, receiver-or-claimer, referrer), check `RIPEMD160(pub_key_hash_sha256)` against the address, PLONK verification against stored VK
 4. `BankKeeper.MintCoins()` — mint to claimer's address
 5. Set `EntitledAmount = 0` on the UTXO (idempotency guard) and record its referrer
