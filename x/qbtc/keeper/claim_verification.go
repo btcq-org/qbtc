@@ -200,8 +200,8 @@ func (c *resolvedClaim) digest() [sha256.Size]byte {
 //     handler then skips its own verification.
 //   - ReCheckTx: the state checks only, so a claim whose UTXOs an earlier block
 //     claimed leaves the mempool. The proof's validity cannot change: every
-//     input of the verification, the Bitcoin address included, is in the
-//     transaction.
+//     input of the verification is in the transaction, the Bitcoin address
+//     included, or fixed for the chain (the chain ID and the verifying key).
 //
 // The mempool holds one free claim per Bitcoin address, the address its proof
 // covers. Copies of one valid claim sent under different broadcaster keys
@@ -209,8 +209,8 @@ func (c *resolvedClaim) digest() [sha256.Size]byte {
 // blocks' claim cap. CheckTx and ReCheckTx look the address up in
 // PendingClaimAddresses before verifying anything, so a copy costs a state
 // read, not a proof verification, and record it once the claim passes. Only a
-// claim with a valid proof is recorded, so no one can hold another holder's
-// address. The record lives in the mempool's copy of the state: an ante
+// claim with a valid proof is recorded, so no one can hold an address
+// without a valid proof for it. The record lives in the mempool's copy of the state: an ante
 // failure discards it, and every commit clears it. ReCheckTx then rebuilds it
 // in mempool order, keeping the first claim of each address and evicting the
 // rest.
