@@ -363,7 +363,8 @@ setup_statesync() {
             print_error "QBTC_STATESYNC_RPCS has an empty entry: $STATESYNC_RPCS"
             return 1
         fi
-        if [[ "$rpc" != https://* || "$rpc" =~ [[:space:]] ]]; then
+        # Plain URL characters only: the list is written into config.toml.
+        if [[ ! "$rpc" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~%/-]*)?$ ]]; then
             print_error "State sync RPC server $rpc must be an https:// URL"
             return 1
         fi
@@ -389,15 +390,25 @@ setup_statesync() {
         print_info "Querying latest block from ${rpcs[0]}..."
         local latest_height
         latest_height=$(curl -fsS --connect-timeout 5 --max-time 10 "${rpcs[0]}/block" | jq -r .result.block.header.height)
-        if [[ -z "$latest_height" || "$latest_height" == "null" ]]; then
+        # Checked before any arithmetic: bash evaluates expressions, and
+        # command substitutions, inside an arithmetic operand.
+        if [[ ! "$latest_height" =~ ^[0-9]{1,18}$ ]]; then
             print_error "Failed to query latest block height from ${rpcs[0]}"
             return 1
         fi
-        if [[ "$latest_height" -le 2000 ]]; then
+        if (( 10#$latest_height <= 2000 )); then
             print_error "Chain height ($latest_height) is too low for statesync (need > 2000)"
             return 1
         fi
-        trust_height=$((latest_height / 2000 * 2000))
+        trust_height=$((10#$latest_height / 2000 * 2000))
+    elif [[ ! "$trust_height" =~ ^[1-9][0-9]{0,17}$ ]]; then
+        print_error "QBTC_TRUST_HEIGHT must be a positive block height: $trust_height"
+        return 1
+    fi
+    trust_hash="${trust_hash^^}"
+    if [[ -n "$trust_hash" && ! "$trust_hash" =~ ^[0-9A-F]{64}$ ]]; then
+        print_error "QBTC_TRUST_HASH must be 64 hex characters: $trust_hash"
+        return 1
     fi
 
     # Every RPC server must report the same hash at the trust height, so one
@@ -405,7 +416,7 @@ setup_statesync() {
     local hash
     for rpc in "${rpcs[@]}"; do
         hash=$(curl -fsS --connect-timeout 5 --max-time 10 "$rpc/block?height=$trust_height" | jq -r .result.block_id.hash)
-        if [[ -z "$hash" || "$hash" == "null" ]]; then
+        if [[ ! "$hash" =~ ^[0-9A-F]{64}$ ]]; then
             print_error "Failed to query the block hash at height $trust_height from $rpc"
             return 1
         fi
@@ -424,7 +435,7 @@ setup_statesync() {
     if [[ -z "$peers" ]]; then
         local node_id
         node_id=$(curl -fsS --connect-timeout 5 --max-time 10 "${rpcs[0]}/status" | jq -r .result.node_info.id)
-        if [[ -z "$node_id" || "$node_id" == "null" ]]; then
+        if [[ ! "$node_id" =~ ^[0-9a-f]{40}$ ]]; then
             print_error "Failed to query node ID from ${rpcs[0]}"
             return 1
         fi
@@ -432,16 +443,29 @@ setup_statesync() {
         rpc_host=$(echo "${rpcs[0]}" | sed -E 's|^https://||; s|[:/].*$||')
         peers="${node_id}@${rpc_host}:26656"
     fi
+    local peer_list=() peer
+    IFS=',' read -r -a peer_list <<< "$peers"
+    for peer in "${peer_list[@]}"; do
+        if [[ ! "$peer" =~ ^[0-9a-f]{40}@[A-Za-z0-9.-]+:[0-9]{1,5}$ ]]; then
+            print_error "Persistent peer $peer is not node_id@host:port; set QBTC_PERSISTENT_PEERS"
+            return 1
+        fi
+    done
     print_info "Persistent peers: $peers"
 
+    # awk takes the values from its environment and prints them as they are,
+    # so none of them is read as a program, unlike in a sed script.
     print_info "Updating config.toml..."
-    sed -i.bak -E \
-        "s|^(enable[[:space:]]+=[[:space:]]+).*$|\1true|
-         s|^(rpc_servers[[:space:]]+=[[:space:]]+).*$|\1\"${rpc_servers}\"|
-         s|^(trust_height[[:space:]]+=[[:space:]]+).*$|\1${trust_height}|
-         s|^(trust_hash[[:space:]]+=[[:space:]]+).*$|\1\"${trust_hash}\"|
-         s|^(persistent_peers[[:space:]]+=[[:space:]]+).*$|\1\"${peers}\"|" "$config_file"
-    rm -f "${config_file}.bak"
+    local tmp_config="${config_file}.tmp"
+    SS_RPCS="$rpc_servers" SS_HEIGHT="$trust_height" SS_HASH="$trust_hash" SS_PEERS="$peers" awk '
+        /^\[/ { section = $0 }
+        section == "[statesync]" && /^enable[[:space:]]*=/ { print "enable = true"; next }
+        section == "[statesync]" && /^rpc_servers[[:space:]]*=/ { print "rpc_servers = \"" ENVIRON["SS_RPCS"] "\""; next }
+        section == "[statesync]" && /^trust_height[[:space:]]*=/ { print "trust_height = " ENVIRON["SS_HEIGHT"]; next }
+        section == "[statesync]" && /^trust_hash[[:space:]]*=/ { print "trust_hash = \"" ENVIRON["SS_HASH"] "\""; next }
+        section == "[p2p]" && /^persistent_peers[[:space:]]*=/ { print "persistent_peers = \"" ENVIRON["SS_PEERS"] "\""; next }
+        { print }
+    ' "$config_file" > "$tmp_config" && mv "$tmp_config" "$config_file"
 
     print_success "Statesync configured"
 }
@@ -472,7 +496,13 @@ init_qbtcd() {
         return 1
     fi
 
-    if ask_yn "Use statesync to bootstrap from the network?" "y"; then
+    if [[ -z "$STATESYNC_RPCS" ]]; then
+        read -r -p "State sync RPC servers, at least two https:// URLs separated by commas (empty to skip state sync): " STATESYNC_RPCS < /dev/tty
+        if [[ -z "$STATESYNC_RPCS" ]]; then
+            print_info "No state sync RPC servers given; skipping state sync."
+        fi
+    fi
+    if [[ -n "$STATESYNC_RPCS" ]] && ask_yn "Use statesync to bootstrap from the network?" "y"; then
         setup_statesync
     elif ask_yn "Download genesis.bin snapshot? (large file)" "n"; then
         print_info "Downloading genesis.bin (this may take a while)..."

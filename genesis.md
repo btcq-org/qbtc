@@ -49,8 +49,9 @@ jq --arg start "$START" \
     | .app_state.qbtc.btc_anchor_header = $header
     | .app_state.qbtc.btc_anchor_period_start_time = $period' "$GENESIS" > tmp.json && mv tmp.json "$GENESIS"
 
-# claims are off by default (ClaimWithProofDisabled = 1); governance enables
-# them with MsgUpdateParam once the chain is ready
+# claims are off by default, with a proof (ClaimWithProofDisabled = 1) and by
+# memo (MemoClaimDisabled = 1); governance enables them with MsgUpdateParam
+# once the chain is ready
 
 # genesis UTXO snapshot: with $NODE_HOME/config/genesis.bin in place, write
 # the SHA-256 of each of its chunks into $GENESIS. Every node splits its
