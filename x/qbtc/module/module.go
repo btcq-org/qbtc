@@ -129,11 +129,8 @@ func (am AppModule) InitGenesis(ctx sdk.Context, _ codec.JSONCodec, gs json.RawM
 	if err := am.keeper.InitGenesis(ctx, genState); err != nil {
 		panic(fmt.Errorf("failed to initialize %s genesis state: %w", types.ModuleName, err))
 	}
-	utxoLoader := NewUtxoLoader(am.dataDir)
-	ctx.Logger().Info("splitting UTXO file for initial load")
-	err := utxoLoader.EnsureUtxoFileSplitted(ctx)
-	if err != nil {
-		panic(fmt.Errorf("failed to split UTXO file for %s: %w", types.ModuleName, err))
+	if err := NewUtxoLoader(am.dataDir).PrepareUtxoChunks(ctx, genState.UtxoChunkHashes); err != nil {
+		panic(fmt.Errorf("failed to prepare genesis UTXO chunks for %s: %w", types.ModuleName, err))
 	}
 }
 
@@ -168,12 +165,8 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 	if err := am.keeper.EnsureZKVerifierInitialized(ctx); err != nil {
 		sdkCtx.Logger().Error("failed to ensure ZK verifier is initialized", "error", err)
 	}
-	utxoLoader := NewUtxoLoader(am.dataDir)
-	if sdkCtx.BlockHeight() <= 0 {
-		return nil
-	}
-	if err := utxoLoader.EnsureLoadUtxoFromChunkFile(sdkCtx, int(sdkCtx.BlockHeight()-1), am.keeper); err != nil {
-		sdkCtx.Logger().Error("fail to load utxo from chunk file", "error", err)
+	if err := NewUtxoLoader(am.dataDir).LoadNextUtxoChunk(sdkCtx, am.keeper); err != nil {
+		return fmt.Errorf("failed to load genesis UTXO snapshot: %w", err)
 	}
 	return nil
 }

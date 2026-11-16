@@ -45,6 +45,11 @@ type Keeper struct {
 	BtcTipHeader       collections.Item[[]byte]
 	BtcPeriodStartTime collections.Item[uint64]
 
+	// Genesis UTXO snapshot: the hash of each chunk, and how many chunks are
+	// loaded. Bitcoin blocks apply only once every chunk is loaded.
+	UtxoChunkHashes  collections.Map[uint64, []byte]
+	UtxoChunksLoaded collections.Item[uint64]
+
 	// ZK Verifying Key (stored as bytes in genesis, loaded at init)
 	// The VK is stored in genesis and registered with the zk package at InitGenesis
 	ZkVerifyingKey collections.Item[[]byte]
@@ -89,6 +94,8 @@ func NewKeeper(
 		BtcTipHeader:       collections.NewItem(sb, types.BtcTipHeaderKey, "btc_tip_header", collections.BytesValue),
 		BtcPeriodStartTime: collections.NewItem(sb, types.BtcPeriodStartTimeKey, "btc_period_start_time", collections.Uint64Value),
 		ReferralStats:      collections.NewMap(sb, types.ReferralStatsKeys, "referral_stats", sdk.AccAddressKey, codec.CollValue[types.ReferralStats](cdc)),
+		UtxoChunkHashes:    collections.NewMap(sb, types.UtxoChunkHashesKey, "utxo_chunk_hashes", collections.Uint64Key, collections.BytesValue),
+		UtxoChunksLoaded:   collections.NewItem(sb, types.UtxoChunksLoadedKey, "utxo_chunks_loaded", collections.Uint64Value),
 	}
 	schema, err := sb.Build()
 	if err != nil {

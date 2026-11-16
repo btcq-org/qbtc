@@ -39,4 +39,9 @@ message GenesisState {
   uint32 btc_anchor_period_start_time = 8;
   // Referral totals per qbtc address.
   repeated ReferralStats referral_stats = 9 [ (gogoproto.nullable) = false ];
+  // The SHA-256 of each genesis UTXO chunk file, in chunk order. The node
+  // splits config/genesis.bin into these chunks at InitChain and loads one
+  // chunk per block, checking it against its hash first. Empty when the chain
+  // starts without a UTXO snapshot.
+  repeated bytes utxo_chunk_hashes = 10;
 }
