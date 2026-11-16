@@ -106,7 +106,12 @@ func (h *ProposalHandler) votedInjectTxs(ctx sdk.Context, req *abci.RequestPrepa
 	if !keeper.VoteExtensionsEnabled(ctx) {
 		return nil, 0
 	}
-	if loaded, err := h.keeper.UtxoSnapshotLoaded(ctx); err != nil || !loaded {
+	loaded, err := h.keeper.UtxoSnapshotLoaded(ctx)
+	if err != nil {
+		ctx.Logger().Error("failed to read genesis UTXO snapshot progress", "error", err)
+		return nil, 0
+	}
+	if !loaded {
 		return nil, 0
 	}
 	lastProcessedBlock, err := h.keeper.GetLastProcessedBlock(ctx)
