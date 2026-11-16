@@ -127,6 +127,8 @@ func TestSetMsgReportBlock_MemoClaim(t *testing.T) {
 		fee       = 1_000
 	)
 	f := initFixture(t)
+	// Memo claims are off at genesis on mainnet; enable them as governance would.
+	require.NoError(t, f.keeper.ConstOverrides.Set(f.ctx, constants.MemoClaimDisabled.String(), 0))
 	minted := sdkmath.ZeroInt()
 	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ string, coins sdk.Coins) error {
@@ -225,6 +227,8 @@ func TestSetMsgReportBlock_PartialEntitlementMemoClaim(t *testing.T) {
 		fee         = 2_000
 	)
 	f := initFixture(t)
+	// Memo claims are off at genesis on mainnet; enable them as governance would.
+	require.NoError(t, f.keeper.ConstOverrides.Set(f.ctx, constants.MemoClaimDisabled.String(), 0))
 	minted := sdkmath.ZeroInt()
 	f.bankKeeper.EXPECT().MintCoins(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ string, coins sdk.Coins) error {

@@ -138,10 +138,15 @@ func (s *E2ETestSuite) SetupSuite() {
 
 	// 3. Mutate the qbtc module genesis in place — the SDK pattern for
 	// seeding module-specific state before the network starts.
+	// Claims are off by default at genesis; enable them here, as governance
+	// does on mainnet.
 	qbtcGen := &types.GenesisState{
 		ZkVerifyingKey: vkBytes,
 		Utxos:          genesisUTXOs,
-		Params:         []*types.Param{{Key: constants.RefereeRewardBps.String(), Value: 100}},
+		Params: []*types.Param{
+			{Key: constants.ClaimWithProofDisabled.String(), Value: 0},
+			{Key: constants.RefereeRewardBps.String(), Value: 100},
+		},
 	}
 	s.cfg.GenesisState[types.ModuleName] = s.cfg.Codec.MustMarshalJSON(qbtcGen)
 
