@@ -17,6 +17,7 @@ const (
 	// RefereeRewardBps is the reward in basis points of the claimed amount that
 	// goes to the destination of a referred claim.
 	RefereeRewardBps
+	MaxClaimsPerBlock
 )
 
 // MaxRewardBps is the upper bound of the referral reward rates: 100%.
@@ -38,6 +39,8 @@ func FromString(s string) (ConstantName, bool) {
 		return ReferrerRewardBps, true
 	case "RefereeRewardBps":
 		return RefereeRewardBps, true
+	case "MaxClaimsPerBlock":
+		return MaxClaimsPerBlock, true
 	default:
 		return 0, false
 	}
