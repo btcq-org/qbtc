@@ -51,9 +51,10 @@ func initFixture(t *testing.T) *fixture {
 	addressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix)
 	validatorAddressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix + sdk.PrefixValidator)
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
+	transientKey := storetypes.NewTransientStoreKey("transient_test")
 
 	storeService := runtime.NewKVStoreService(storeKey)
-	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+	ctx := testutil.DefaultContextWithDB(t, storeKey, transientKey).Ctx
 	ctrl := gomock.NewController(t)
 	stakingKeeper := qbtctestutil.NewMockStakingKeeper(ctrl)
 
@@ -87,6 +88,7 @@ func initFixture(t *testing.T) *fixture {
 	authKeeper := qbtctestutil.NewMockAuthKeeper(ctrl)
 	k := keeper.NewKeeper(
 		storeService,
+		runtime.NewTransientStoreService(transientKey),
 		encCfg.Codec,
 		addressCodec,
 		stakingKeeper,

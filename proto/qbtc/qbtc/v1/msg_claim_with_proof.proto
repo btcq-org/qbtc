@@ -28,8 +28,8 @@ message MsgClaimWithProof {
   // Payload-only: minting destination, not the cosmos tx signer.
   string claimer = 1;
 
-  // The UTXOs to claim. Only those matching the proven Bitcoin address will
-  // be claimed; others are skipped. Maximum 50 UTXOs per batch.
+  // The UTXOs to claim. Only those at bitcoin_address are claimed; others
+  // are skipped. Maximum 50 UTXOs per batch.
   repeated UTXORef utxos = 2 [ (gogoproto.nullable) = false ];
 
   // Hex-encoded ZK proof proving ownership of the Bitcoin address associated
@@ -50,6 +50,12 @@ message MsgClaimWithProof {
   // empty), so it cannot be swapped by whoever relays the proof. It must
   // differ from the destination.
   string referrer = 7;
+  // The Bitcoin address being claimed (P2PKH or P2WPKH), exactly as stored on
+  // its UTXOs and as written in the signed claim message. The proof must
+  // cover it, and only the listed UTXOs at this address are claimed. Naming
+  // it in the message keeps what the proof is checked against the same from
+  // CheckTx to the block, whatever happens to the listed UTXOs in between.
+  string bitcoin_address = 8;
 }
 
 // MsgClaimWithProofResponse is the response for a successful batch claim.

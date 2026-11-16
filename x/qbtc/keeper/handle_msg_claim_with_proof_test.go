@@ -88,9 +88,10 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 	encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
 	addressCodec := addresscodec.NewBech32Codec(common.AccountAddressPrefix)
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
+	transientKey := storetypes.NewTransientStoreKey("transient_test")
 
 	storeService := runtime.NewKVStoreService(storeKey)
-	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+	ctx := testutil.DefaultContextWithDB(t, storeKey, transientKey).Ctx
 	ctx = ctx.WithChainID(testChainID)
 
 	ctrl := gomock.NewController(t)
@@ -114,6 +115,7 @@ func setupClaimTest(t *testing.T) *claimTestFixture {
 
 	k := keeper.NewKeeper(
 		storeService,
+		runtime.NewTransientStoreService(transientKey),
 		encCfg.Codec,
 		addressCodec,
 		stakingKeeper,
@@ -454,7 +456,7 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 			expectedAmount: 40000000,
 		},
 		{
-			name: "first listed UTXO at an address the proof does not sign fails",
+			name: "the order of the listed UTXOs does not matter",
 			setupUTXOs: func(t *testing.T, f *claimTestFixture) {
 				unsigned := types.UTXO{
 					Txid:           "acac000000000000000000000000000000000000000000000000000000000001",
@@ -472,13 +474,17 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 				}
 				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "acac000000000000000000000000000000000000000000000000000000000001-0", unsigned))
 				require.NoError(t, f.keeper.Utxoes.Set(f.ctx, "acac000000000000000000000000000000000000000000000000000000000002-0", signed))
+
+				f.bankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, gomock.Any()).Return(nil).Times(1)
+				f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 			utxos: []types.UTXORef{
 				{Txid: "acac000000000000000000000000000000000000000000000000000000000001", Vout: 0},
 				{Txid: "acac000000000000000000000000000000000000000000000000000000000002", Vout: 0},
 			},
-			expectErr:   true,
-			errContains: "proof verification failed",
+			expectedClaim:  1,
+			expectedSkip:   1,
+			expectedAmount: 40000000,
 		},
 	}
 
@@ -496,6 +502,7 @@ func TestClaimWithProof_PartialClaiming(t *testing.T) {
 			proofData, pubKeyHashSHA256 := f.generateProof(st)
 			// Create claim message
 			msg := &types.MsgClaimWithProof{
+				BitcoinAddress:   f.btcAddress,
 				Claimer:          f.claimerAddr,
 				Broadcaster:      f.claimerAddr,
 				Utxos:            tc.utxos,
@@ -548,8 +555,9 @@ func TestClaimWithProof_InvalidProof(t *testing.T) {
 	// Create claim with a well-formed but bogus proof, so it passes the layout
 	// check and fails PLONK verification.
 	msg := &types.MsgClaimWithProof{
-		Claimer:     f.claimerAddr,
-		Broadcaster: f.claimerAddr,
+		BitcoinAddress: f.btcAddress,
+		Claimer:        f.claimerAddr,
+		Broadcaster:    f.claimerAddr,
 		Utxos: []types.UTXORef{
 			{Txid: "9999000000000000000000000000000000000000000000000000000000000001", Vout: 0},
 		},
@@ -599,6 +607,7 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 		f.bankKeeper.EXPECT().SendCoinsFromModuleToAccount(gomock.Any(), types.ModuleName, receiverAccAddr, gomock.Any()).Return(nil).Times(1)
 
 		msg := &types.MsgClaimWithProof{
+			BitcoinAddress:   f.btcAddress,
 			Claimer:          f.claimerAddr,
 			Broadcaster:      f.claimerAddr,
 			Receiver:         receiverAddr,
@@ -630,6 +639,7 @@ func TestClaimWithProof_Receiver(t *testing.T) {
 		proofData, pubKeyHashSHA256 := f.generateProof(t) // claimer-bound proof
 
 		msg := &types.MsgClaimWithProof{
+			BitcoinAddress:   f.btcAddress,
 			Claimer:          f.claimerAddr,
 			Broadcaster:      f.claimerAddr,
 			Receiver:         receiverAddr,
@@ -675,6 +685,7 @@ func TestClaimWithProof_Referrer(t *testing.T) {
 	proofData, pubKeyHashSHA256 := f.generateReferredProof(t, f.claimerAddr, referrer)
 	newMsg := func(referrer string) *types.MsgClaimWithProof {
 		return &types.MsgClaimWithProof{
+			BitcoinAddress:   f.btcAddress,
 			Claimer:          f.claimerAddr,
 			Broadcaster:      f.claimerAddr,
 			Referrer:         referrer,

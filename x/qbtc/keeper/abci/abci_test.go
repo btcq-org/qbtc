@@ -121,7 +121,8 @@ func newFixture(t *testing.T, cachedBlocks int, powers ...int64) *abciFixture {
 	sdk.GetConfig().SetBech32PrefixForAccount(common.AccountAddressPrefix, common.AccountAddressPrefix+sdk.PrefixPublic)
 	encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
-	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+	transientKey := storetypes.NewTransientStoreKey("transient_test")
+	ctx := testutil.DefaultContextWithDB(t, storeKey, transientKey).Ctx
 
 	ctrl := gomock.NewController(t)
 	staking := qbtctestutil.NewMockStakingKeeper(ctrl)
@@ -144,6 +145,7 @@ func newFixture(t *testing.T, cachedBlocks int, powers ...int64) *abciFixture {
 		})
 	k := keeper.NewKeeper(
 		runtime.NewKVStoreService(storeKey),
+		runtime.NewTransientStoreService(transientKey),
 		encCfg.Codec,
 		addresscodec.NewBech32Codec(common.AccountAddressPrefix),
 		staking,

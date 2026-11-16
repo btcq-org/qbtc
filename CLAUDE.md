@@ -177,13 +177,13 @@ Each validator's `qbtcd` reads Bitcoin from its own Bitcoin node through an in-p
 
 `MsgClaimWithProof` →
 1. `ValidateBasic()` — syntax checks
-2. `Keeper.Utxoes.Get()` — look up the first claimable UTXO for its Bitcoin address string
+2. `Keeper.ClaimBitcoinAddress()` — the claim names its Bitcoin address (`bitcoin_address`); one listed UTXO must be at that address, unclaimed and confirmed
 3. `zk.Verifier.VerifyProof()` — rebuild the claim digest from (chain ID, address, receiver-or-claimer, referrer), check `RIPEMD160(pub_key_hash_sha256)` against the address, PLONK verification against stored VK
 4. `BankKeeper.MintCoins()` — mint to claimer's address
 5. Set `EntitledAmount = 0` on the UTXO (idempotency guard) and record its referrer
 6. If a referrer is set, pay `ReferrerRewardBps` / `RefereeRewardBps` of the claimed amount from the `referral` module account (capped at its balance, never fails the claim) and update `ReferralStats`
 
-For a free claim tx (claim-only, no fee), `ClaimProofDecorator` (`x/qbtc/keeper/claim_verification.go`) runs steps 2–3 in the ante handler, so CheckTx drops an invalid claim (ReCheckTx skips the proof), and the handler skips its own verification. `MaxClaimsPerBlock` (default 200) and `block.max_gas` are enforced in `PrepareProposal`/`ProcessProposal`.
+For a free claim tx (claim-only, no fee), `ClaimProofDecorator` (`x/qbtc/keeper/claim_verification.go`) runs steps 2–3 in the ante handler, so CheckTx drops an invalid claim (ReCheckTx skips the proof), and the handler skips its own verification. CheckTx/ReCheckTx also keep one free claim per Bitcoin address in the mempool, recorded in the module's transient store (`PendingClaimAddresses`). `MaxClaimsPerBlock` (default 200) and `block.max_gas` are enforced in `PrepareProposal`/`ProcessProposal`.
 
 ### Dependencies
 

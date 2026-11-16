@@ -30,6 +30,9 @@ func makeValidReceiverAddress() string {
 }
 
 // validBitcoinTxID is a valid 64-character hex Bitcoin transaction ID for testing
+// validBitcoinAddress is a P2PKH address.
+const validBitcoinAddress = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+
 const validBitcoinTxID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // validBitcoinTxID2 is another valid 64-character hex Bitcoin transaction ID for testing batch claims
@@ -85,6 +88,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "valid message - single UTXO",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -94,8 +98,46 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name: "valid message - P2WPKH address",
+			msg: &MsgClaimWithProof{
+				BitcoinAddress:   "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeValidProof(),
+			},
+			expectErr: false,
+		},
+		{
+			name: "missing bitcoin address",
+			msg: &MsgClaimWithProof{
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeValidProof(),
+			},
+			expectErr: true,
+			errMsg:    "bitcoin address is required",
+		},
+		{
+			name: "bitcoin address of an unsupported type",
+			msg: &MsgClaimWithProof{
+				BitcoinAddress:   "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
+				Claimer:          validBech32Address,
+				Broadcaster:      validBech32Address,
+				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
+				PubKeyHashSha256: makeValidPubKeyHashSHA256(),
+				Proof:            makeValidProof(),
+			},
+			expectErr: true,
+			errMsg:    "invalid bitcoin address",
+		},
+		{
 			name: "valid message - broadcaster differs from claimer",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      makeValidReceiverAddress(),
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -107,8 +149,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "valid message - multiple UTXOs",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
+				BitcoinAddress: validBitcoinAddress,
+				Claimer:        validBech32Address,
+				Broadcaster:    validBech32Address,
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 					{Txid: validBitcoinTxID, Vout: 1},
@@ -122,6 +165,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "valid message - max batch size",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            makeValidUTXORefs(MaxBatchClaimUTXOs),
@@ -133,6 +177,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "valid message - with receiver",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Receiver:         makeValidReceiverAddress(),
@@ -145,6 +190,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid receiver address",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Receiver:         "not-a-valid-bech32",
@@ -158,6 +204,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "missing broadcaster",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      "",
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -170,6 +217,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid broadcaster address format",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      "not-a-valid-bech32",
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -182,7 +230,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "missing claimer",
 			msg: &MsgClaimWithProof{
-				Claimer: "",
+				BitcoinAddress: validBitcoinAddress,
+				Claimer:        "",
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
@@ -195,7 +244,8 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid claimer address format",
 			msg: &MsgClaimWithProof{
-				Claimer: "not-a-valid-bech32",
+				BitcoinAddress: validBitcoinAddress,
+				Claimer:        "not-a-valid-bech32",
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 				},
@@ -208,6 +258,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "no UTXOs provided",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{},
@@ -220,6 +271,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "too many UTXOs",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            makeValidUTXORefs(MaxBatchClaimUTXOs + 1),
@@ -232,10 +284,11 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "missing txid in UTXO",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
-				Utxos:       []UTXORef{{Txid: "", Vout: 0}},
-				Proof:       makeValidProof(),
+				BitcoinAddress: validBitcoinAddress,
+				Claimer:        validBech32Address,
+				Broadcaster:    validBech32Address,
+				Utxos:          []UTXORef{{Txid: "", Vout: 0}},
+				Proof:          makeValidProof(),
 			},
 			expectErr: true,
 			errMsg:    "txid is required",
@@ -243,6 +296,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid txid length - too short",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: "0123456789abcdef", Vout: 0}},
@@ -255,8 +309,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid txid - not hex",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
+				BitcoinAddress: validBitcoinAddress,
+				Claimer:        validBech32Address,
+				Broadcaster:    validBech32Address,
 				Utxos: []UTXORef{
 					{Txid: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", Vout: 0},
 				},
@@ -269,8 +324,9 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "duplicate UTXO references",
 			msg: &MsgClaimWithProof{
-				Claimer:     validBech32Address,
-				Broadcaster: validBech32Address,
+				BitcoinAddress: validBitcoinAddress,
+				Claimer:        validBech32Address,
+				Broadcaster:    validBech32Address,
 				Utxos: []UTXORef{
 					{Txid: validBitcoinTxID, Vout: 0},
 					{Txid: validBitcoinTxID, Vout: 0}, // duplicate
@@ -284,6 +340,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "missing proof data",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -296,6 +353,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof data too small",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -308,6 +366,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof data too large",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -320,6 +379,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof data not hex",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -332,6 +392,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof with huge Bsb22Commitments count",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -344,6 +405,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "proof with no Bsb22Commitments",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -356,6 +418,7 @@ func TestMsgClaimWithProof_ValidateBasic(t *testing.T) {
 		{
 			name: "invalid message - no pub_key_hash_sha256",
 			msg: &MsgClaimWithProof{
+				BitcoinAddress:   validBitcoinAddress,
 				Claimer:          validBech32Address,
 				Broadcaster:      validBech32Address,
 				Utxos:            []UTXORef{{Txid: validBitcoinTxID, Vout: 0}},
@@ -387,6 +450,7 @@ func TestMsgClaimWithProof_ValidateBasic_Referrer(t *testing.T) {
 
 	newMsg := func(receiver, referrer string) *MsgClaimWithProof {
 		return &MsgClaimWithProof{
+			BitcoinAddress:   validBitcoinAddress,
 			Claimer:          validBech32Address,
 			Broadcaster:      validBech32Address,
 			Receiver:         receiver,

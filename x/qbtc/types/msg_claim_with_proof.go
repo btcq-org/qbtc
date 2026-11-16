@@ -47,6 +47,14 @@ func (m *MsgClaimWithProof) ValidateBasic() error {
 		return err
 	}
 
+	// The Bitcoin address the proof covers: P2PKH or P2WPKH.
+	if m.BitcoinAddress == "" {
+		return se.ErrInvalidRequest.Wrap("bitcoin address is required")
+	}
+	if _, err := zk.BitcoinAddressToHash160(m.BitcoinAddress); err != nil {
+		return se.ErrInvalidAddress.Wrapf("invalid bitcoin address: %v", err)
+	}
+
 	// Validate broadcaster (the cosmos tx signer)
 	if m.Broadcaster == "" {
 		return se.ErrInvalidRequest.Wrap("broadcaster address is required")
