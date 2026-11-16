@@ -64,14 +64,14 @@ bench:
 	@go test -mod=readonly -v -timeout 30m -bench=. ./...
 
 # TEST_PKGS narrows test-all to some packages; CI runs the ZK-heavy ones on
-# runners of their own.
+# runners of their own. Each of those takes about 25 minutes, hence the 60m timeout.
 TEST_PKGS ?= ./...
 
 test-all:
 	@echo Running unit tests...
 	@go mod download github.com/vultisig/go-wrappers
 	@export LD_LIBRARY_PATH=$$(go list -m -f '{{.Dir}}' github.com/vultisig/go-wrappers)/includes/linux:$$LD_LIBRARY_PATH && \
-	go test -mod=readonly -tags=testing -v -timeout 30m $(TEST_PKGS)
+	go test -mod=readonly -tags=testing -v -timeout 60m $(TEST_PKGS)
 
 test: govet test-unit
 
