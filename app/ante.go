@@ -48,13 +48,15 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ante.NewValidateMemoDecorator(options.AccountKeeper),
 		ante.NewConsumeGasForTxSizeDecorator(options.AccountKeeper),
 		ante.NewDeductFeeDecorator(options.AccountKeeper, options.BankKeeper, options.FeegrantKeeper, options.TxFeeChecker),
-		// verifies the signatures of a tx with a vultisig sign mode signer,
-		// which the SDK's decorators do not accept; before SetPubKeyDecorator
-		signmode.NewVultisigSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewSetPubKeyDecorator(options.AccountKeeper), // SetPubKeyDecorator must be called before all signature verification decorators
 		ante.NewValidateSigCountDecorator(options.AccountKeeper),
 		// SigGasConsumer is the account key policy: only ML-DSA-65 keys pass.
 		ante.NewSigGasConsumeDecorator(options.AccountKeeper, options.SigGasConsumer),
+		// verifies the signatures of a tx with a vultisig sign mode signer,
+		// which SigVerificationDecorator does not accept. It runs after the
+		// signature count, signature gas and key policy checks, so a tx
+		// they reject costs no signature verification.
+		signmode.NewVultisigSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewIncrementSequenceDecorator(options.AccountKeeper),
 		// verifies a free claim's proof, after its signature: an invalid

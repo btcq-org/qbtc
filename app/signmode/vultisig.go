@@ -67,7 +67,10 @@ func (VultisigSignModeHandler) GetSignBytes(ctx context.Context, signerData txsi
 // and the sequence increment still run.
 //
 // A transaction without a SignModeVultisig signer passes through unchanged. It
-// must be placed before ante.SetPubKeyDecorator.
+// must be placed after ante.ValidateSigCountDecorator and
+// ante.SigGasConsumeDecorator, so the signature count, the signature gas and
+// the key policy are checked before any signature is verified, and directly
+// before ante.SigVerificationDecorator.
 type VultisigSigVerificationDecorator struct {
 	ak              ante.AccountKeeper
 	signModeHandler *txsigning.HandlerMap
@@ -118,8 +121,8 @@ func (d VultisigSigVerificationDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx,
 		if err != nil {
 			return ctx, err
 		}
-		// The account's stored pubkey, or for its first transaction the one in
-		// signer_infos, which SetPubKeyDecorator stores next.
+		// The account's stored pubkey; SetPubKeyDecorator has stored the one in
+		// signer_infos for an account's first transaction.
 		pubKey := acc.GetPubKey()
 		if pubKey == nil {
 			pubKey = sig.PubKey
@@ -155,11 +158,12 @@ func (d VultisigSigVerificationDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx,
 			}
 			if !pubKey.VerifySignature(signBytes, single.Signature) {
 				return ctx, errorsmod.Wrapf(sdkerrors.ErrUnauthorized,
-					"signature verification failed; please verify account number (%d) and chain-id (%s): (unable to verify vultisig sign mode signature)",
-					accNum, chainID)
+					"signature verification failed; please verify account number (%d) and chain-id (%s)", accNum, chainID)
 			}
 			continue
 		}
+		// Every other mode, known or not, goes to the SDK's verification,
+		// which rejects a mode it has no handler for.
 		if err := authsigning.VerifySignature(ctx, pubKey, signerData, sig.Data, d.signModeHandler, txData); err != nil {
 			return ctx, errorsmod.Wrapf(sdkerrors.ErrUnauthorized,
 				"signature verification failed; please verify account number (%d) and chain-id (%s): (%s)", accNum, chainID, err)

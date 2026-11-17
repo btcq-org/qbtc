@@ -250,6 +250,9 @@ func TestVultisigSignMode(t *testing.T) {
 		ctx, _ := baseCtx.CacheContext()
 		priv := fund(t, ctx)
 		acc := application.AuthKeeper.GetAccount(ctx, sdk.AccAddress(priv.PubKey().Address()))
+		// A number a float64 cannot hold: a generated one can, by chance.
+		require.NoError(t, acc.SetAccountNumber(uint64(1)<<63+1))
+		application.AuthKeeper.SetAccount(ctx, acc)
 		// the account number after a round trip through a JavaScript Number
 		rounded := uint64(float64(acc.GetAccountNumber()))
 		require.NotEqual(t, acc.GetAccountNumber(), rounded)
@@ -257,6 +260,35 @@ func TestVultisigSignMode(t *testing.T) {
 		s.accNum = &rounded
 		_, err := ante(ctx, buildSendTx(t, application, ctx, to, denom, s), false)
 		require.ErrorIs(t, err, sdkerrors.ErrUnauthorized)
+	})
+
+	t.Run("an unknown sign mode is rejected", func(t *testing.T) {
+		unknown := func(priv *mldsa65.PrivKey) vultisigSigner {
+			return vultisigSigner{priv: priv, mode: signing.SignMode(999), signFn: signDigest}
+		}
+		// next to a vultisig signer, by this decorator's fall-through to the
+		// SDK's verification
+		ctx, _ := baseCtx.CacheContext()
+		_, err := ante(ctx, buildSendTx(t, application, ctx, to, denom, vultisig(fund(t, ctx)), unknown(fund(t, ctx))), false)
+		require.ErrorIs(t, err, sdkerrors.ErrUnauthorized)
+
+		// on its own, by the SDK's decorator
+		ctx, _ = baseCtx.CacheContext()
+		_, err = ante(ctx, buildSendTx(t, application, ctx, to, denom, unknown(fund(t, ctx))), false)
+		require.ErrorIs(t, err, sdkerrors.ErrUnauthorized)
+	})
+
+	t.Run("too many signers are rejected before any signature is verified", func(t *testing.T) {
+		ctx, _ := baseCtx.CacheContext()
+		limit := application.AuthKeeper.GetParams(ctx).TxSigLimit
+		signers := make([]vultisigSigner, limit+1)
+		for i := range signers {
+			signers[i] = vultisig(fund(t, ctx))
+			// invalid signatures: verification would fail with ErrUnauthorized
+			signers[i].signFn = signRaw
+		}
+		_, err := ante(ctx, buildSendTx(t, application, ctx, to, denom, signers...), false)
+		require.ErrorIs(t, err, sdkerrors.ErrTooManySignatures)
 	})
 
 	t.Run("a wrong sequence is rejected", func(t *testing.T) {
