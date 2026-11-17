@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"math/bits"
 	"slices"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/constants"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
+	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -102,8 +105,11 @@ func (s *msgServer) processBtcBlock(ctx sdk.Context, block *types.BtcBlock) erro
 	memoClaimsEnabled := s.k.GetConfig(ctx, constants.MemoClaimDisabled) <= 0
 	claimTxs := make([]int, 0)
 	totalFee := uint64(0)
+	// The entitlement the block's transactions gave up by paying their fees.
+	// It moves to the coinbase.
+	totalClaimableFee := uint64(0)
 	// process the reported block; txs[0] is the coinbase, processed last because
-	// it needs the block's total fee
+	// it needs the entitlement of the block's fees
 	for i := 1; i < len(txs); i++ {
 		tx, txid := txs[i], txids[i].String()
 		// check if it is a claim transaction , need to check it before the transaction is processed
@@ -111,15 +117,16 @@ func (s *msgServer) processBtcBlock(ctx sdk.Context, block *types.BtcBlock) erro
 		if memoClaimsEnabled && s.isClaimTx(ctx, params, tx) {
 			claimTxs = append(claimTxs, i)
 		}
-		fee, err := s.processTransaction(ctx, params, tx, txid, block.Height)
+		fee, claimableFee, err := s.processTransaction(ctx, params, tx, txid, block.Height)
 		if err != nil {
 			ctx.Logger().Error("failed to process transaction", "txid", txid, "error", err)
 			return sdkerror.ErrUnknownRequest.Wrapf("failed to process transaction %s: %v", txid, err)
 		}
-		totalFee += fee
+		totalFee = saturatingAdd(totalFee, fee)
+		totalClaimableFee = saturatingAdd(totalClaimableFee, claimableFee)
 	}
 	coinbaseTxid := txids[0].String()
-	if err := s.processCoinbaseVOuts(ctx, params, txs[0].TxOut, coinbaseTxid, totalFee, block.Height); err != nil {
+	if err := s.processCoinbaseVOuts(ctx, params, txs[0].TxOut, coinbaseTxid, totalClaimableFee, block.Height); err != nil {
 		ctx.Logger().Error("failed to process coinbase transaction", "txid", coinbaseTxid, "error", err)
 		return sdkerror.ErrUnknownRequest.Wrapf("failed to process coinbase transaction %s: %v", coinbaseTxid, err)
 	}
@@ -157,6 +164,23 @@ func outputAmount(out *wire.TxOut) (uint64, error) {
 	return uint64(out.Value), nil
 }
 
+// totalOutputAmount sums a transaction's output values, with Bitcoin's rule
+// that the total cannot exceed 21 million BTC, so the sum cannot overflow.
+func totalOutputAmount(outs []*wire.TxOut) (uint64, error) {
+	total := uint64(0)
+	for _, out := range outs {
+		amount, err := outputAmount(out)
+		if err != nil {
+			return 0, err
+		}
+		if amount > btcutil.MaxSatoshi || total+amount > btcutil.MaxSatoshi {
+			return 0, fmt.Errorf("output total exceeds %d satoshis", int64(btcutil.MaxSatoshi))
+		}
+		total += amount
+	}
+	return total, nil
+}
+
 // scriptPubKey describes an output script the way Bitcoin Core's getblock
 // does: the script hex, its class name, and an address only for the classes
 // Core gives one (not bare public keys or multisig, which have no address).
@@ -180,35 +204,42 @@ func scriptPubKey(params *chaincfg.Params, pkScript []byte) *types.ScriptPubKeyR
 	return result
 }
 
-func (s *msgServer) processTransaction(ctx sdk.Context, params *chaincfg.Params, tx *wire.MsgTx, txid string, blockHeight uint64) (uint64, error) {
+// processTransaction spends the transaction's inputs and creates its outputs.
+// It returns the transaction's fee and the entitlement the transaction gave
+// up by paying it, which the block's coinbase receives.
+//
+// The fee comes out of the entitled part of the inputs first, so the fee's
+// entitlement is min(fee, entitlement of the inputs). A fee paid with claimed
+// coins carries none: entitlement that was already claimed cannot come back
+// through a coinbase.
+func (s *msgServer) processTransaction(ctx sdk.Context, params *chaincfg.Params, tx *wire.MsgTx, txid string, blockHeight uint64) (fee, claimableFee uint64, err error) {
 	defer telemetry.MeasureSince(time.Now(), "process_transaction")
-	fee := uint64(0)
 	totalClaimable, totalInput, err := s.processVIn(ctx, tx.TxIn)
 	if err != nil {
-		return fee, err
+		return 0, 0, err
 	}
-	totalOutput := uint64(0)
-	for _, out := range tx.TxOut {
-		amount, err := outputAmount(out)
-		if err != nil {
-			return fee, err
-		}
-		totalOutput += amount
+	totalOutput, err := totalOutputAmount(tx.TxOut)
+	if err != nil {
+		return 0, 0, err
 	}
-	if totalInput > 0 && totalInput > totalOutput {
-		// calculate the transaction fee
+	if totalInput > totalOutput {
 		fee = totalInput - totalOutput
-		if totalClaimable > fee {
-			totalClaimable = totalClaimable - fee
-		} else {
-			totalClaimable = 0
-		}
+		claimableFee = min(fee, totalClaimable)
+		totalClaimable -= claimableFee
 	}
 	if err := s.processVOuts(ctx, params, tx.TxOut, txid, totalClaimable, totalOutput, blockHeight); err != nil {
-		return fee, err
+		return 0, 0, err
 	}
+	return fee, claimableFee, nil
+}
 
-	return fee, nil
+// saturatingAdd returns a + b, or the largest uint64 if the sum overflows.
+func saturatingAdd(a, b uint64) uint64 {
+	sum, carry := bits.Add64(a, b, 0)
+	if carry != 0 {
+		return math.MaxUint64
+	}
+	return sum
 }
 
 const claimPrefix = "claim:"
@@ -436,9 +467,25 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 	params *chaincfg.Params,
 	outs []*wire.TxOut,
 	txID string,
-	totalFee uint64,
+	totalClaimableFee uint64,
 	blockHeight uint64) error {
 	defer telemetry.MeasureSince(time.Now(), "process_coinbase_vout")
+	totalOutput, err := totalOutputAmount(outs)
+	if err != nil {
+		return err
+	}
+	// The coinbase is entitled to the block subsidy, which is new, plus the
+	// entitlement the block's transactions gave up by paying their fees, which
+	// moves here. So a fee never creates entitlement: a fee paid with claimed
+	// coins adds nothing, and a miner who pays their own unclaimed coins as a
+	// fee gets the same entitlement back. The total is split across the
+	// outputs in proportion to their value.
+	//
+	// It does not rely on the attested block being valid: Bitcoin rejects a
+	// coinbase that pays more than the subsidy plus the fees, and one that
+	// does gets no entitlement for the excess.
+	subsidy := uint64(blockchain.CalcBlockSubsidy(int32(blockHeight), params))
+	totalClaimable := min(totalOutput, saturatingAdd(subsidy, totalClaimableFee))
 	for n, out := range outs {
 		if out.Value == 0 {
 			continue
@@ -448,10 +495,7 @@ func (s *msgServer) processCoinbaseVOuts(ctx sdk.Context,
 		if err != nil {
 			return err
 		}
-		entitleAmount := amount
-		if entitleAmount > totalFee {
-			entitleAmount = entitleAmount - totalFee
-		}
+		entitleAmount := proportionalEntitlement(totalClaimable, amount, totalOutput)
 		utxo := types.UTXO{
 			Txid:           txID,
 			Vout:           uint32(n),

@@ -381,7 +381,7 @@ func TestSetMsgReportBlock_MultipleBlocks(t *testing.T) {
 	require.NoError(t, submitBlockMsg(f, msg))
 
 	require.Equal(t, uint64(800002), getLastProcessed(t, f))
-	require.Equal(t, uint64(312_490_000), getTestEntitlement(t, f, coinbase1.TxHash().String(), 0), "the block's fee is deducted")
+	require.Equal(t, uint64(312_500_000), getTestEntitlement(t, f, coinbase1.TxHash().String(), 0), "the coinbase pays less than the subsidy plus the fee's entitlement")
 	// the first block's output was spent by the second
 	_, err := f.keeper.Utxoes.Get(f.ctx, spend1.TxHash().String()+"-0")
 	require.Error(t, err)
