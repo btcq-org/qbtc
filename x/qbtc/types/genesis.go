@@ -39,7 +39,7 @@ func (gs GenesisState) Validate() error {
 		}
 	}
 
-	if err := gs.validateStringParams(); err != nil {
+	if err := gs.ValidateStringParams(); err != nil {
 		return err
 	}
 	for i, hash := range gs.UtxoChunkHashes {
@@ -130,9 +130,9 @@ func (gs GenesisState) validateBtcAnchor() error {
 	return nil
 }
 
-// validateStringParams checks that each string param is a known key, set
+// ValidateStringParams checks that each string param is a known key, set
 // once, with an empty value or a valid address.
-func (gs GenesisState) validateStringParams() error {
+func (gs GenesisState) ValidateStringParams() error {
 	seen := make(map[string]bool, len(gs.StringParams))
 	for _, p := range gs.StringParams {
 		if err := ValidateStringParam(p.Key, p.Value); err != nil {

@@ -37,10 +37,10 @@ func (k Keeper) InitGenesis(ctx context.Context, genState types.GenesisState) er
 	}
 	// InitChain does not run the module's ValidateGenesis, and the gov claim
 	// handler fails on a stored fund address it cannot parse.
+	if err := genState.ValidateStringParams(); err != nil {
+		return err
+	}
 	for _, item := range genState.StringParams {
-		if err := types.ValidateStringParam(item.Key, item.Value); err != nil {
-			return err
-		}
 		if err := k.StringParams.Set(ctx, item.Key, item.Value); err != nil {
 			return fmt.Errorf("failed to set string param %s: %w", item.Key, err)
 		}
