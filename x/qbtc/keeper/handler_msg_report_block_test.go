@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"cosmossdk.io/collections"
 	sdkmath "cosmossdk.io/math"
+	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
@@ -54,8 +56,11 @@ func TestSetMsgReportBlock_MainnetBlocks(t *testing.T) {
 			checkFunc: func(st *testing.T, f *fixture) {
 				_, err := f.keeper.Utxoes.Get(f.ctx, "8eb9d5922df115ccea20adf84f2b1e6664fd9a2c196a3f863303283353d52a33-0")
 				require.Error(st, err)
-				// the coinbase output has the block's fee (65602 sats) deducted
-				require.Equal(st, uint64(313461906), getTestEntitlement(st, f, "7025015c9a362d21ac2731bcad2f0ef6c7bb9a1a7bf297c443eb53e952beb8dd", 1))
+				// The coinbase pays the 3.125 BTC subsidy plus the block's fees. The
+				// transaction that spends the preloaded inputs pays no fee, so no
+				// entitlement moves to the coinbase: its claimable total is the
+				// subsidy, split across the outputs.
+				require.Equal(st, uint64(312499455), getTestEntitlement(st, f, "7025015c9a362d21ac2731bcad2f0ef6c7bb9a1a7bf297c443eb53e952beb8dd", 1))
 			},
 		},
 		{
@@ -63,8 +68,10 @@ func TestSetMsgReportBlock_MainnetBlocks(t *testing.T) {
 			fileName:   "../../../testdata/block/300003.json",
 			prevHeader: mainnetHeader300002,
 			checkFunc: func(st *testing.T, f *fixture) {
-				// no inputs are preloaded, so every input counts as already spent
-				require.Equal(st, uint64(2502676489), getTestEntitlement(st, f, "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3", 0))
+				// no inputs are preloaded, so every input counts as already spent,
+				// no fee carries entitlement, and the coinbase is capped at the 25
+				// BTC subsidy
+				require.Equal(st, uint64(2500000000), getTestEntitlement(st, f, "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3", 0))
 				require.Equal(st, uint64(0), getTestEntitlement(st, f, "e8bd07a2b2a68965ef732d6dad74d3af16ac384aff1c92a42e1707f5bc8fb714", 0))
 			},
 		},
@@ -76,7 +83,8 @@ func TestSetMsgReportBlock_MainnetBlocks(t *testing.T) {
 				setUtxo(st, f, "c99a1454100bc1a57ff5206dcfcaf196907f5724417d9e0a496741949fe0d20d", 963, 53048210, 53048210)
 			},
 			checkFunc: func(st *testing.T, f *fixture) {
-				require.Equal(st, uint64(2502666489), getTestEntitlement(st, f, "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3", 0))
+				// the subsidy plus the 10000 sat fee of the preloaded, unclaimed input
+				require.Equal(st, uint64(2500010000), getTestEntitlement(st, f, "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3", 0))
 				require.Equal(st, uint64(20000000), getTestEntitlement(st, f, "2bda3732778da19cbf8799aceed3a6ab270948aeac85678bee013ddf3070687e", 0))
 				require.Equal(st, uint64(33038210), getTestEntitlement(st, f, "2bda3732778da19cbf8799aceed3a6ab270948aeac85678bee013ddf3070687e", 1))
 			},
@@ -91,7 +99,8 @@ func TestSetMsgReportBlock_MainnetBlocks(t *testing.T) {
 				setUtxo(st, f, "bc84b6ec6473499eb9c5cbd266cc17dfb177efe2a35c9da843b884106be829aa", 0, 11825990, 0)
 			},
 			checkFunc: func(st *testing.T, f *fixture) {
-				require.Equal(st, uint64(2502666489), getTestEntitlement(st, f, "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3", 0))
+				// the 10000 sat fee comes out of the entitled inputs first
+				require.Equal(st, uint64(2500010000), getTestEntitlement(st, f, "effbacb359a68252c25d349cea55eaff68ef549aef6aef0faa30e38ab48080a3", 0))
 				require.Equal(st, uint64(14659050), getTestEntitlement(st, f, "bfa3ed4869f33192946dcc03d7789d6be32aa07f083e9752fcea2a5568a9ea47", 0))
 				require.Equal(st, uint64(8591612), getTestEntitlement(st, f, "bfa3ed4869f33192946dcc03d7789d6be32aa07f083e9752fcea2a5568a9ea47", 1))
 			},
@@ -283,6 +292,189 @@ func TestSetMsgReportBlock_UnclaimedInputsKeepFullEntitlement(t *testing.T) {
 	require.Equal(t, uint64(33_333_333), getTestEntitlement(t, f, txid, 0))
 	require.Equal(t, uint64(66_666_667), getTestEntitlement(t, f, txid, 1))
 	require.Equal(t, uint64(1), getTestEntitlement(t, f, txid, 2))
+}
+
+// The coinbase is entitled to the subsidy plus the entitlement the block's
+// transactions gave up by paying their fees. A fee moves entitlement to the
+// coinbase and never creates any: the entitlement of the spent input plus the
+// subsidy is an upper bound on that of the outputs and the coinbase together.
+func TestSetMsgReportBlock_CoinbaseGetsFeeEntitlement(t *testing.T) {
+	const (
+		inTxid  = "1111111111111111111111111111111111111111111111111111111111111111"
+		inSats  = 100_000_000
+		feeSats = 30_000_000
+		subsidy = 625_000_000
+	)
+	tests := []struct {
+		name string
+		// entitlement of the spent input, which pays the fee
+		inEntitled uint64
+		coinbase   []int64
+		// entitlement of the spending transaction's output and of each
+		// coinbase output
+		outEntitled uint64
+		entitled    []uint64
+	}{
+		{
+			name:        "a fee paid with unclaimed coins moves its entitlement to the coinbase",
+			inEntitled:  inSats,
+			coinbase:    []int64{subsidy + feeSats},
+			outEntitled: inSats - feeSats,
+			entitled:    []uint64{subsidy + feeSats},
+		},
+		{
+			name:        "a fee paid with claimed coins carries no entitlement",
+			inEntitled:  0,
+			coinbase:    []int64{subsidy + feeSats},
+			outEntitled: 0,
+			entitled:    []uint64{subsidy},
+		},
+		{
+			name:        "an input entitled to less than the fee passes on what it has",
+			inEntitled:  10_000_000,
+			coinbase:    []int64{subsidy + feeSats},
+			outEntitled: 0,
+			entitled:    []uint64{subsidy + 10_000_000},
+		},
+		{
+			name:        "the fee comes out of the entitled part first",
+			inEntitled:  50_000_000,
+			coinbase:    []int64{subsidy + feeSats},
+			outEntitled: 20_000_000,
+			entitled:    []uint64{subsidy + feeSats},
+		},
+		{
+			name:        "uneven outputs, fully entitled",
+			inEntitled:  inSats,
+			coinbase:    []int64{524_000_000, 131_000_000},
+			outEntitled: inSats - feeSats,
+			entitled:    []uint64{524_000_000, 131_000_000},
+		},
+		{
+			// 625/655 of each output
+			name:        "uneven outputs share the subsidy when the fee carries nothing",
+			inEntitled:  0,
+			coinbase:    []int64{524_000_000, 131_000_000},
+			outEntitled: 0,
+			entitled:    []uint64{500_000_000, 125_000_000},
+		},
+		{
+			// A pool paying its miners directly in the coinbase.
+			name:        "many equal outputs",
+			inEntitled:  0,
+			coinbase:    slices.Repeat([]int64{65_500_000}, 10),
+			outEntitled: 0,
+			entitled:    slices.Repeat([]uint64{62_500_000}, 10),
+		},
+		{
+			name:        "zero-value output, such as the witness commitment",
+			inEntitled:  inSats,
+			coinbase:    []int64{subsidy + feeSats, 0},
+			outEntitled: inSats - feeSats,
+			entitled:    []uint64{subsidy + feeSats},
+		},
+		{
+			name:        "coinbase pays less than the subsidy plus the fees",
+			inEntitled:  inSats,
+			coinbase:    []int64{300_000_000},
+			outEntitled: inSats - feeSats,
+			entitled:    []uint64{300_000_000},
+		},
+		{
+			// Bitcoin rejects this block; the excess gets no entitlement.
+			name:        "coinbase pays more than the subsidy plus the fees",
+			inEntitled:  inSats,
+			coinbase:    []int64{subsidy + feeSats + 1_000_000},
+			outEntitled: inSats - feeSats,
+			entitled:    []uint64{subsidy + feeSats},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := initFixture(t)
+			c := newRegtestChain(t, f, 800000)
+			require.Equal(t, int64(subsidy), blockchain.CalcBlockSubsidy(int32(c.height+1), c.params))
+			setTestUtxo(t, f, c.params, inTxid, 0, inSats, tc.inEntitled)
+
+			spend := spendTx([]wire.OutPoint{outpoint(t, inTxid, 0)}, p2pkhOut(t, inSats-feeSats))
+			cb := c.coinbase(tc.coinbase...)
+			c.mustSubmit(c.nextBlock(cb, spend))
+
+			require.Equal(t, tc.outEntitled, getTestEntitlement(t, f, spend.TxHash().String(), 0))
+			total := tc.outEntitled
+			for n, want := range tc.entitled {
+				require.Equal(t, want, getTestEntitlement(t, f, cb.TxHash().String(), uint32(n)), "coinbase output %d", n)
+				total += want
+			}
+			require.LessOrEqual(t, total, tc.inEntitled+subsidy, "a fee creates no entitlement")
+		})
+	}
+}
+
+// The coinbase gets the fee entitlement of every transaction in the block.
+func TestSetMsgReportBlock_CoinbaseGetsEveryFeeEntitlement(t *testing.T) {
+	const (
+		unclaimedTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+		claimedTxid   = "2222222222222222222222222222222222222222222222222222222222222222"
+		partialTxid   = "3333333333333333333333333333333333333333333333333333333333333333"
+		inSats        = 100_000_000
+		feeSats       = 1_000_000
+		subsidy       = 625_000_000
+	)
+	f := initFixture(t)
+	c := newRegtestChain(t, f, 800000)
+	setTestUtxo(t, f, c.params, unclaimedTxid, 0, inSats, inSats)
+	setTestUtxo(t, f, c.params, claimedTxid, 0, inSats, 0)
+	setTestUtxo(t, f, c.params, partialTxid, 0, inSats, 400_000)
+
+	spends := make([]*wire.MsgTx, 0, 3)
+	for _, txid := range []string{unclaimedTxid, claimedTxid, partialTxid} {
+		spends = append(spends, spendTx([]wire.OutPoint{outpoint(t, txid, 0)}, p2pkhOut(t, inSats-feeSats)))
+	}
+	cb := c.coinbase(subsidy + 3*feeSats)
+	c.mustSubmit(c.nextBlock(append([]*wire.MsgTx{cb}, spends...)...))
+
+	// 1,000,000 from the unclaimed input, nothing from the claimed one, and
+	// the partial input's whole 400,000
+	require.Equal(t, uint64(subsidy+1_400_000), getTestEntitlement(t, f, cb.TxHash().String(), 0))
+	require.Equal(t, uint64(inSats-feeSats), getTestEntitlement(t, f, spends[0].TxHash().String(), 0))
+	require.Equal(t, uint64(0), getTestEntitlement(t, f, spends[1].TxHash().String(), 0))
+	require.Equal(t, uint64(0), getTestEntitlement(t, f, spends[2].TxHash().String(), 0))
+}
+
+// A coinbase that pays more than the subsidy breaks Bitcoin's rules when the
+// block has no fees. Its entitlement is capped at the subsidy anyway.
+func TestSetMsgReportBlock_CoinbaseCappedAtSubsidy(t *testing.T) {
+	f := initFixture(t)
+	c := newRegtestChain(t, f, 800000)
+	subsidy := blockchain.CalcBlockSubsidy(int32(c.height+1), c.params)
+	require.Equal(t, int64(625_000_000), subsidy)
+
+	cb := c.coinbase(subsidy + 1)
+	c.mustSubmit(c.nextBlock(cb))
+	require.Equal(t, uint64(subsidy), getTestEntitlement(t, f, cb.TxHash().String(), 0))
+}
+
+// Bitcoin caps a transaction's output total at 21 million BTC; a block that
+// breaks the cap is rejected, so the output sums cannot overflow.
+func TestSetMsgReportBlock_OutputTotalAboveMaxSatoshi(t *testing.T) {
+	const inTxid = "1111111111111111111111111111111111111111111111111111111111111111"
+	t.Run("coinbase", func(t *testing.T) {
+		f := initFixture(t)
+		c := newRegtestChain(t, f, 800000)
+		err := c.submit(c.nextBlock(c.coinbase(btcutil.MaxSatoshi, 1)))
+		require.ErrorContains(t, err, "output total exceeds")
+		require.Equal(t, uint64(800000), getLastProcessed(t, f))
+	})
+	t.Run("transaction", func(t *testing.T) {
+		f := initFixture(t)
+		c := newRegtestChain(t, f, 800000)
+		setTestUtxo(t, f, c.params, inTxid, 0, 100_000_000, 100_000_000)
+		spend := spendTx([]wire.OutPoint{outpoint(t, inTxid, 0)}, p2pkhOut(t, btcutil.MaxSatoshi+1))
+		err := c.submit(c.nextBlock(c.coinbase(), spend))
+		require.ErrorContains(t, err, "output total exceeds")
+		require.Equal(t, uint64(800000), getLastProcessed(t, f))
+	})
 }
 
 // An input that is not in the store contributes nothing to the claimable or

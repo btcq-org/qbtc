@@ -200,11 +200,20 @@ type regtestChain struct {
 	height uint64
 }
 
-// newRegtestChain switches the fixture's keeper to regtest rules and anchors it
-// at a mined regtest block at height.
+// testChainParams are regtest's rules, which accept blocks of any difficulty,
+// with mainnet's halving interval, so a test chain at mainnet heights pays
+// mainnet's block subsidy (regtest halves every 150 blocks).
+var testChainParams = func() *chaincfg.Params {
+	params := chaincfg.RegressionNetParams
+	params.SubsidyReductionInterval = chaincfg.MainNetParams.SubsidyReductionInterval
+	return &params
+}()
+
+// newRegtestChain switches the fixture's keeper to testChainParams and anchors
+// it at a mined regtest block at height.
 func newRegtestChain(t *testing.T, f *fixture, height uint64) *regtestChain {
 	t.Helper()
-	c := &regtestChain{t: t, f: f, params: &chaincfg.RegressionNetParams, height: height}
+	c := &regtestChain{t: t, f: f, params: testChainParams, height: height}
 	f.keeper.SetBtcParamsForTesting(c.params)
 	c.tip = wire.BlockHeader{
 		Version:   4,
