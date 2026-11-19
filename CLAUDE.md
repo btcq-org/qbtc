@@ -191,6 +191,8 @@ Upstream `cosmos-sdk` v0.55 and `cometbft` v0.40, no forks. See `go.mod` for exa
 
 The chain accepts **ML-DSA-65 keys only**, for validator consensus keys (`consensus_params.validator.pub_key_types = ["ml_dsa_65"]`, checked by staking, by CometBFT and at InitChain by `app/genesis_guard.go`) and for account keys (`app/sig_gas_consumer.go` rejects every other pubkey type, including multisig; the CLI keyring only creates `ml_dsa_65` keys). `qbtcd init` and `qbtcd keys add` default to it.
 
+A signer may also use the `vultisig` sign mode (`mode_info.single.mode = 1000`), which signs SHA-256 of the `SIGN_MODE_DIRECT` SignDoc; see `app/signmode`.
+
 CosmWasm, IBC and tokenfactory are not wired in v1. They are planned to be added later through a governance software upgrade (see `app/upgrades.go`) once wasmd and ibc-go release on SDK v0.55.
 
 ## Further Reading

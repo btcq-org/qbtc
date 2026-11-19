@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 
+	"github.com/btcq-org/qbtc/app/signmode"
 	"github.com/btcq-org/qbtc/x/qbtc/btcreader"
 	"github.com/btcq-org/qbtc/x/qbtc/keeper"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -51,6 +52,11 @@ func NewAnteHandler(options HandlerOptions) (sdk.AnteHandler, error) {
 		ante.NewValidateSigCountDecorator(options.AccountKeeper),
 		// SigGasConsumer is the account key policy: only ML-DSA-65 keys pass.
 		ante.NewSigGasConsumeDecorator(options.AccountKeeper, options.SigGasConsumer),
+		// verifies the signatures of a tx with a vultisig sign mode signer,
+		// which SigVerificationDecorator does not accept. It runs after the
+		// signature count, signature gas and key policy checks, so a tx
+		// they reject costs no signature verification.
+		signmode.NewVultisigSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewSigVerificationDecorator(options.AccountKeeper, options.SignModeHandler),
 		ante.NewIncrementSequenceDecorator(options.AccountKeeper),
 		// verifies a free claim's proof, after its signature: an invalid
