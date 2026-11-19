@@ -94,3 +94,48 @@ func TestGenesisState_ValidateUtxoChunkHashes(t *testing.T) {
 	short := types.GenesisState{UtxoChunkHashes: [][]byte{hash, hash[:31]}}
 	require.ErrorContains(t, short.Validate(), "utxo_chunk_hashes[1] is 31 bytes")
 }
+
+func TestGenesisState_ValidateStringParams(t *testing.T) {
+	addr := sdk.AccAddress(bytes.Repeat([]byte{0x01}, 20)).String()
+	tests := []struct {
+		desc   string
+		params []types.StringParam
+		errMsg string
+	}{
+		{
+			desc: "fund addresses, one left unset",
+			params: []types.StringParam{
+				{Key: types.DevFundAddressKey, Value: addr},
+				{Key: types.MarketingFundAddressKey, Value: ""},
+			},
+		},
+		{
+			desc:   "unknown string param",
+			params: []types.StringParam{{Key: "Other", Value: addr}},
+			errMsg: "unknown string param",
+		},
+		{
+			desc: "string param set twice",
+			params: []types.StringParam{
+				{Key: types.DevFundAddressKey, Value: addr},
+				{Key: types.DevFundAddressKey, Value: addr},
+			},
+			errMsg: "set twice",
+		},
+		{
+			desc:   "invalid fund address",
+			params: []types.StringParam{{Key: types.DevFundAddressKey, Value: "nope"}},
+			errMsg: "invalid address",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			err := types.GenesisState{StringParams: tc.params}.Validate()
+			if tc.errMsg == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.errMsg)
+		})
+	}
+}

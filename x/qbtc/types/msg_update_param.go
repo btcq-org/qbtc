@@ -1,6 +1,8 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/btcq-org/qbtc/constants"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -29,6 +31,21 @@ func NewMsgUpdateStringParam(authority string, key string, value string) *MsgUpd
 
 func isStringParamKey(key string) bool {
 	return key == DevFundAddressKey || key == MarketingFundAddressKey
+}
+
+// ValidateStringParam checks that key is a string param and value is empty,
+// which leaves it unset, or a valid account address.
+func ValidateStringParam(key, value string) error {
+	if !isStringParamKey(key) {
+		return fmt.Errorf("unknown string param %q", key)
+	}
+	if value == "" {
+		return nil
+	}
+	if _, err := sdk.AccAddressFromBech32(value); err != nil {
+		return fmt.Errorf("string param %s: invalid address: %w", key, err)
+	}
+	return nil
 }
 
 func (m *MsgUpdateParam) ValidateBasic() error {

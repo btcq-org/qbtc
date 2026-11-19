@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"cosmossdk.io/collections"
 	"github.com/btcq-org/qbtc/x/qbtc/types"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,66 @@ func TestGenesis(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
+}
+
+// Export then import keeps the governance string params, the const overrides
+// and the UTXOs.
+func TestGenesis_ExportImportRoundTrip(t *testing.T) {
+	f := initFixture(t)
+	devAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+	genesisState := types.GenesisState{
+		Params: []*types.Param{{Key: "EmissionCurve", Value: 9}},
+		StringParams: []types.StringParam{
+			{Key: types.DevFundAddressKey, Value: devAddr},
+			{Key: types.MarketingFundAddressKey, Value: devAddr},
+		},
+		Utxos: []*types.UTXO{{Txid: "11", Vout: 1, Amount: 5, EntitledAmount: 5, ScriptPubKey: &types.ScriptPubKeyResult{Address: "a"}}},
+	}
+
+	require.NoError(t, f.keeper.InitGenesis(f.ctx, genesisState))
+	exported, err := f.keeper.ExportGenesis(f.ctx)
+	require.NoError(t, err)
+	require.NoError(t, exported.Validate())
+	require.ElementsMatch(t, genesisState.StringParams, exported.StringParams)
+
+	imported := initFixture(t)
+	require.NoError(t, imported.keeper.InitGenesis(imported.ctx, *exported))
+	got, err := imported.keeper.GetStringParam(imported.ctx, types.DevFundAddressKey)
+	require.NoError(t, err)
+	require.Equal(t, devAddr, got)
+	again, err := imported.keeper.ExportGenesis(imported.ctx)
+	require.NoError(t, err)
+	require.Equal(t, exported, again)
+}
+
+// InitGenesis refuses a fund address it cannot parse: InitChain does not run
+// ValidateGenesis, and the gov claim handler would fail on it.
+func TestGenesis_InvalidStringParam(t *testing.T) {
+	f := initFixture(t)
+	err := f.keeper.InitGenesis(f.ctx, types.GenesisState{
+		StringParams: []types.StringParam{{Key: types.DevFundAddressKey, Value: "nope"}},
+	})
+	require.ErrorContains(t, err, "invalid address")
+	_, err = f.keeper.StringParams.Get(f.ctx, types.DevFundAddressKey)
+	require.ErrorIs(t, err, collections.ErrNotFound)
+}
+
+// InitGenesis refuses a key set twice, which would otherwise keep the last
+// entry: here an empty value that would leave the fund address unset.
+func TestGenesis_DuplicateStringParam(t *testing.T) {
+	f := initFixture(t)
+	devAddr, err := f.GetRandomQbtcAddress()
+	require.NoError(t, err)
+	err = f.keeper.InitGenesis(f.ctx, types.GenesisState{
+		StringParams: []types.StringParam{
+			{Key: types.DevFundAddressKey, Value: devAddr},
+			{Key: types.DevFundAddressKey, Value: ""},
+		},
+	})
+	require.ErrorContains(t, err, "set twice")
+	_, err = f.keeper.StringParams.Get(f.ctx, types.DevFundAddressKey)
+	require.ErrorIs(t, err, collections.ErrNotFound)
 }
 
 // The chunk hashes are stored at InitGenesis. The export refuses while chunks
